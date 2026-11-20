@@ -12,7 +12,8 @@
  * "langkah:<stage>" (Kerjakan: opens the form and lights the first field to fill, then Simpan).
  *
  * No points, coins or streaks (0053 Out of scope): a bar per step, the chapter's reward is a capability.
- * Pure helpers are on RA for test/mulai.test.js: bizRoles, stepRole, roleTone, dayWord, unlocks, mulaiSummary, kenalanSteps.
+ * Pure helpers are on RA for test/mulai.test.js: bizRoles, stepRole, roleTone, dayWord, unlocks, mulaiSummary, kenalanSteps,
+ * kenalanPlaces, kenalanKind, approvesModels, screenModels (the welcome tour per person, contract 0053 §7a).
  */
 (function (global) {
   "use strict";
@@ -27,7 +28,14 @@
     if (typeof v === "string") return v;
     return v.id || v.en || Object.keys(v).map(function (k) { return v[k]; })[0] || "";
   }
-  function lower(s) { return s ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
+  /** A label inside a sentence: its first letter in lower case, unless its first word is an acronym ("SPK produksi",
+   *  "PPN keluaran", "PO pembelian" stay as they are). */
+  function lower(s) {
+    if (!s) return s;
+    var w = String(s).split(/[\s/,-]/)[0];
+    if (w.length > 1 && w === w.toUpperCase() && w !== w.toLowerCase()) return s;
+    return s.charAt(0).toLowerCase() + s.slice(1);
+  }
   function modelLabel(meta, m) { return L((((meta && meta.models) || {})[m] || {}).label) || m; }
   function roleLabel(meta, r) { return r === "owner" ? "Pemilik" : L((((meta && meta.roles) || {})[r] || {}).label) || r; }
   function isOwner(meta) { return (((meta && meta.user) || {}).roles || []).indexOf("owner") >= 0; }
@@ -534,10 +542,149 @@
     var a = global.document.querySelectorAll('.rk-side nav .rk-navgroup:not(:first-child) .rk-navlink, .rk-side nav .rk-navgroup:not(:first-child) .rk-navgroup-t');
     return a[0] || null;
   }
-  /** The welcome tour (at most five lit places after the welcome, riset 26 K-TS2). drawer(open) opens the phone drawer. */
+  /** The first element of sels that is on screen (the side shell's entry, else the work shell's), else the first
+   *  that exists at all (a link in the closed phone drawer: tur.js keeps the step and the step's before() opens it). */
+  function shown(sels) {
+    var any = null;
+    for (var i = 0; i < sels.length; i++) {
+      var el = sels[i] && (typeof sels[i] === "string" ? global.document.querySelector(sels[i]) : sels[i]);
+      if (!el || !el.getBoundingClientRect) continue;
+      var r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) return el;
+      any = any || el;
+    }
+    return any;
+  }
+  /** A work screen's place: its sidebar link, else the work shell's bottom bar or rail, else (a folded group draws no
+   *  links) the sidebar group that holds it (at: groupPlace's position). */
+  function navPlace(id, at) {
+    return function () {
+      return shown(['.rk-side [data-nav="' + id + '"]', '.ap-workbar a[href="#/' + id + '"]']) || (at ? groupPlace(at)() : null);
+    };
+  }
+  /** A sidebar group by its position in the groups the tour was composed from (at: {index, of, label}), not by its
+   *  heading: two apps may both name a group "Penjualan". The sidebar draws one .rk-navgroup per group, after the
+   *  pinned entries, so the group is the index-th of the last `of` ones; its heading must still read `label`, else the
+   *  sidebar changed since and nothing lights up (the step is optional). The whole group (heading and links) lights up
+   *  when open; a folded group draws only its heading, so the heading alone does. The person's fold choice is left alone. */
+  function groupPlace(at) {
+    return function () {
+      var gs = global.document.querySelectorAll(".rk-side nav > .rk-navgroup"), g = gs[gs.length - at.of + at.index];
+      if (!at.of || gs.length < at.of || !g) return null;
+      var t = g.querySelector(":scope > p");
+      var l = t && ((t.querySelector(".l") || t).textContent || "").trim();
+      if (l !== at.label) return null;
+      return /\bfolded\b/.test(g.className) ? t : g;
+    };
+  }
+  /** "a", "a dan b", "a, b dan c"; more than `max` entries: "a, b, c dan lainnya". */
+  function joinWords(list, max) {
+    if (max && list.length > max) return list.slice(0, max).join(", ") + " dan lainnya";
+    return list.length > 1 ? list.slice(0, -1).join(", ") + " dan " + list[list.length - 1] : list[0] || "";
+  }
+  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+  /** The models a screen works on: every `model` named anywhere in it (document, session, source, record, ...). */
+  function screenModels(screen) {
+    var out = [];
+    (function walk(v, key) {
+      if (typeof v === "string") { if (key === "model" && out.indexOf(v) < 0) out.push(v); return; }
+      if (Array.isArray(v)) { v.forEach(function (x) { walk(x, null); }); return; }
+      if (v && typeof v === "object") Object.keys(v).forEach(function (k) { walk(v[k], k); });
+    })(screen, null);
+    return out;
+  }
+  // a screen without its own description (screens/<name>.rk `description`): one sentence by its type
+  var SCREEN_KIND = {
+    counter: "Layar untuk melayani pembeli: pilih barang, terima bayaran, lalu cetak struk.",
+    queue: "Pekerjaan yang masuk muncul sebagai kartu. Tekan tombol di kartu untuk memindahkannya ke tahap berikutnya.",
+    roll: "Satu daftar yang ditandai cepat: semua mulai dari yang biasa, kamu cukup mengubah yang berbeda.",
+    route: "Daftar tempat yang dikunjungi hari ini. Buka satu tempat untuk check in dan mencatat di sana.",
+    handover: "Serah terima barang dengan bukti: foto, tanda tangan, lalu simpan.",
+    clock: "Absen masuk dan pulang dari sini, dengan foto dan lokasimu.",
+    entry: "Formulir singkat: isi, simpan, lalu langsung isi yang berikutnya."
+  };
+  /** The places of a person's own work for the welcome tour, at most three, deterministic (no LLM):
+   *  1. their work screens (contract 0030) in nav order, each with its `description` (else a sentence by type);
+   *  2. then each sidebar group that holds entries they may create (meta.models[m].can.create), skipping entries
+   *     that are the models of their own screens (the screen already covers them);
+   *  3. only when 1 and 2 found nothing: the groups whose entries they may read.
+   *  groups is the sidebar as drawn: [{label, items: [{id: "w/<screen>" | "r/<model>" | ..., label, items?}]}]. */
+  function kenalanPlaces(meta, groups) {
+    var models = (meta && meta.models) || {}, screens = (meta && meta.screens) || {}, out = [], covered = [];
+    function leaves(items) { var o = []; (items || []).forEach(function (it) { if (it.items) o = o.concat(leaves(it.items)); else if (it && it.id) o.push(it); }); return o; }
+    var all = groups || [];
+    function at(g) { return { index: all.indexOf(g), of: all.length, label: L(g.label) }; }
+    all.forEach(function (g) {
+      leaves(g.items).forEach(function (it) {
+        if (it.id.indexOf("w/") !== 0) return;
+        var s = screens[it.id.slice(2)];
+        if (!s) return;
+        covered = covered.concat(screenModels(s));
+        out.push({ kind: "screen", id: it.id, at: L(g.label) ? at(g) : null, label: it.label || L(s.label), body: L(s.description) || SCREEN_KIND[s.type] || "Buka " + (it.label || L(s.label)) + " dari sini untuk mulai bekerja." });
+      });
+    });
+    function entries(g, test) {
+      return leaves(g.items).filter(function (it) {
+        if (it.id.indexOf("r/") !== 0) return false;
+        var m = it.id.slice(2), can = (models[m] || {}).can || {};
+        return test(m, can);
+      });
+    }
+    function groupStep(g, list, verb) {
+      var names = list.map(function (it) { return lower(it.label); });
+      return { kind: "group", label: L(g.label), at: at(g), body: "Di sini kamu " + verb + " " + joinWords(names, 3) + "." +
+        (verb === "mencatat" ? " Tiap menu punya tombol Tambah di kanan atas." : "") };
+    }
+    var groupsWithLabel = all.filter(function (g) { return g && L(g.label); }); // the heading is what lights up
+    groupsWithLabel.forEach(function (g) {
+      var mine = entries(g, function (m, can) { return can.create && covered.indexOf(m) < 0; });
+      if (mine.length) out.push(groupStep(g, mine, "mencatat"));
+    });
+    if (!out.length) {
+      groupsWithLabel.forEach(function (g) {
+        var seen = entries(g, function (m, can) { return can.read !== false; });
+        if (seen.length) out.push(groupStep(g, seen, "melihat"));
+      });
+    }
+    return out.slice(0, 3);
+  }
+  /** The models whose approvals name one of the person's roles: a model's `approvals:` (0007), or an `approve:` step
+   *  of a flow that runs on that model's event (`on: <model>.<event>`), at any depth (if then/else, for_each do).
+   *  A flow on a connector trigger or a schedule names no model, so its approve: steps are not counted. */
+  function approvesModels(meta) {
+    var roles = ((meta && meta.user) || {}).roles || [], out = [];
+    function mine(list) { return (list || []).some(function (r) { return roles.indexOf(r) >= 0; }); }
+    var models = (meta && meta.models) || {};
+    Object.keys(models).sort().forEach(function (m) {
+      if (((models[m] || {}).approvals || []).some(function (a) { return a && mine(a.approvers); })) out.push(m);
+    });
+    function approves(steps) {
+      return (Array.isArray(steps) ? steps : []).some(function (s) {
+        if (!s || typeof s !== "object") return false;
+        if (s.approve && mine(s.approve.approvers)) return true;
+        return approves(s.then) || approves(s.else) || approves(s.do);
+      });
+    }
+    var flows = (meta && meta.flows) || {};
+    Object.keys(flows).sort().forEach(function (f) {
+      var fl = flows[f] || {}, on = typeof fl.on === "string" ? fl.on : "", m = on.indexOf(".") > 0 ? on.slice(0, on.indexOf(".")) : "";
+      if (m && models[m] && out.indexOf(m) < 0 && approves(fl.steps)) out.push(m);
+    });
+    return out.sort();
+  }
+  var MAX_LIT = 5; // lit places after the welcome (riset 26 K-TS2)
+  /** Who the welcome tour is for: "owner" for the owner (the tour as it always was), "staff" for everyone else. */
+  function kenalanKind(meta) { return !meta || isOwner(meta) ? "owner" : "staff"; }
+
+  /** The welcome tour (at most five lit places after the welcome, riset 26 K-TS2). drawer(open) opens the phone drawer.
+   *  o: {company, mulai, drawer, meta, groups (the sidebar as drawn), raka (Tanya Raka is on), approvals (the
+   *  approvals feature is on)}. The owner keeps the tour of the whole business; staff get their own work
+   *  (kenalanPlaces), Persetujuan only when approvals are on and they approve something, Tanya Raka only when it is on,
+   *  and where to find the tour again (always the last). Over five, work places drop first (down to two). */
   function kenalanSteps(o) {
     var side = function () { return o.drawer ? o.drawer(true) : null; };
     var close = function () { return o.drawer ? o.drawer(false) : null; };
+    if (kenalanKind(o.meta) === "staff") return staffSteps(o, side, close);
     var steps = [
       { target: null, title: "Selamat datang di " + (o.company || "usahamu"), body: "Kita lihat sebentar tempat-tempat penting di sini. Kurang dari satu menit, dan bisa diulang kapan saja.",
         nextLabel: "Mulai", skipLabel: "Nanti saja", before: close },
@@ -548,6 +695,37 @@
       { target: ".rk-side-switch", before: side, title: "Bantuan ada di sini", body: "Buka menu ini lalu pilih Ulangi tur kalau ingin melihat panduan ini lagi.", wait: 800 }
     ].filter(Boolean);
     return steps;
+  }
+  function staffSteps(o, side, close) {
+    var meta = o.meta, appr = o.approvals ? approvesModels(meta) : [];
+    // K-TS2: five lit places at most; Bantuan always, then Persetujuan and Raka, and the work places take what is left
+    var places = kenalanPlaces(meta, o.groups).slice(0, MAX_LIT - 1 - (appr.length ? 1 : 0) - (o.raka ? 1 : 0));
+    var names = places.map(function (x) { return x.label; });
+    var steps = [{ target: null, title: "Selamat datang di " + (o.company || "tempat kerjamu"),
+      body: (names.length ? "Kita lihat sebentar tempat kerjamu: " + joinWords(names) + "." : "Kita lihat sebentar tempat-tempat yang kamu pakai di sini.") +
+        " Kurang dari satu menit, dan bisa diulang kapan saja.",
+      nextLabel: "Mulai", skipLabel: "Nanti saja", before: close }];
+    places.forEach(function (x) {
+      steps.push({ target: x.kind === "screen" ? navPlace(x.id, x.at) : groupPlace(x.at), before: side, optional: true, title: x.label, body: x.body });
+    });
+    if (appr.length) {
+      var what = cap(joinWords(appr.map(function (m) { return lower(modelLabel(meta, m)); }), 2));
+      steps.push({ target: function () { return shown(['.rk-side [data-nav="approvals"]', ".ap-workbar button"]); }, before: side, optional: true, title: "Persetujuan",
+        body: what + " yang menunggu keputusanmu ada di sini, lengkap dengan alasannya. Angka di sebelahnya jumlah yang menunggu." });
+    }
+    if (o.raka) {
+      steps.push({ target: ".ap-ask", before: side, optional: true, title: "Tanya Raka",
+        body: "Raka bisa menjelaskan cara mengisi, mencarikan catatan, atau menyiapkan draf. Raka menyiapkan, kamu yang menyimpan." });
+    }
+    steps.push({ target: function () { return shown([".rk-side-switch", ".ap-wme", ".ap-wacct"]); }, before: side, title: "Bantuan ada di sini",
+      body: "Buka menu ini lalu pilih Ulangi tur kalau ingin melihat panduan ini lagi.", wait: 800 });
+    return steps;
+  }
+
+  /** "Lihat tur singkat" on Beranda (dashboard home or home work screen) for a person who skipped the welcome tour;
+   *  gone once they finish it. onStart starts it again. */
+  function TourOffer(p) {
+    return h("div", { className: "ap-tur-offer" }, h(R.Button, { variant: "quiet", icon: "map", onClick: p.onStart }, "Lihat tur singkat"));
   }
   function mulaiTour(ob, meta) {
     var cur = mulaiSummary(ob, meta).current;
@@ -602,6 +780,11 @@
   RA.whenKind = whenKind;
   RA.saveCopy = saveCopy;
   RA.kenalanSteps = kenalanSteps;
+  RA.kenalanPlaces = kenalanPlaces;
+  RA.kenalanKind = kenalanKind;
+  RA.approvesModels = approvesModels;
+  RA.screenModels = screenModels;
+  RA.TourOffer = TourOffer;
   RA.mulaiTour = mulaiTour;
   RA.stepTour = stepTour;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -30,6 +30,7 @@ exactly as for a form.
 name: kasir                    # = file stem, unique per site
 type: counter                  # one of the seven types in §2
 label: {id: Kasir, en: Cashier}
+description: {id: Layani pembeli di sini}   # optional: one sentence the welcome tour shows for this screen (0053 §7a)
 icon: cashier
 roles: [cashier]               # who may open it (owner always may); each must be a role of the site
 device: tablet                 # phone | tablet | any (layout hint; never a lock)

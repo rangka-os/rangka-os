@@ -243,6 +243,8 @@
     var missing = screenNeeds(s.needs, global.navigator);
     return h("div", { className: "rk-shell-content ap-work ap-work-" + s.type + (s.device ? " ap-work-" + s.device : "") },
       h(WorkHead, { screen: s, right: q.queued.length ? h("span", { className: "ap-work-count" }, q.queued.length + " antre") : null }),
+      // Beranda of a person whose home is this screen: the welcome tour again after they skipped it (mulai.js)
+      ctx.tourOffer && RA.TourOffer && qkey === "|" && ctx.home === "#/w/" + name ? h(RA.TourOffer, { onStart: ctx.tourOffer }) : null,
       stale ? h("p", { className: "ap-work-note" }, "Belum ada koneksi. Layar dari data terakhir " + hhmm(stale) + ".") : null,
       h(QueueBar, { q: q }),
       missing.length ? h("p", { className: "ap-work-note" }, "Perangkat ini belum mendukung " + missing.join(", ") + ". Layar tetap bisa dipakai tanpa fitur itu.") : null,

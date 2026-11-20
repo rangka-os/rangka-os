@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
+	"github.com/rangka-os/rangka-os/kernel/internal/logx"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/notices"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -55,6 +57,9 @@ type Config struct {
 	AI                              *api.AIConfig    // rangka-ai sidecar (--ai-url); nil = assistant off
 	Now                             func() time.Time // fixed clocks in tests
 	Logf                            func(format string, args ...any)
+	// Logger is the structured logger (rangka serve --log-format=json, docs/logging.md). With Logf unset, each
+	// subsystem logs through it with its own component; nil keeps the plain log.Printf text.
+	Logger *slog.Logger
 	// RequestOnly runs the kernel for platforms that freeze the process between requests (contract 0040 §1): no
 	// migrate or writes at start, no background loops; the scheduler and queue run on POST /_rangka/tick.
 	RequestOnly bool
@@ -125,8 +130,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if cfg.Schemas == nil {
 		cfg.Schemas = schema.Embedded()
 	}
+	logFor := func(string) func(string, ...any) { return cfg.Logf } // explicit Logf (tests) or plain text: one sink
 	if cfg.Logf == nil {
-		cfg.Logf = log.Printf
+		if cfg.Logger != nil {
+			cfg.Logf = logx.Logf(cfg.Logger, logx.CompKernel)
+			logFor = func(component string) func(string, ...any) { return logx.Logf(cfg.Logger, component) }
+		} else {
+			cfg.Logf = log.Printf
+		}
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
@@ -179,7 +190,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		// once at boot: a site that removed an app with submitted documents says so in the log (audit 14 Nov N1)
 		for _, n := range res.Notes {
 			if strings.Contains(n, "submitted document") {
-				cfg.Logf("migrate: %s", n)
+				logFor(logx.CompMigrate)("migrate: %s", n)
 			}
 		}
 		if err := SyncOrgs(ctx, db, reg); err != nil {
@@ -197,14 +208,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	e := engine.New(db, reg)
 	e.Now = cfg.Now
-	e.Log = cfg.Logf
+	e.Log = logFor(logx.CompFlow)
 	e.Cache = cache.New(strCfg(reg, "cache.driver", "memory"), intCfg(reg, "cache.max_mb", 64), strCfg(reg, "cache.url", ""))
 	s.Engine = e
 	if err := e.Plan.Refresh(ctx, db, reg, e.Now()); err != nil { // the read-only check reads this snapshot (contract 0028)
 		cfg.Logf("plan: %v", err)
 	}
 	s.Queue = jobs.New(db, intCfg(reg, "queue.workers", 2), intCfg(reg, "queue.retries", 3))
-	s.Queue.Log = cfg.Logf
+	s.Queue.Log = logFor(logx.CompQueue)
 	e.Queue = s.Queue
 	// notices leave the kernel for the host only when the deployment names one (contract 0066 §3)
 	if h, err := notices.HostFromEnv(os.Getenv); err != nil {
@@ -227,13 +238,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		// drops repeats (contract 0040 §3).
 		s.Sched.CatchUp = time.Duration(intCfg(reg, "scheduler.catch_up_s", 600)) * time.Second
 	}
-	s.Sched.Log = cfg.Logf
+	s.Sched.Log = logFor(logx.CompScheduler)
 	// scheduled flows run for every org on the host, not only the default one (rangka-os#263 slice a)
 	s.Sched.Orgs = s.listOrgs
 	s.Sched.Stagger = time.Duration(intCfg(reg, "scheduler.stagger_s", 300)) * time.Second
 	s.Sched.SetFlows(reg, cfg.Org)
 	s.Hub = realtime.NewHub()
-	s.Hub.Log = cfg.Logf
+	s.Hub.Log = logFor(logx.CompRealtime)
 	issuer := strCfg(reg, "auth.issuer", "")
 	if issuer == "" {
 		issuer = "http://localhost" + cfg.Addr
@@ -275,7 +286,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		site = filepath.Base(filepath.Clean(cfg.SiteDir))
 	}
 	s.API = &api.Server{Version: cfg.Version, Started: time.Now(), Engine: e, DB: db, Auth: s.Auth, Hub: s.Hub, Queue: s.Queue,
-		Sched: s.Sched, Changes: s.Changes, Imports: &imports.Service{DB: db, Engine: e}, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: cfg.Logf, DeployTarget: cfg.DeployTarget,
+		Sched: s.Sched, Changes: s.Changes, Imports: &imports.Service{DB: db, Engine: e}, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: apiLog(cfg.Logger, logFor), DeployTarget: cfg.DeployTarget,
 		MaxUploadMB: intCfg(reg, "files.max_upload_mb", 20), AI: cfg.AI}
 	if cfg.InternalToken != "" {
 		budget := time.Duration(intCfg(reg, "queue.tick_budget_s", 40)) * time.Second
@@ -318,7 +329,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		cfg.Logf("secrets: driver vault without VAULT_ADDR; connector secrets read as unset")
 	}
 	// the connector runtime (contract 0002 §A): calls run as "call" jobs, webhooks start flows
-	s.Connectors = &connectors.Runtime{Resolver: connectors.Resolver{Reg: e.Reg, Secrets: s.API.Secrets}, DB: db, Now: cfg.Now, Log: cfg.Logf, Egress: egress,
+	s.Connectors = &connectors.Runtime{Resolver: connectors.Resolver{Reg: e.Reg, Secrets: s.API.Secrets}, DB: db, Now: cfg.Now, Log: logFor(logx.CompConnector), Egress: egress,
 		StartFlow: func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, key string) error {
 			_, err := s.Queue.Enqueue(ctx, qr, "flow", org, map[string]any{"flow": flow, "event": event}, engine.EnqueueOpts{UniqueKey: key})
 			return err
@@ -742,9 +753,15 @@ func callTarget(reg *meta.Registry, call string, input map[string]any) (string, 
 // Handler is the HTTP handler.
 func (s *Server) Handler() http.Handler { return s.API.Handler() }
 
+// httpHandler is what ListenAndServe serves. logx.HTTP is outermost, so every response (the request-only 503 and
+// /_rangka/tick included) carries X-Request-Id and failed requests log with it (docs/logging.md).
+func (s *Server) httpHandler() http.Handler {
+	return logx.HTTP(s.requestOnly(s.Handler()), s.Cfg.Logger)
+}
+
 // ListenAndServe serves HTTP until ctx ends, then shuts down gracefully.
 func (s *Server) ListenAndServe(ctx context.Context) error {
-	hs := &http.Server{Addr: s.Cfg.Addr, Handler: s.requestOnly(s.Handler()), ReadHeaderTimeout: 10 * time.Second}
+	hs := &http.Server{Addr: s.Cfg.Addr, Handler: s.httpHandler(), ReadHeaderTimeout: 10 * time.Second}
 	errc := make(chan error, 1)
 	go func() { errc <- hs.ListenAndServe() }()
 	select {
@@ -755,6 +772,16 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		defer cancel()
 		return hs.Shutdown(sctx)
 	}
+}
+
+// apiLog is the API's logger. With a structured logger it drops the API's own per-request access line (format
+// "%s %s %d %s", api.logRequests): logx.HTTP logs only failed and slow requests, by route pattern instead of the
+// raw path (docs/logging.md).
+func apiLog(l *slog.Logger, logFor func(string) func(string, ...any)) func(string, ...any) {
+	if l == nil {
+		return logFor(logx.CompHTTP)
+	}
+	return logx.SkipFormats(logFor(logx.CompHTTP), "%s %s %d %s")
 }
 
 // Close releases the database.

@@ -140,9 +140,19 @@
     },
     PosKeypad: function () { return h("div", { className: "gx-demo gx-wide" }, h(R.PosKeypad, { initial: 85000 }), h(R.PosKeypad, { offline: true, queued: 3, payLabel: "Bayar tunai", payIcon: "card" })); },
     Raka: function () {
-      return h("div", { className: "gx-row" }, h(R.Raka, { size: 72, interactive: true }),
-        ["netral", "mikir", "kerja", "senang", "tidur"].map(function (s) { return h(R.Raka, { key: s, size: 40, state: s }); }),
-        h(R.Raka, { size: 16 }), h(R.Raka, { size: 32, withName: true, company: "Kopi Senja" }));
+      // One big Raka you can drive: every state loops, every reaction plays once on top
+      var st = React.useState("netral"), k = React.useState({ name: null, n: 0 });
+      return h("div", { style: { display: "grid", gap: 16 } },
+        h("div", { className: "gx-row" }, h(R.Raka, { size: 96, state: st[0], react: k[0].name, reactKey: k[0].n, title: "Raka" }),
+          h(R.Raka, { size: 40, state: st[0], react: k[0].name, reactKey: k[0].n }), h(R.Raka, { size: 22, state: st[0], react: k[0].name, reactKey: k[0].n }),
+          h(R.Raka, { size: 32, withName: true, company: "Kopi Senja" })),
+        h("div", { className: "gx-row", "data-raka-states": "" }, R.RAKA_STATES.map(function (s) {
+          return h(R.Button, { key: s, size: "sm", variant: s === st[0] ? "primary" : undefined, onClick: function () { st[1](s); } }, s);
+        })),
+        h("div", { className: "gx-row", "data-raka-reactions": "" }, R.RAKA_REACTIONS.map(function (s) {
+          return h(R.Button, { key: s, size: "sm", onClick: function () { k[1]({ name: s, n: k[0].n + 1 }); } }, s);
+        })),
+        h("div", { className: "gx-row" }, R.RAKA_STATES.map(function (s) { return h(R.Raka, { key: s, size: 40, state: s, title: s }); })));
     },
     Table: function () {
       return h("div", { className: "gx-wide" }, h(R.Table, { columns: COLS, rows: INVOICES, checked: ["INV-2026-00041", "INV-2026-00040"], sort: { key: "date", dir: "desc" }, searchPlaceholder: "Cari faktur…",

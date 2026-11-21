@@ -46,6 +46,7 @@ Text methods: `contains`, `startsWith`, `endsWith`, `matches` (regex), `replace(
 | `option('field', 'attr')` | an attribute of the chosen select option | `option('stage', 'probability')` |
 | `app_installed('stock')` | whether an app or module is installed | flow `if:` on a site that may lack a module |
 | `clock()` | `HH:MM` now, site timezone | happy-hour windows |
+| `hour_of(t)`, `weekday_of(t)` | hour 0 to 23 and weekday 1 (Monday) to 7 of a datetime, site timezone | peak-hour reports |
 | `epoch(t)`, `timestamp(n)` | Unix seconds and back | connector poll cursors |
 | `distance_m(a, b)` | metres between two `geo` values | |
 | `random_code(n)` | random code, flows only (`flow_only_function` elsewhere) | coupon codes |

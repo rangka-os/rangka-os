@@ -45,7 +45,7 @@ def check_set_once(rep, p, i, f, child):
         rep.add("error", p, f"fields/{i}/set_once", "set_once_type", f'set_once needs a field whose empty value means "not filled"; a {pystr(f.get("type"))} field starts at 0, false or empty')
 # Methods: the macros and what the kernel's cel eval.go method() runs (kernel meta.Methods).
 METHODS = ["all", "exists", "exists_one", "map", "filter", "size", "sum", "join", "contains", "startsWith", "endsWith", "matches", "replace", "lowerAscii", "upperAscii", "trim", "emvcoTag", "emvcoValid"]
-FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp", "int", "double", "string", "min", "max", "clock", "random_code"}
+FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp", "int", "double", "string", "min", "max", "clock", "random_code", "hour_of", "weekday_of"}
 GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: contract 0010 §8
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
 # documents stock.post_moves has a built-in rule for; they may not declare stock: (contract 0021)
@@ -733,15 +733,80 @@ def check_dashboard(rep, p, db, visible, optional, allmodels, app):
         if w.get("chart") == "line" and g and g.get("type") != "date":
             rep.add("warn", p, f"{at}/chart", "line_without_time", "line charts read as a trend over time; group by a date field or use bar")
         need("period", w.get("period"), ("date", "datetime"), "period needs a date field")
-        for j, c in enumerate(w.get("columns", [])):
-            need(f"columns/{j}", c)
+        wt = w.get("type")
+        if wt == "table":
+            check_table_widget(rep, p, at, w, mn, fields, known)
+        else:
+            for j, c in enumerate(w.get("columns", [])):
+                need(f"columns/{j}", c)
+        if wt == "heatmap":
+            sb = need("series_by", w.get("series_by"), ("select", "link", "check", "int"), "a heatmap's columns come from a select, link, check or int field")
+            gb = fields.get(w.get("group_by"))
+            if gb and gb.get("type") not in ("select", "link", "check", "int"):
+                rep.add("error", p, f"{at}/group_by", "bad_field_type", f'"{gb.get("name")}" is {gb.get("type")}; a heatmap\'s rows come from a select, link, check or int field')
+            if "series_range" in w and (not sb or sb.get("type") != "int"):
+                rep.add("error", p, f"{at}/series_range", "range_without_int", "series_range only applies when series_by is an int field")
+            sr = w.get("series_range")
+            if isinstance(sr, list) and len(sr) == 2:
+                lo, hi = int(sr[0] or 0), int(sr[1] or 0)
+                if lo > hi or hi - lo + 1 > 24:
+                    rep.add("error", p, f"{at}/series_range", "bad_series_range", "series_range is [from, to] with from <= to and at most 24 columns")
         srt = (w.get("sort") or "").lstrip("-")
-        if srt and not (w.get("type") == "chart" and srt in ("value", "label")):
+        if srt and wt != "table" and not (wt == "chart" and srt in ("value", "label")):
             need("sort", srt)
         if w.get("type") == "number" and w.get("group_by"):
             rep.add("warn", p, f"{at}/group_by", "ignored", "number widgets ignore group_by")
         if "filter" in w:
             check_expr(rep, p, f"{at}/filter", w["filter"], m, fields, visible)
+
+
+_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_STRLIT = re.compile(r"'[^']*'|\"[^\"]*\"")
+_CEL_WORDS = {"true", "false", "null", "in"}
+
+
+def check_table_widget(rep, p, at, w, mn, fields, known):
+    """Columns, sort and compare of a table widget (contract 0075 section 2); mirrors meta.tableWidget in Go."""
+    if w.get("group_by") is None:
+        rep.add("error", p, f"{at}/group_by", "table_without_group", "a table widget needs group_by")
+    if w.get("compare") and w.get("period") is None:
+        rep.add("error", p, f"{at}/compare", "compare_without_period", "compare: previous_period needs a period field")
+    names = set()
+    for j, c in enumerate(w.get("columns", [])):
+        cat = f"{at}/columns/{j}"
+        if not isinstance(c, dict):
+            rep.add("error", p, cat, "bad_table_column", "a table column is an object with name, label and fn or expr")
+            continue
+        cn = str(c.get("name", ""))
+        if cn in names:
+            rep.add("error", p, f"{cat}/name", "bad_table_column", f'column "{cn}" appears twice')
+        has_fn, has_expr = "fn" in c, "expr" in c
+        if has_fn == has_expr:
+            rep.add("error", p, cat, "bad_table_column", "a table column has either fn or expr")
+        if has_fn and c["fn"] != "count":
+            fn = c["fn"]
+            if c.get("field") is None:
+                rep.add("error", p, f"{cat}/field", "bad_table_column", f"{fn} needs a number field")
+            elif c["field"] not in known:
+                rep.add("error", p, f"{cat}/field", "unknown_field", f'"{c["field"]}" is not a field of {mn}{suggest(c["field"], known)}')
+            elif fields.get(c["field"]) and fields[c["field"]].get("type") not in NUMERIC:
+                rep.add("error", p, f"{cat}/field", "bad_field_type", f'"{c["field"]}" is {fields[c["field"]].get("type")}; {fn} needs a number field ({", ".join(NUMERIC)})')
+        if has_expr:
+            ex = str(c["expr"])
+            if ex.count("(") != ex.count(")"):
+                rep.add("error", p, f"{cat}/expr", "cel_syntax", f"unbalanced parentheses in `{ex}`")
+            else:
+                rest = _STRLIT.sub("''", ex)
+                for m_ in _IDENT.finditer(rest):
+                    ident = m_.group(0)
+                    if ident in _CEL_WORDS or ident in names or rest[m_.end():].lstrip(" ").startswith("("):
+                        continue
+                    rep.add("error", p, f"{cat}/expr", "unknown_column", f'"{ident}" is not a column defined before this one')
+                    break
+        names.add(cn)
+    srt = (w.get("sort") or "").lstrip("-")
+    if srt and srt != "label" and srt not in names:
+        rep.add("error", p, f"{at}/sort", "unknown_column", f'"{srt}" is not a column of this table (or label)')
 
 
 def with_parent(mname, m, fields, visible):

@@ -21,7 +21,7 @@ var SystemFields = map[string]bool{"name": true, "status": true, "created_by": t
 var Methods = []string{"all", "exists", "exists_one", "map", "filter", "size", "sum", "join", "contains", "startsWith", "endsWith", "matches", "replace", "lowerAscii", "upperAscii", "trim", "emvcoTag", "emvcoValid"}
 
 // Functions of the CEL dialect (rangka_validate.py FUNCTIONS).
-var Functions = []string{"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp", "int", "double", "string", "min", "max", "clock", "random_code"}
+var Functions = []string{"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp", "int", "double", "string", "min", "max", "clock", "random_code", "hour_of", "weekday_of"}
 
 // Globals readable in expressions (org and tax: contract 0010 §8).
 var Globals = map[string]bool{"user": true, "org": true, "tax": true, "true": true, "false": true, "null": true, "event": true}
@@ -176,7 +176,16 @@ type Widget struct {
 	Limit, Span              int
 	Label                    Label
 	Columns                  []string
+	SeriesBy, Compare        string        // heatmap columns; table: "previous_period" (contract 0075)
+	SeriesRange              []int         // heatmap with an int series_by: [from, to]
+	TableCols                []TableColumn // table widget columns
 	Raw                      map[string]any
+}
+
+// TableColumn is one column of a table widget: an aggregate (Fn, Field) or an expression over earlier columns (Expr).
+type TableColumn struct {
+	Name, Fn, Field, Expr, Format string
+	Label                         Label
 }
 
 type Dashboard struct {
@@ -408,9 +417,39 @@ func parseDashboard(app string, doc *rk.Doc) *Dashboard {
 		d.Widgets = append(d.Widgets, &Widget{Name: str(wm, "name"), Type: str(wm, "type"), Chart: str(wm, "chart"), Model: str(wm, "model"),
 			Aggregate: str(wm, "aggregate"), Field: str(wm, "field"), Filter: celText(wm["filter"]), GroupBy: str(wm, "group_by"),
 			Grain: str(wm, "grain"), Period: str(wm, "period"), Sort: str(wm, "sort"), If: celText(wm["if"]), Limit: integer(wm, "limit"),
-			Span: integer(wm, "span"), Label: label(wm["label"]), Columns: strList(wm["columns"]), Raw: wm})
+			Span: integer(wm, "span"), Label: label(wm["label"]), Columns: strList(wm["columns"]), Raw: wm,
+			SeriesBy: str(wm, "series_by"), Compare: str(wm, "compare"), SeriesRange: intList(wm["series_range"]), TableCols: tableCols(wm["columns"])})
 	}
 	return d
+}
+
+func intList(v any) []int {
+	var out []int
+	for _, x := range asList(v) {
+		switch n := x.(type) {
+		case float64:
+			out = append(out, int(n))
+		case int:
+			out = append(out, n)
+		case int64:
+			out = append(out, int(n))
+		}
+	}
+	return out
+}
+
+// tableCols reads the column objects of a table widget; plain names (a list's columns) are skipped.
+func tableCols(v any) []TableColumn {
+	var out []TableColumn
+	for _, cv := range asList(v) {
+		c := asMap(cv)
+		if c == nil {
+			continue
+		}
+		out = append(out, TableColumn{Name: str(c, "name"), Fn: str(c, "fn"), Field: str(c, "field"), Expr: celText(c["expr"]),
+			Format: str(c, "format"), Label: label(c["label"])})
+	}
+	return out
 }
 
 func parseFlow(app string, doc *rk.Doc) *Flow {

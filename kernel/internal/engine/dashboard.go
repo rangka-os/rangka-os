@@ -211,8 +211,13 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 	if hidden := dc.e.hiddenFields(dc.a, m); hidden != nil {
 		// a chart sorts its groups by their aggregate or label ('value', 'label'), never by a field of the model: only a
 		// list's sort names a field
-		if hidden[w.Field] || hidden[w.GroupBy] || (w.Type == "list" && hidden[strings.TrimPrefix(w.Sort, "-")]) {
+		if hidden[w.Field] || hidden[w.GroupBy] || hidden[w.SeriesBy] || (w.Type == "list" && hidden[strings.TrimPrefix(w.Sort, "-")]) {
 			return map[string]any{"hidden": true}, nil
+		}
+		for _, c := range w.TableCols {
+			if hidden[c.Field] {
+				return map[string]any{"hidden": true}, nil
+			}
 		}
 		for _, c := range w.Columns {
 			if hidden[c] {
@@ -266,6 +271,16 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 		return out, nil
 	case "chart":
 		return dc.chart(w, m, rows, money)
+	case "table":
+		var prevRows []store.Record
+		if w.Compare == "previous_period" && w.Period != "" {
+			if prevRows, err = dc.widgetRows(w, m, cel.AddDays(today, -2*days), from); err != nil {
+				return nil, err
+			}
+		}
+		return dc.table(w, m, rows, prevRows)
+	case "heatmap":
+		return dc.heatmap(w, m, rows, money)
 	case "list":
 		list := append([]store.Record{}, rows...)
 		if w.Sort != "" {
@@ -346,6 +361,49 @@ func (dc *dashCtx) title(model, name string) (string, bool) {
 	return t.title, t.exists
 }
 
+// groupKey names the group a field value falls in: its key, label and option colour. ok is false for a date that is
+// not a date (the record is left out). Charts, tables and heatmaps group the same way.
+func (dc *dashCtx) groupKey(g *meta.Field, raw any, grain string) (key, label, color string, ok bool) {
+	rs := str(raw)
+	switch g.Type {
+	case "date":
+		k, l, ok := bucket(rs, grain)
+		if !ok {
+			return "", "", "", false
+		}
+		key, label = k, l
+	case "select":
+		o := g.Option(rs)
+		key = or(rs, "—").(string)
+		switch {
+		case o != nil:
+			label = o.Label.Text()
+			color = toneColor[o.Tone]
+		case rs != "":
+			label = rs
+		default:
+			label = "Tanpa nilai"
+		}
+	case "link":
+		key = or(rs, "—").(string)
+		if t, ok := dc.title(g.To, rs); ok {
+			label = t
+		} else {
+			label = "Tanpa " + strings.ToLower(g.Label.Text())
+		}
+	case "check":
+		if b, _ := raw.(bool); b {
+			key, label = "1", "Ya"
+		} else {
+			key, label = "0", "Tidak"
+		}
+	default:
+		key = or(rs, "—").(string)
+		label = or(rs, "Tanpa nilai").(string)
+	}
+	return key, label, color, true
+}
+
 func (dc *dashCtx) chart(w *meta.Widget, m *meta.Model, rows []store.Record, money bool) (map[string]any, error) {
 	g := m.Field(w.GroupBy)
 	if g == nil {
@@ -358,44 +416,9 @@ func (dc *dashCtx) chart(w *meta.Widget, m *meta.Model, rows []store.Record, mon
 		grain = "day"
 	}
 	for _, r := range rows {
-		raw := r[w.GroupBy]
-		rs := str(raw)
-		var key, label, color string
-		switch g.Type {
-		case "date":
-			k, l, ok := bucket(rs, grain)
-			if !ok {
-				continue
-			}
-			key, label = k, l
-		case "select":
-			o := g.Option(rs)
-			key = or(rs, "—").(string)
-			switch {
-			case o != nil:
-				label = o.Label.Text()
-				color = toneColor[o.Tone]
-			case rs != "":
-				label = rs
-			default:
-				label = "Tanpa nilai"
-			}
-		case "link":
-			key = or(rs, "—").(string)
-			if t, ok := dc.title(g.To, rs); ok {
-				label = t
-			} else {
-				label = "Tanpa " + strings.ToLower(g.Label.Text())
-			}
-		case "check":
-			if b, _ := raw.(bool); b {
-				key, label = "1", "Ya"
-			} else {
-				key, label = "0", "Tidak"
-			}
-		default:
-			key = or(rs, "—").(string)
-			label = or(rs, "Tanpa nilai").(string)
+		key, label, color, ok := dc.groupKey(g, r[w.GroupBy], grain)
+		if !ok {
+			continue
 		}
 		gr := groups[key]
 		if gr == nil {

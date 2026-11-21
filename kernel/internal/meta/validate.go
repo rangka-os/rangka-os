@@ -881,11 +881,31 @@ func (v *validator) dashboard(d *Dashboard, visible map[string]vis, optional map
 			v.rep.add("warn", p, at+"/chart", "line_without_time", "line charts read as a trend over time; group by a date field or use bar")
 		}
 		need("period", w["period"], []string{"date", "datetime"}, "period needs a date field")
-		for j, c := range asList(w["columns"]) {
-			need(fmt.Sprintf("columns/%d", j), c, nil, "")
+		wt := str(w, "type")
+		if wt == "table" {
+			v.tableWidget(p, at, w, mn, fields, known)
+		} else {
+			for j, c := range asList(w["columns"]) {
+				need(fmt.Sprintf("columns/%d", j), c, nil, "")
+			}
+		}
+		if wt == "heatmap" {
+			sb := need("series_by", w["series_by"], []string{"select", "link", "check", "int"}, "a heatmap's columns come from a select, link, check or int field")
+			if gb := fields[pyStr(w["group_by"])]; gb != nil && !contains([]string{"select", "link", "check", "int"}, str(gb, "type")) {
+				v.rep.add("error", p, at+"/group_by", "bad_field_type", fmt.Sprintf(`"%s" is %s; a heatmap's rows come from a select, link, check or int field`, pyStr(gb["name"]), pyStr(gb["type"])))
+			}
+			if _, ok := w["series_range"]; ok && (sb == nil || str(sb, "type") != "int") {
+				v.rep.add("error", p, at+"/series_range", "range_without_int", "series_range only applies when series_by is an int field")
+			}
+			if sr := asList(w["series_range"]); len(sr) == 2 {
+				lo, hi := intOf(sr[0]), intOf(sr[1])
+				if lo > hi || hi-lo+1 > 24 {
+					v.rep.add("error", p, at+"/series_range", "bad_series_range", "series_range is [from, to] with from <= to and at most 24 columns")
+				}
+			}
 		}
 		srt := strings.TrimLeft(str(w, "sort"), "-")
-		if srt != "" && !(str(w, "type") == "chart" && (srt == "value" || srt == "label")) {
+		if srt != "" && wt != "table" && !(wt == "chart" && (srt == "value" || srt == "label")) {
 			need("sort", srt, nil, "")
 		}
 		if str(w, "type") == "number" && w["group_by"] != nil && w["group_by"] != "" {
@@ -894,6 +914,86 @@ func (v *validator) dashboard(d *Dashboard, visible map[string]vis, optional map
 		if fx, ok := w["filter"]; ok {
 			v.expr(p, at+"/filter", fx, fields, visible)
 		}
+	}
+}
+
+// identRe finds the identifiers of a table column's expr (string literals are blanked first).
+var (
+	identRe  = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
+	strLitRe = regexp.MustCompile(`'[^']*'|"[^"]*"`)
+	celWords = map[string]bool{"true": true, "false": true, "null": true, "in": true}
+)
+
+// intOf reads a JSON number as an int (0 when it is not one).
+func intOf(v any) int {
+	switch x := v.(type) {
+	case float64:
+		return int(x)
+	case int:
+		return x
+	case int64:
+		return int(x)
+	}
+	return 0
+}
+
+// tableWidget checks the columns, sort and compare of a table widget (contract 0075 §2).
+func (v *validator) tableWidget(p, at string, w map[string]any, mn string, fields map[string]map[string]any, known map[string]bool) {
+	if w["group_by"] == nil {
+		v.rep.add("error", p, at+"/group_by", "table_without_group", "a table widget needs group_by")
+	}
+	if str(w, "compare") != "" && w["period"] == nil {
+		v.rep.add("error", p, at+"/compare", "compare_without_period", "compare: previous_period needs a period field")
+	}
+	names := map[string]bool{}
+	for j, cv := range asList(w["columns"]) {
+		c := asMap(cv)
+		cat := fmt.Sprintf("%s/columns/%d", at, j)
+		if c == nil {
+			v.rep.add("error", p, cat, "bad_table_column", "a table column is an object with name, label and fn or expr")
+			continue
+		}
+		cn := pyStr(c["name"])
+		if names[cn] {
+			v.rep.add("error", p, cat+"/name", "bad_table_column", fmt.Sprintf(`column "%s" appears twice`, cn))
+		}
+		_, hasFn := c["fn"]
+		_, hasExpr := c["expr"]
+		if hasFn == hasExpr {
+			v.rep.add("error", p, cat, "bad_table_column", "a table column has either fn or expr")
+		}
+		if hasFn {
+			fn := pyStr(c["fn"])
+			if fn != "count" {
+				if c["field"] == nil {
+					v.rep.add("error", p, cat+"/field", "bad_table_column", fmt.Sprintf("%s needs a number field", fn))
+				} else if fv := pyStr(c["field"]); !known[fv] {
+					v.rep.add("error", p, cat+"/field", "unknown_field", fmt.Sprintf(`"%s" is not a field of %s%s`, fv, mn, suggest(fv, boolKeys(known))))
+				} else if f := fields[fv]; f != nil && !contains(numericTypes, str(f, "type")) {
+					v.rep.add("error", p, cat+"/field", "bad_field_type", fmt.Sprintf(`"%s" is %s; %s needs a number field (%s)`, fv, pyStr(f["type"]), fn, strings.Join(numericTypes, ", ")))
+				}
+			}
+		}
+		if hasExpr {
+			ex := pyStr(c["expr"])
+			if strings.Count(ex, "(") != strings.Count(ex, ")") {
+				v.rep.add("error", p, cat+"/expr", "cel_syntax", fmt.Sprintf("unbalanced parentheses in `%s`", ex))
+			} else {
+				rest := strLitRe.ReplaceAllString(ex, "''")
+				for _, loc := range identRe.FindAllStringIndex(rest, -1) {
+					id := rest[loc[0]:loc[1]]
+					if celWords[id] || names[id] || strings.HasPrefix(strings.TrimLeft(rest[loc[1]:], " "), "(") {
+						continue
+					}
+					v.rep.add("error", p, cat+"/expr", "unknown_column", fmt.Sprintf(`"%s" is not a column defined before this one`, id))
+					break
+				}
+			}
+		}
+		names[cn] = true
+	}
+	if srt := strings.TrimLeft(str(w, "sort"), "-"); srt != "" && srt != "label" && !names[srt] {
+		v.rep.add("error", p, at+"/sort", "unknown_column", fmt.Sprintf(`"%s" is not a column of this table (or label)`, srt))
 	}
 }
 

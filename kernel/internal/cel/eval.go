@@ -957,6 +957,46 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			loc = time.UTC
 		}
 		return t.In(loc).Format("15:04"), nil
+	case "hour_of", "weekday_of":
+		// hour_of(t): the hour 0 to 23 and weekday_of(t): the weekday 1 (Monday) to 7 (Sunday) of a datetime in the
+		// site's timezone (UTC without one); null for null or "". An ISO date has no time of day: hour_of is null and
+		// weekday_of is that date's own weekday (contract 0075 §3).
+		if err := need(1); err != nil {
+			return nil, err
+		}
+		loc := e.env.Loc
+		if loc == nil {
+			loc = time.UTC
+		}
+		var t time.Time
+		switch a := Unwrap(args[0]).(type) {
+		case nil:
+			return nil, nil
+		case time.Time:
+			t = a.In(loc)
+		case string:
+			if a == "" {
+				return nil, nil
+			}
+			if IsDate(a) {
+				if n.Fn == "hour_of" {
+					return nil, nil
+				}
+				d, _ := time.Parse("2006-01-02", a)
+				return int64((int(d.Weekday())+6)%7 + 1), nil
+			}
+			p, err := parseInstant(a)
+			if err != nil {
+				return nil, errf("%s() needs a datetime like '2026-11-11T08:00:00Z', got '%s'", n.Fn, a)
+			}
+			t = p.In(loc)
+		default:
+			return nil, errf("%s() needs a datetime, got %s", n.Fn, typeName(args[0]))
+		}
+		if n.Fn == "hour_of" {
+			return int64(t.Hour()), nil
+		}
+		return int64((int(t.Weekday())+6)%7 + 1), nil
 	case "duration":
 		if err := need(1); err != nil {
 			return nil, err

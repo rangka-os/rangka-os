@@ -84,9 +84,11 @@
           "enum": [
             "number",
             "chart",
-            "list"
+            "list",
+            "table",
+            "heatmap"
           ],
-          "description": "number: one aggregated value; chart: values grouped by a field; list: the first rows of a filtered, sorted list"
+          "description": "number: one aggregated value; chart: values grouped by a field; list: the first rows of a filtered, sorted list; table: several aggregates per group, one row per group (contract 0075); heatmap: one aggregate per cell of two groupings"
         },
         "model": {
           "$ref": "model.json#/$defs/name",
@@ -125,7 +127,7 @@
         },
         "group_by": {
           "$ref": "model.json#/$defs/name",
-          "description": "select, link, check or date field (type: chart)."
+          "description": "select, link, check or date field (type: chart, table); select, link, check or int field, the rows (type: heatmap)."
         },
         "grain": {
           "enum": [
@@ -148,11 +150,18 @@
         "columns": {
           "type": "array",
           "items": {
-            "$ref": "model.json#/$defs/name"
+            "oneOf": [
+              {
+                "$ref": "model.json#/$defs/name"
+              },
+              {
+                "$ref": "#/$defs/table_column"
+              }
+            ]
           },
           "minItems": 1,
-          "maxItems": 6,
-          "description": "Fields shown in a list widget."
+          "maxItems": 8,
+          "description": "list: fields shown (at most 6). table: column objects (contract 0075 §2, at most 8)."
         },
         "span": {
           "type": "integer",
@@ -180,6 +189,25 @@
         "empty": {
           "$ref": "model.json#/$defs/label",
           "description": "list: the sentence an empty list shows in a compact card, e.g. Belum ada jadwal minggu ini. (contract 0074 §4)"
+        },
+        "series_by": {
+          "$ref": "model.json#/$defs/name",
+          "description": "select, link, check or int field, the columns of a heatmap (at most 24 columns, 50 rows)."
+        },
+        "series_range": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "heatmap with an int series_by: [from, to], every integer in it is a column even when empty, e.g. [0, 23] for hours."
+        },
+        "compare": {
+          "enum": [
+            "previous_period"
+          ],
+          "description": "table: add the change against the previous window of the same length per numeric column (needs period)."
         }
       },
       "allOf": [
@@ -209,6 +237,41 @@
           "then": {
             "required": [
               "columns"
+            ],
+            "properties": {
+              "columns": {
+                "maxItems": 6
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "table"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "group_by",
+              "columns"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "heatmap"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "group_by",
+              "series_by"
             ]
           }
         },
@@ -235,6 +298,49 @@
           }
         }
       ]
+    },
+    "table_column": {
+      "type": "object",
+      "required": [
+        "name",
+        "label"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "model.json#/$defs/name",
+          "description": "Referenced by later expr columns and by sort."
+        },
+        "label": {
+          "$ref": "model.json#/$defs/label"
+        },
+        "fn": {
+          "enum": [
+            "count",
+            "sum",
+            "avg",
+            "min",
+            "max"
+          ],
+          "description": "Aggregate over the group's records. Give fn or expr, not both."
+        },
+        "field": {
+          "$ref": "model.json#/$defs/name",
+          "description": "Numeric field for sum, avg, min, max."
+        },
+        "expr": {
+          "$ref": "model.json#/$defs/cel",
+          "description": "CEL over the names of the earlier columns of the same row only, e.g. net / receipts; no record access. Division by zero shows an empty cell."
+        },
+        "format": {
+          "enum": [
+            "number",
+            "currency",
+            "percent"
+          ],
+          "description": "Default: currency for a currency field, else number."
+        }
+      }
     }
   }
 }

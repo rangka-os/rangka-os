@@ -40,11 +40,14 @@ type Caller struct {
 type Handler struct {
 	Version string
 	Resolve func(r *http.Request) (*Caller, error)
-	Engine  func() *engine.Engine
-	Changes *changeset.Service
-	Meta    func(ctx context.Context, a engine.Actor) (any, error)
-	File    func(ctx context.Context, path string) (any, error)
-	Status  func(ctx context.Context, org string) any
+	// Forbidden reports a Resolve error that is a refusal of a known credential (403) rather than a missing or bad
+	// one (401). Nil: every error is a 401.
+	Forbidden func(err error) bool
+	Engine    func() *engine.Engine
+	Changes   *changeset.Service
+	Meta      func(ctx context.Context, a engine.Actor) (any, error)
+	File      func(ctx context.Context, path string) (any, error)
+	Status    func(ctx context.Context, org string) any
 	// Catalogue and Skills serve contract 0035: what exists for this site, and the skills agents load.
 	Catalogue func() any
 	Skills    func() *skills.Library
@@ -85,6 +88,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	caller, err := h.Resolve(r)
+	if err != nil && h.Forbidden != nil && h.Forbidden(err) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "scope_limited", "message": err.Error()})
+		return
+	}
 	if err != nil || caller == nil {
 		w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="/.well-known/openid-configuration"`)
 		http.Error(w, `{"error":"unauthorized","message":"send Authorization: Bearer <rk_ token or OIDC access token with scope rangka.mcp>"}`, http.StatusUnauthorized)

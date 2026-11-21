@@ -58,9 +58,10 @@ func keyOf(v string) (credKey, bool) {
 
 // verifiedSet remembers hashes of credentials verified in this process. The zero value is ready to use.
 type verifiedSet struct {
-	mu  sync.Mutex
-	m   map[credKey]time.Time // expiry
-	now func() time.Time      // tests; nil = time.Now
+	mu   sync.Mutex
+	m    map[credKey]time.Time // expiry
+	keys map[credKey]time.Time // the verified credentials that are integration keys (contract 0075 §5); expiry
+	now  func() time.Time      // tests; nil = time.Now
 }
 
 func (v *verifiedSet) clock() time.Time {
@@ -110,6 +111,34 @@ func (v *verifiedSet) forget(k credKey, ok bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	delete(v.m, k)
+	delete(v.keys, k)
+}
+
+// noteKey marks a verified credential as an integration key, so shaping gives it its own bucket as well.
+func (v *verifiedSet) noteKey(k credKey, ok bool) {
+	if !ok {
+		return
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.keys == nil {
+		v.keys = map[credKey]time.Time{}
+	}
+	if _, found := v.keys[k]; !found && len(v.keys) >= verifiedMax {
+		clear(v.keys)
+	}
+	v.keys[k] = v.clock().Add(verifiedTTL)
+}
+
+// isKey reports whether k is a verified integration key.
+func (v *verifiedSet) isKey(k credKey, ok bool) bool {
+	if !ok {
+		return false
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	exp, found := v.keys[k]
+	return found && v.clock().Before(exp)
 }
 
 // issuesSessions: the routes that set or clear the session cookie (sign-in and sign-out, upstream and OIDC

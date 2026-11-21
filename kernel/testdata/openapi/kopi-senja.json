@@ -1,0 +1,3640 @@
+{
+  "components": {
+    "schemas": {
+      "Error": {
+        "properties": {
+          "error": {
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "activity": {
+        "properties": {
+          "activity_type": {
+            "enum": [
+              "whatsapp",
+              "call",
+              "meeting",
+              "visit",
+              "email"
+            ],
+            "title": "Jenis",
+            "type": "string"
+          },
+          "deal": {
+            "description": "Name of a deal record",
+            "title": "Peluang",
+            "type": "string"
+          },
+          "done": {
+            "title": "Selesai",
+            "type": "boolean"
+          },
+          "due_date": {
+            "format": "date",
+            "title": "Tanggal",
+            "type": "string"
+          },
+          "lead": {
+            "description": "Name of a lead record",
+            "title": "Lead",
+            "type": "string"
+          },
+          "name": {
+            "readOnly": true,
+            "type": "string"
+          },
+          "notes": {
+            "title": "Catatan",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Name of a user record",
+            "title": "Penanggung jawab",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Perihal",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "activityInput": {
+        "properties": {
+          "activity_type": {
+            "enum": [
+              "whatsapp",
+              "call",
+              "meeting",
+              "visit",
+              "email"
+            ],
+            "title": "Jenis",
+            "type": "string"
+          },
+          "deal": {
+            "description": "Name of a deal record",
+            "title": "Peluang",
+            "type": "string"
+          },
+          "done": {
+            "title": "Selesai",
+            "type": "boolean"
+          },
+          "due_date": {
+            "format": "date",
+            "title": "Tanggal",
+            "type": "string"
+          },
+          "lead": {
+            "description": "Name of a lead record",
+            "title": "Lead",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Catatan",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Name of a user record",
+            "title": "Penanggung jawab",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Perihal",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "type": "object"
+      },
+      "customer": {
+        "properties": {
+          "city": {
+            "title": "Kota",
+            "type": "string"
+          },
+          "credit_limit": {
+            "title": "Batas kredit",
+            "type": "number"
+          },
+          "customer_name": {
+            "title": "Nama pelanggan",
+            "type": "string"
+          },
+          "name": {
+            "readOnly": true,
+            "type": "string"
+          },
+          "npwp": {
+            "title": "NPWP",
+            "type": "string"
+          },
+          "outstanding": {
+            "readOnly": true,
+            "title": "Piutang",
+            "type": "number"
+          },
+          "payment_days": {
+            "title": "Tempo (hari)",
+            "type": "integer"
+          },
+          "phone": {
+            "title": "Nomor WhatsApp",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "customerInput": {
+        "properties": {
+          "city": {
+            "title": "Kota",
+            "type": "string"
+          },
+          "credit_limit": {
+            "title": "Batas kredit",
+            "type": "number"
+          },
+          "customer_name": {
+            "title": "Nama pelanggan",
+            "type": "string"
+          },
+          "npwp": {
+            "title": "NPWP",
+            "type": "string"
+          },
+          "payment_days": {
+            "title": "Tempo (hari)",
+            "type": "integer"
+          },
+          "phone": {
+            "title": "Nomor WhatsApp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_name"
+        ],
+        "type": "object"
+      },
+      "deal": {
+        "properties": {
+          "contact_person": {
+            "title": "Kontak",
+            "type": "string"
+          },
+          "customer": {
+            "description": "Name of a customer record",
+            "title": "Pelanggan",
+            "type": "string"
+          },
+          "deal_name": {
+            "title": "Judul peluang",
+            "type": "string"
+          },
+          "expected_close": {
+            "format": "date",
+            "title": "Perkiraan closing",
+            "type": "string"
+          },
+          "lost_reason": {
+            "title": "Alasan kalah",
+            "type": "string"
+          },
+          "name": {
+            "readOnly": true,
+            "type": "string"
+          },
+          "notes": {
+            "title": "Catatan",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Name of a user record",
+            "title": "Penanggung jawab",
+            "type": "string"
+          },
+          "probability": {
+            "readOnly": true,
+            "title": "Peluang menang",
+            "type": "number"
+          },
+          "source": {
+            "title": "Sumber",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "prospect",
+              "qualified",
+              "proposal",
+              "negotiation",
+              "won",
+              "lost"
+            ],
+            "title": "Tahap",
+            "type": "string"
+          },
+          "value": {
+            "title": "Nilai",
+            "type": "number"
+          },
+          "weighted_value": {
+            "readOnly": true,
+            "title": "Nilai tertimbang",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "dealInput": {
+        "properties": {
+          "contact_person": {
+            "title": "Kontak",
+            "type": "string"
+          },
+          "customer": {
+            "description": "Name of a customer record",
+            "title": "Pelanggan",
+            "type": "string"
+          },
+          "deal_name": {
+            "title": "Judul peluang",
+            "type": "string"
+          },
+          "expected_close": {
+            "format": "date",
+            "title": "Perkiraan closing",
+            "type": "string"
+          },
+          "lost_reason": {
+            "title": "Alasan kalah",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Catatan",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Name of a user record",
+            "title": "Penanggung jawab",
+            "type": "string"
+          },
+          "source": {
+            "title": "Sumber",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "prospect",
+              "qualified",
+              "proposal",
+              "negotiation",
+              "won",
+              "lost"
+            ],
+            "title": "Tahap",
+            "type": "string"
+          },
+          "value": {
+            "title": "Nilai",
+            "type": "number"
+          }
+        },
+        "required": [
+          "deal_name",
+          "customer"
+        ],
+        "type": "object"
+      },
+      "item": {
+        "properties": {
+          "item_name": {
+            "title": "Nama barang",
+            "type": "string"
+          },
+          "name": {
+            "readOnly": true,
+            "type": "string"
+          },
+          "rate": {
+            "title": "Harga jual",
+            "type": "number"
+          },
+          "stock": {
+            "title": "Stok",
+            "type": "number"
+          },
+          "uom": {
+            "title": "Satuan",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "itemInput": {
+        "properties": {
+          "item_name": {
+            "title": "Nama barang",
+            "type": "string"
+          },
+          "rate": {
+            "title": "Harga jual",
+            "type": "number"
+          },
+          "stock": {
+            "title": "Stok",
+            "type": "number"
+          },
+          "uom": {
+            "title": "Satuan",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_name"
+        ],
+        "type": "object"
+      },
+      "lead": {
+        "properties": {
+          "city": {
+            "title": "Kota",
+            "type": "string"
+          },
+          "company_name": {
+            "title": "Nama usaha",
+            "type": "string"
+          },
+          "converted_customer": {
+            "description": "Name of a customer record",
+            "readOnly": true,
+            "title": "Jadi pelanggan",
+            "type": "string"
+          },
+          "converted_deal": {
+            "description": "Name of a deal record",
+            "readOnly": true,
+            "title": "Jadi peluang",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "lead_name": {
+            "title": "Nama",
+            "type": "string"
+          },
+          "name": {
+            "readOnly": true,
+            "type": "string"
+          },
+          "notes": {
+            "title": "Catatan",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Name of a user record",
+            "title": "Penanggung jawab",
+            "type": "string"
+          },
+          "phone": {
+            "title": "Nomor WhatsApp",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "whatsapp",
+              "instagram",
+              "referral",
+              "walk_in",
+              "website",
+              "marketplace"
+            ],
+            "title": "Sumber",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "new",
+              "contacted",
+              "qualified",
+              "lost"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "leadInput": {
+        "properties": {
+          "city": {
+            "title": "Kota",
+            "type": "string"
+          },
+          "company_name": {
+            "title": "Nama usaha",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "lead_name": {
+            "title": "Nama",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Catatan",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Name of a user record",
+            "title": "Penanggung jawab",
+            "type": "string"
+          },
+          "phone": {
+            "title": "Nomor WhatsApp",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "whatsapp",
+              "instagram",
+              "referral",
+              "walk_in",
+              "website",
+              "marketplace"
+            ],
+            "title": "Sumber",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "new",
+              "contacted",
+              "qualified",
+              "lost"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "lead_name"
+        ],
+        "type": "object"
+      },
+      "outlet": {
+        "properties": {
+          "name": {
+            "readOnly": true,
+            "type": "string"
+          },
+          "outlet_name": {
+            "title": "Nama outlet",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "outletInput": {
+        "properties": {
+          "outlet_name": {
+            "title": "Nama outlet",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "sales_invoice": {
+        "properties": {
+          "customer": {
+            "description": "Name of a customer record",
+            "title": "Pelanggan",
+            "type": "string"
+          },
+          "due_date": {
+            "format": "date",
+            "title": "Jatuh tempo",
+            "type": "string"
+          },
+          "grand_total": {
+            "readOnly": true,
+            "title": "Total",
+            "type": "number"
+          },
+          "items": {
+            "items": {
+              "properties": {
+                "amount": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                },
+                "item": {
+                  "description": "Name of a item record",
+                  "type": "string"
+                },
+                "qty": {
+                  "type": "number"
+                },
+                "rate": {
+                  "type": "number"
+                },
+                "uom": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "title": "Barang",
+            "type": "array"
+          },
+          "name": {
+            "readOnly": true,
+            "type": "string"
+          },
+          "notes": {
+            "title": "Catatan untuk pelanggan",
+            "type": "string"
+          },
+          "outlet": {
+            "description": "Name of a outlet record",
+            "title": "Outlet",
+            "type": "string"
+          },
+          "paid_amount": {
+            "readOnly": true,
+            "title": "Sudah dibayar",
+            "type": "number"
+          },
+          "posting_date": {
+            "format": "date",
+            "title": "Tanggal faktur",
+            "type": "string"
+          },
+          "ppn": {
+            "readOnly": true,
+            "title": "PPN 12% × DPP 11/12",
+            "type": "number"
+          },
+          "subtotal": {
+            "readOnly": true,
+            "title": "Subtotal",
+            "type": "number"
+          },
+          "tax_rate": {
+            "title": "Tarif PPN",
+            "type": "number"
+          }
+        },
+        "type": "object"
+      },
+      "sales_invoiceInput": {
+        "properties": {
+          "customer": {
+            "description": "Name of a customer record",
+            "title": "Pelanggan",
+            "type": "string"
+          },
+          "due_date": {
+            "format": "date",
+            "title": "Jatuh tempo",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "properties": {
+                "amount": {
+                  "type": "number"
+                },
+                "discount": {
+                  "type": "number"
+                },
+                "item": {
+                  "description": "Name of a item record",
+                  "type": "string"
+                },
+                "qty": {
+                  "type": "number"
+                },
+                "rate": {
+                  "type": "number"
+                },
+                "uom": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "title": "Barang",
+            "type": "array"
+          },
+          "notes": {
+            "title": "Catatan untuk pelanggan",
+            "type": "string"
+          },
+          "outlet": {
+            "description": "Name of a outlet record",
+            "title": "Outlet",
+            "type": "string"
+          },
+          "posting_date": {
+            "format": "date",
+            "title": "Tanggal faktur",
+            "type": "string"
+          },
+          "tax_rate": {
+            "title": "Tarif PPN",
+            "type": "number"
+          }
+        },
+        "required": [
+          "customer",
+          "outlet"
+        ],
+        "type": "object"
+      },
+      "user": {
+        "properties": {
+          "access": {
+            "enum": [
+              "active",
+              "pending",
+              "removed",
+              "none"
+            ],
+            "readOnly": true,
+            "title": "Akses",
+            "type": "string"
+          },
+          "account_id": {
+            "readOnly": true,
+            "title": "ID akun",
+            "type": "integer"
+          },
+          "email": {
+            "readOnly": true,
+            "title": "Email",
+            "type": "string"
+          },
+          "employee_no": {
+            "title": "Nomor karyawan",
+            "type": "string"
+          },
+          "full_name": {
+            "title": "Nama",
+            "type": "string"
+          },
+          "name": {
+            "readOnly": true,
+            "type": "string"
+          },
+          "outlets": {
+            "items": {
+              "properties": {
+                "outlet": {
+                  "description": "Name of a outlet record",
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "readOnly": true,
+            "title": "Outlet",
+            "type": "array"
+          },
+          "phone": {
+            "title": "Nomor telepon",
+            "type": "string"
+          },
+          "role": {
+            "readOnly": true,
+            "title": "Peran",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "userInput": {
+        "properties": {
+          "employee_no": {
+            "title": "Nomor karyawan",
+            "type": "string"
+          },
+          "full_name": {
+            "title": "Nama",
+            "type": "string"
+          },
+          "phone": {
+            "title": "Nomor telepon",
+            "type": "string"
+          }
+        },
+        "required": [
+          "full_name"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "description": "An rk_ API token or integration key.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Record API of this business, limited to what the caller's role and key scopes allow (contract 0075).",
+    "title": "Rangka API",
+    "version": "1",
+    "x-rangka-contract": "0075"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/r/activity": {
+      "get": {
+        "operationId": "activity.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/activity"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of records"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          }
+        },
+        "summary": "List activity records",
+        "tags": [
+          "activity"
+        ]
+      },
+      "post": {
+        "operationId": "activity.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/activityInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/activity"
+                }
+              }
+            },
+            "description": "The new record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create a activity record",
+        "tags": [
+          "activity"
+        ]
+      }
+    },
+    "/api/v1/r/activity/{name}": {
+      "delete": {
+        "operationId": "activity.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Delete a activity record",
+        "tags": [
+          "activity"
+        ]
+      },
+      "get": {
+        "operationId": "activity.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/activity"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get one activity record",
+        "tags": [
+          "activity"
+        ]
+      },
+      "patch": {
+        "operationId": "activity.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/activityInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/activity"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Update a activity record",
+        "tags": [
+          "activity"
+        ]
+      }
+    },
+    "/api/v1/r/customer": {
+      "get": {
+        "operationId": "customer.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/customer"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of records"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          }
+        },
+        "summary": "List customer records",
+        "tags": [
+          "customer"
+        ]
+      },
+      "post": {
+        "operationId": "customer.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/customerInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/customer"
+                }
+              }
+            },
+            "description": "The new record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create a customer record",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/v1/r/customer/{name}": {
+      "delete": {
+        "operationId": "customer.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Delete a customer record",
+        "tags": [
+          "customer"
+        ]
+      },
+      "get": {
+        "operationId": "customer.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/customer"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get one customer record",
+        "tags": [
+          "customer"
+        ]
+      },
+      "patch": {
+        "operationId": "customer.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/customerInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/customer"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Update a customer record",
+        "tags": [
+          "customer"
+        ]
+      }
+    },
+    "/api/v1/r/deal": {
+      "get": {
+        "operationId": "deal.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/deal"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of records"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          }
+        },
+        "summary": "List deal records",
+        "tags": [
+          "deal"
+        ]
+      },
+      "post": {
+        "operationId": "deal.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/dealInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deal"
+                }
+              }
+            },
+            "description": "The new record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create a deal record",
+        "tags": [
+          "deal"
+        ]
+      }
+    },
+    "/api/v1/r/deal/{name}": {
+      "delete": {
+        "operationId": "deal.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Delete a deal record",
+        "tags": [
+          "deal"
+        ]
+      },
+      "get": {
+        "operationId": "deal.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deal"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get one deal record",
+        "tags": [
+          "deal"
+        ]
+      },
+      "patch": {
+        "operationId": "deal.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/dealInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deal"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Update a deal record",
+        "tags": [
+          "deal"
+        ]
+      }
+    },
+    "/api/v1/r/item": {
+      "get": {
+        "operationId": "item.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/item"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of records"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          }
+        },
+        "summary": "List item records",
+        "tags": [
+          "item"
+        ]
+      },
+      "post": {
+        "operationId": "item.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/itemInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/item"
+                }
+              }
+            },
+            "description": "The new record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create a item record",
+        "tags": [
+          "item"
+        ]
+      }
+    },
+    "/api/v1/r/item/{name}": {
+      "delete": {
+        "operationId": "item.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Delete a item record",
+        "tags": [
+          "item"
+        ]
+      },
+      "get": {
+        "operationId": "item.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/item"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get one item record",
+        "tags": [
+          "item"
+        ]
+      },
+      "patch": {
+        "operationId": "item.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/itemInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/item"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Update a item record",
+        "tags": [
+          "item"
+        ]
+      }
+    },
+    "/api/v1/r/lead": {
+      "get": {
+        "operationId": "lead.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/lead"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of records"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          }
+        },
+        "summary": "List lead records",
+        "tags": [
+          "lead"
+        ]
+      },
+      "post": {
+        "operationId": "lead.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/leadInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/lead"
+                }
+              }
+            },
+            "description": "The new record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create a lead record",
+        "tags": [
+          "lead"
+        ]
+      }
+    },
+    "/api/v1/r/lead/{name}": {
+      "delete": {
+        "operationId": "lead.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Delete a lead record",
+        "tags": [
+          "lead"
+        ]
+      },
+      "get": {
+        "operationId": "lead.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/lead"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get one lead record",
+        "tags": [
+          "lead"
+        ]
+      },
+      "patch": {
+        "operationId": "lead.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/leadInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/lead"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Update a lead record",
+        "tags": [
+          "lead"
+        ]
+      }
+    },
+    "/api/v1/r/lead/{name}/actions/convert": {
+      "post": {
+        "operationId": "lead.action.convert",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "The result"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Run the convert action on a lead record",
+        "tags": [
+          "lead"
+        ]
+      }
+    },
+    "/api/v1/r/outlet": {
+      "get": {
+        "operationId": "outlet.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/outlet"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of records"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          }
+        },
+        "summary": "List outlet records",
+        "tags": [
+          "outlet"
+        ]
+      },
+      "post": {
+        "operationId": "outlet.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/outletInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/outlet"
+                }
+              }
+            },
+            "description": "The new record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create a outlet record",
+        "tags": [
+          "outlet"
+        ]
+      }
+    },
+    "/api/v1/r/outlet/{name}": {
+      "delete": {
+        "operationId": "outlet.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Delete a outlet record",
+        "tags": [
+          "outlet"
+        ]
+      },
+      "get": {
+        "operationId": "outlet.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/outlet"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get one outlet record",
+        "tags": [
+          "outlet"
+        ]
+      },
+      "patch": {
+        "operationId": "outlet.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/outletInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/outlet"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Update a outlet record",
+        "tags": [
+          "outlet"
+        ]
+      }
+    },
+    "/api/v1/r/sales_invoice": {
+      "get": {
+        "operationId": "sales_invoice.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/sales_invoice"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of records"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          }
+        },
+        "summary": "List sales_invoice records",
+        "tags": [
+          "sales_invoice"
+        ]
+      },
+      "post": {
+        "operationId": "sales_invoice.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sales_invoiceInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sales_invoice"
+                }
+              }
+            },
+            "description": "The new record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create a sales_invoice record",
+        "tags": [
+          "sales_invoice"
+        ]
+      }
+    },
+    "/api/v1/r/sales_invoice/{name}": {
+      "delete": {
+        "operationId": "sales_invoice.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Delete a sales_invoice record",
+        "tags": [
+          "sales_invoice"
+        ]
+      },
+      "get": {
+        "operationId": "sales_invoice.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sales_invoice"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get one sales_invoice record",
+        "tags": [
+          "sales_invoice"
+        ]
+      },
+      "patch": {
+        "operationId": "sales_invoice.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/sales_invoiceInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sales_invoice"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Update a sales_invoice record",
+        "tags": [
+          "sales_invoice"
+        ]
+      }
+    },
+    "/api/v1/r/sales_invoice/{name}/cancel": {
+      "post": {
+        "operationId": "sales_invoice.cancel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sales_invoice"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "cancel a sales_invoice record",
+        "tags": [
+          "sales_invoice"
+        ]
+      }
+    },
+    "/api/v1/r/sales_invoice/{name}/submit": {
+      "post": {
+        "operationId": "sales_invoice.submit",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/sales_invoice"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "submit a sales_invoice record",
+        "tags": [
+          "sales_invoice"
+        ]
+      }
+    },
+    "/api/v1/r/user": {
+      "get": {
+        "operationId": "user.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "filter",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "data": {
+                      "items": {
+                        "$ref": "#/components/schemas/user"
+                      },
+                      "type": "array"
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "A page of records"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          }
+        },
+        "summary": "List user records",
+        "tags": [
+          "user"
+        ]
+      },
+      "post": {
+        "operationId": "user.create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/userInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/user"
+                }
+              }
+            },
+            "description": "The new record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create a user record",
+        "tags": [
+          "user"
+        ]
+      }
+    },
+    "/api/v1/r/user/{name}": {
+      "delete": {
+        "operationId": "user.delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Delete a user record",
+        "tags": [
+          "user"
+        ]
+      },
+      "get": {
+        "operationId": "user.get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/user"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          }
+        },
+        "summary": "Get one user record",
+        "tags": [
+          "user"
+        ]
+      },
+      "patch": {
+        "operationId": "user.update",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/userInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/user"
+                }
+              }
+            },
+            "description": "The record"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not allowed for this key or role"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Update a user record",
+        "tags": [
+          "user"
+        ]
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "servers": [
+    {
+      "url": "/"
+    }
+  ]
+}

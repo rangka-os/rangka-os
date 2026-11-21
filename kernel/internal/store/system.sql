@@ -74,6 +74,11 @@ create table if not exists rk_tokens (
   expires_at   timestamptz
 );
 alter table rk_tokens add column if not exists scopes text[] not null default '{}'; -- secrets:write (contract 0017 §3)
+-- contract 0075: integration keys. A key's holder is a service member (no password, never signs in); the token counts
+-- its requests per day for the owner's list.
+alter table rk_users add column if not exists service boolean not null default false;
+alter table rk_tokens add column if not exists req_day date;
+alter table rk_tokens add column if not exists req_count bigint not null default 0;
 -- contract 0056 §5 upgrade: an account with a session or an API token it created has signed in before signed_in_at
 -- existed, so it is not pending. A password or an identity link is no proof (invitees get both). Runs on every start;
 -- it only fills nulls, and openSession sets the column from then on.

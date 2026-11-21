@@ -289,6 +289,10 @@ const ScopeAssistant = "assistant"
 // TokenScopes are the scopes an API token may carry.
 var TokenScopes = map[string]bool{ScopeSecretsWrite: true, ScopeSecretsHost: true, ScopeMembersWrite: true, ScopeAssistant: true}
 
+// ValidTokenScope reports whether scope is one an API token may carry: a fixed scope of TokenScopes, or an
+// integration-key scope (api:read:<model>, api:write:<model>, api:read:*; contract 0075 §3).
+func ValidTokenScope(scope string) bool { return TokenScopes[scope] || IsAPIScope(scope) }
+
 // RevokeMember deletes a person's sessions and API tokens in one organisation (contract 0043 §4); their sessions and
 // tokens for other organisations stay. q may be the transaction that changes the membership.
 func (s *Service) RevokeMember(ctx context.Context, q pg.Querier, userID int64, org string) error {
@@ -328,7 +332,7 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
 		if strings.HasPrefix(tok, "rk_") {
-			res, err := s.DB.Query(ctx, `update rk_tokens set last_used_at = now() where token_hash = $1 and (expires_at is null or expires_at > $2)
+			res, err := s.DB.Query(ctx, `update rk_tokens set last_used_at = now(), req_count = case when req_day = current_date then req_count + 1 else 1 end, req_day = current_date where token_hash = $1 and (expires_at is null or expires_at > $2)
 				returning user_id, org_id, array_to_string(scopes, ' ')`, HashToken(tok), s.now())
 			if err != nil {
 				return nil, err

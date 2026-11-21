@@ -120,6 +120,13 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	if p != nil && p.Via == "dev" && p.User.Org == "" {
 		p.User.Org = s.Org
 	}
+	// an integration key reaches the routes its scopes name and nothing else (contract 0075 §4)
+	if p != nil && p.IsIntegrationKey() {
+		if err := keyGuard(p, r); err != nil {
+			return nil, err
+		}
+		s.verified.noteKey(credential(r))
+	}
 	// a members:write token reaches the member API and nothing else (contract 0043 §1)
 	if p != nil && p.Via == "token" && p.HasScope(auth.ScopeMembersWrite) && !memberRoute(r) {
 		return nil, errScopeLimited
@@ -307,6 +314,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/files/meta", a(s.listFiles)) // v0 aliases
 	mux.HandleFunc("GET /api/v1/files/meta/{path...}", a(s.getFile))
 	mux.HandleFunc("POST /api/v1/tokens", a(s.createToken))
+	// integration keys (contract 0075 §2) and the Open API document (§6)
+	mux.HandleFunc("POST /api/v1/integration-keys", a(s.createIntegrationKey))
+	mux.HandleFunc("GET /api/v1/integration-keys", a(s.listIntegrationKeys))
+	mux.HandleFunc("DELETE /api/v1/integration-keys/{id}", a(s.deleteIntegrationKey))
+	mux.HandleFunc("GET /api/v1/openapi.json", a(s.openAPI))
 	// paired devices (contract 0058 §2): codes, list and revoke for owner and head office; pairing is not signed in
 	mux.HandleFunc("POST /api/v1/devices/codes", a(s.createPairingCode))
 	mux.HandleFunc("GET /api/v1/devices", a(s.listDevices))
@@ -351,7 +363,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /oauth/jwks", s.Auth.JWKS)
 	// MCP
 	mcpHandler := &mcp.Handler{
-		Version: s.Version,
+		Version:   s.Version,
+		Forbidden: func(err error) bool { return errors.Is(err, errKeyLimited) }, // an integration key: 403, not 401 (contract 0075 §4)
 		Resolve: func(r *http.Request) (*mcp.Caller, error) {
 			p, err := s.principal(r)
 			// a cashier's PIN session (contract 0058 §2) does not reach MCP: it answers like no credential

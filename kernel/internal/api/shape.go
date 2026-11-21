@@ -39,7 +39,25 @@ func (s *Server) shape(h http.Handler) http.Handler {
 		if !s.verified.has(credential(r)) {
 			key = "ip:" + s.clientKey(r)
 		}
+		// an integration key has its own bucket nested in the tenant's (contract 0075 §5): a key over its half of
+		// the rate is refused before it spends the tenant's tokens
+		var keyWait time.Duration
+		if cred, ok := credential(r); key == "tenant" && s.verified.isKey(cred, ok) {
+			kw, err := s.limiter.Wait(r.Context(), "key:"+hex.EncodeToString(cred[:]), keyRate(rate))
+			var refused *ratelimit.Refused
+			switch {
+			case err == nil:
+				keyWait = kw
+			case errors.As(err, &refused):
+				w.Header().Set("Retry-After", strconv.Itoa(refused.RetrySeconds()))
+				writeError(w, http.StatusTooManyRequests, "rate_limited", msgRateLimited)
+				return
+			default: // the client went away while waiting
+				return
+			}
+		}
 		waited, err := s.limiter.Wait(r.Context(), key, rate)
+		waited += keyWait
 		var refused *ratelimit.Refused
 		switch {
 		case err == nil:
@@ -99,4 +117,12 @@ func unshaped(r *http.Request) bool {
 func (s *Server) clientKey(r *http.Request) string {
 	sum := sha256.Sum256([]byte(s.proxies.clientIP(r, s.Log)))
 	return hex.EncodeToString(sum[:12])
+}
+
+// keyRate is an integration key's own rate: half the tenant's, at least one request a second.
+func keyRate(r ratelimit.Rate) ratelimit.Rate {
+	r.RPS = max(1, r.RPS/2)
+	r.Burst = max(1, r.Burst/2)
+	r.MaxWaiting = max(1, r.MaxWaiting/2)
+	return r
 }

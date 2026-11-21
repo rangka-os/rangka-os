@@ -540,7 +540,7 @@ type person struct {
 func persons(ctx context.Context, q pg.Querier) ([]person, error) {
 	// members of the ruang coba only (contract 0052 §2) are not counted
 	res, err := q.Query(ctx, `select u.email, array_agg(distinct m.role) from rk_members m join rk_users u on u.id = m.user_id
-		join rk_orgs o on o.id = m.org_id where not o.sandbox
+		join rk_orgs o on o.id = m.org_id where not o.sandbox and not u.service
 		group by u.id, u.email order by bool_or(m.role = 'owner') desc, min(m.added_at), u.id`)
 	if err != nil {
 		return nil, err

@@ -176,6 +176,11 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) 
 		body.Name = "api"
 	}
 	for _, sc := range body.Scopes {
+		// api: scopes belong to integration keys, minted with their service member (contract 0075 §2)
+		if strings.HasPrefix(sc, auth.APIScopePrefix) {
+			writeError(w, 403, "forbidden", msgKeyViaToken)
+			return
+		}
 		if !auth.TokenScopes[sc] {
 			writeError(w, 400, "unknown_scope", "unknown token scope "+sc+" (known: secrets:write, secrets:host, members:write, assistant)")
 			return

@@ -68,6 +68,10 @@ func TestEdgeConfig(t *testing.T) {
 	if get(cfg, "device", "code") != "K1" || get(cfg, "device", "id") == "" {
 		t.Fatalf("device = %v", cfg["device"])
 	}
+	// the patterns the device names its own documents with (naming_on: device models only)
+	if get(cfg, "naming", "penjualan") != "STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####}" || get(cfg, "naming", "menu") != nil {
+		t.Fatalf("naming = %v", cfg["naming"])
+	}
 	if get(cfg, "sync", "push_max_items") != 100.0 || get(cfg, "sync", "pull_interval_s") != 60.0 {
 		t.Fatalf("sync = %v", cfg["sync"])
 	}

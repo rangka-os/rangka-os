@@ -54,6 +54,16 @@ jobs:
       - name: Vet, test and compare with the Python validator
         run: make -C rangka-os/kernel vet test compare-python
 
+      # The web app's unit tests, among them engine.js against the kernel's own numbers on the shared fixtures
+      # (web/app/test/fixtures/cel-parity.json, pos-sale-parity.json): a paired device's totals are binding (contract
+      # 0058 §10). The fixture's models must still be rangka-apps' (a warning here; regenerate in this repo).
+      - uses: actions/setup-node@v7
+        with: { node-version: 22 }
+      - name: Web unit tests and pos parity models
+        run: |
+          node --test rangka-os/web/app/test/*.test.js
+          python rangka-os/tools/pos_parity_models.py --apps rangka-apps --check
+
       # Contract 0035: the release zip of every skill must pack (it refuses a skill that fails rangka skills check).
       - name: Skills pack
         run: |

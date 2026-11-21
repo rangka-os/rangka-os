@@ -549,6 +549,9 @@ func (r *flowRun) env() *cel.Env {
 		if v, ok := r.vars[n]; ok {
 			return v, true
 		}
+		if n == "device" && r.o != nil {
+			return deviceVarIn(r.o.ctx, r.a), true
+		}
 		return GlobalVar(r.registry(), r.a, n)
 	}}
 }

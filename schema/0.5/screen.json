@@ -305,7 +305,7 @@
             },
             "checkout": {
               "type": "array",
-              "maxItems": 6,
+              "maxItems": 8,
               "items": {
                 "oneOf": [
                   {

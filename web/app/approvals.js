@@ -393,6 +393,11 @@
     var ss = useState(null), sel = ss[0], setSel = ss[1]; // the request on show in the detail panel (wide screens)
     var wide = useWide();
 
+    // /meta may arrive after the first render (just signed in): a link with ?tab=sistem still lands on the tab
+    useEffect(function () {
+      if (sysOk && tabFromHash(global.location && global.location.hash) === "sistem") setTab("sistem");
+    }, [sysOk]);
+
     useEffect(function () {
       var dead = false;
       setData(null);

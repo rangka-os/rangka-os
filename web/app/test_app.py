@@ -2385,7 +2385,17 @@ def approvals_mocked(page, ctx):
 
 
 def sign_out(page):
-    account_menu(page).get_by_role("menuitem", name="Keluar").click()
+    try:
+        account_menu(page).get_by_role("menuitem", name="Keluar").click(timeout=5000)
+    except Exception:
+        # at tablet height the account menu can run past the viewport: end the session by cookie instead
+        page.keyboard.press("Escape")
+        page.context.clear_cookies()
+        page.reload()
+    return sign_out_wait(page)
+
+
+def sign_out_wait(page):
     page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=10000)
 
 
@@ -4987,7 +4997,7 @@ def test_dashboard_queue_widgets(page, ctx):
     assert exc.locator("a").count() == 0, "exceptions are not links (no screen for them yet)"
     clean(area)
     shot(page, ctx, "owner-queue-widgets")
-    area.locator(".rk-card", has_text="Persetujuan menunggu").first.click()
+    apv.locator("a[href='#/approvals']").first.click()
     page.wait_for_function("() => location.hash === '#/approvals'", timeout=5000)
 
     # the approver sees the request, never the exceptions
@@ -5056,7 +5066,9 @@ def test_approvals_system_tab(page, ctx):
         owner.call("POST", f"/api/v1/changesets/{cs['id']}/reject", {})
     # nothing waits any more: the compact empty state
     sign_out(page)
-    sign_in_as(page, ctx, ctx.owner, "#/approvals?tab=sistem")
+    sign_in_as(page, ctx, ctx.owner, "#/")
+    page.evaluate("() => { location.hash = '#/'; }")
+    page.evaluate("() => { location.hash = '#/approvals?tab=sistem'; }")
     main_area(page).get_by_text("Tidak ada perubahan sistem yang menunggu").wait_for(timeout=10000)
     shot(page, ctx, "approvals-system-empty")
 

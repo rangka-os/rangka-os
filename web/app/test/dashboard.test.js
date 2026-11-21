@@ -30,3 +30,23 @@ test("widgetError hides permission_denied and turns other errors into text", () 
     assert.strictEqual(typeof widgetError(r).text, "string");
   }
 });
+
+// Table and heatmap helpers (contract 0075).
+test("tableCell formats currency, percent and numbers, and shows an empty cell as a dash", () => {
+  const { tableCell } = global.RangkaApp;
+  assert.strictEqual(tableCell("number", null), "–");
+  assert.strictEqual(tableCell("percent", 12.5), "12,5%");
+  assert.strictEqual(tableCell("number", 1234567), (1234567).toLocaleString("id-ID"));
+  assert.strictEqual(tableCell("currency", 1500, (n) => "Rp " + n), "Rp 1500");
+  assert.strictEqual(tableCell("number", 2.5), "2,5");
+});
+
+test("heatShade: empty cell is null, the busiest is 100, zero is the faintest", () => {
+  const { heatShade, heatColLabel } = global.RangkaApp;
+  assert.strictEqual(heatShade(null, 10), null);
+  assert.deepStrictEqual(heatShade(10, 10), { pct: 100, dark: true });
+  assert.deepStrictEqual(heatShade(0, 10), { pct: 8, dark: false });
+  assert.deepStrictEqual(heatShade(3, 0), { pct: 8, dark: false });
+  assert.strictEqual(heatColLabel({ key: "7", label: "7" }), "07");
+  assert.strictEqual(heatColLabel({ key: "12", label: "12" }), "12");
+});

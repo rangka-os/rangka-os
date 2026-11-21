@@ -38,6 +38,35 @@
   }
   RA.widgetError = widgetError;
 
+  /** One table cell as text: null (an empty cell, e.g. a ratio over 0) is an en dash, currency is rupiah, percent has a
+   *  % sign, anything else is a number grouped the Indonesian way. */
+  function tableCell(format, v, rupiah) {
+    if (v === null || v === undefined || v === "") return "\u2013";
+    var n = Number(v);
+    if (!isFinite(n)) return "\u2013";
+    if (format === "currency") return rupiah ? rupiah(n) : "Rp " + Math.round(n).toLocaleString("id-ID");
+    if (format === "percent") return String(Math.round(n * 10) / 10).replace(".", ",") + "%";
+    return Math.round(n * 100) / 100 === Math.round(n) ? Math.round(n).toLocaleString("id-ID") : String(Math.round(n * 100) / 100).replace(".", ",");
+  }
+  RA.tableCell = tableCell;
+
+  /** The shade of a heatmap cell: null for an empty cell (no records), else {pct: 8 to 100 (share of the busiest cell),
+   *  dark: true when the text on it must be light}. 0 is a cell with records and a zero value: the faintest shade. */
+  function heatShade(v, max) {
+    if (v === null || v === undefined) return null;
+    var m = Number(max) || 0, n = Number(v) || 0;
+    var pct = m > 0 ? Math.max(8, Math.min(100, Math.round(n / m * 100))) : 8;
+    return { pct: pct, dark: pct >= 55 };
+  }
+  RA.heatShade = heatShade;
+
+  /** A heatmap column label: hours are shown with two digits (07), other labels as given. */
+  function heatColLabel(c) {
+    var k = String(c && c.label != null ? c.label : c && c.key);
+    return /^\d$/.test(k) ? "0" + k : k;
+  }
+  RA.heatColLabel = heatColLabel;
+
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
   if (!React || !R || !global.document) return;
@@ -72,7 +101,78 @@
       var m = w.model;
       return h(DashList, { key: w.name, ctx: ctx, w: w, r: r, open: open, span: span, loading: loading, title: title });
     }
+    if (w.type === "table") return h(DashTable, { key: w.name, w: w, r: r, span: span, loading: loading, title: title, days: days });
+    if (w.type === "heatmap") return h(DashHeatmap, { key: w.name, w: w, r: r, span: span, loading: loading, title: title });
     return null;
+  }
+
+  var RP = function (n) { return global.RangkaAppAPI && global.RangkaAppAPI.rupiah ? global.RangkaAppAPI.rupiah(n) : null; };
+  function cellText(col, v) { return tableCell(col.format, v, global.RangkaAppAPI && global.RangkaAppAPI.rupiah); }
+  var TREND_TXT = { up: "naik", down: "turun", flat: "tetap" };
+  function deltaNode(row, col) {
+    var d = row.delta && row.delta[col.name];
+    if (d === undefined || d === null && !(row.trend && row.trend[col.name])) return null;
+    var t = row.trend && row.trend[col.name] || "flat";
+    var txt = d === null || d === undefined ? "" : (t === "up" ? "\u25B2 " : t === "down" ? "\u25BC " : "") + d;
+    if (!txt) return null;
+    return h("span", { className: "ap-dt-delta ap-dt-" + t }, h("span", { className: "rk-sr" }, TREND_TXT[t] + " "), txt);
+  }
+
+  /* A dashboard table (contract 0075 §2): a row per group, the totals row last, the change against the previous period
+     under each value. Under 490px a card per group with the same numbers, so no column is cut off. */
+  function DashTable(p) {
+    var w = p.w, r = p.r, cols = r.columns || [], rows = r.rows || [];
+    var narrow = RA.useNarrow ? RA.useNarrow() : false;
+    if (!p.loading && !rows.length) {
+      return h(R.Card, { span: p.span, title: p.title, extra: h("span", { className: "rk-card-sub" }, "0 data") },
+        h("p", { className: "ap-dash-empty" }, L(w.empty) || "Belum ada data di periode ini."));
+    }
+    var sub = r.compare ? "dibanding " + p.days + " hari sebelumnya" : null;
+    var cell = function (row, c) { return h("span", { className: "ap-dt-val" }, h("span", null, cellText(c, row.values[c.name])), r.compare ? deltaNode(row, c) : null); };
+    if (narrow) {
+      return h(R.Card, { span: p.span, title: p.title, flush: true, extra: sub ? h("span", { className: "rk-card-sub" }, sub) : null },
+        h("ul", { className: "ap-dt-cards", "aria-label": p.title }, rows.concat(r.total ? [Object.assign({}, r.total, { label: "Total" })] : []).map(function (row, i) {
+          return h("li", { key: row.key + ":" + i, className: "ap-dt-card" + (i === rows.length ? " total" : "") },
+            h("strong", { className: "ap-dt-name" }, row.label),
+            h("dl", { className: "ap-dt-kv" }, cols.map(function (c) {
+              return h("div", { key: c.name }, h("dt", null, c.label), h("dd", null, cell(row, c)));
+            })));
+        })));
+    }
+    return h(R.Card, { span: p.span, title: p.title, flush: true, extra: sub ? h("span", { className: "rk-card-sub" }, sub) : null },
+      h("div", { className: "ap-dt-wrap" },
+        h("table", { className: "ap-dt", "aria-label": p.title },
+          h("thead", null, h("tr", null, h("th", { scope: "col" }, ""), cols.map(function (c) { return h("th", { key: c.name, scope: "col", className: "num" }, c.label); }))),
+          h("tbody", null, rows.map(function (row) {
+            return h("tr", { key: row.key }, h("th", { scope: "row" }, row.label), cols.map(function (c) { return h("td", { key: c.name, className: "num" }, cell(row, c)); }));
+          })),
+          r.total ? h("tfoot", null, h("tr", null, h("th", { scope: "row" }, "Total"), cols.map(function (c) { return h("td", { key: c.name, className: "num" }, cell(r.total, c)); }))) : null)));
+  }
+
+  /* A dashboard heatmap (contract 0075 §3): rows x columns, one neutral hue, darker is more; an empty cell stays blank. */
+  function DashHeatmap(p) {
+    var r = p.r, rows = r.rows || [], cols = r.cols || [], values = r.values || [], max = Number(r.max) || 0;
+    var fmt = function (v) { return r.rupiah ? (RP(v) || String(v)) : tableCell("number", v); };
+    if (!p.loading && !(r.counts || []).some(function (row) { return (row || []).some(function (c) { return c > 0; }); })) {
+      return h(R.Card, { span: p.span, title: p.title, extra: h("span", { className: "rk-card-sub" }, "0 data") },
+        h("p", { className: "ap-dash-empty" }, L(p.w.empty) || "Belum ada data di periode ini."));
+    }
+    return h(R.Card, { span: p.span, title: p.title, flush: true },
+      h("div", { className: "ap-hm-wrap" },
+        h("table", { className: "ap-hm", "aria-label": p.title },
+          h("thead", null, h("tr", null, h("th", null, ""), cols.map(function (c, j) {
+            return h("th", { key: c.key, scope: "col", className: j % 3 === 0 ? "" : "ap-hm-skip" }, heatColLabel(c));
+          }))),
+          h("tbody", null, rows.map(function (row, i) {
+            return h("tr", { key: row.key }, h("th", { scope: "row" }, row.label), cols.map(function (c, j) {
+              var v = (values[i] || [])[j], sh = heatShade(v, max);
+              if (!sh) return h("td", { key: c.key, className: "ap-hm-c empty" }, h("span", { className: "rk-sr" }, "tidak ada data"));
+              return h("td", { key: c.key, className: "ap-hm-c" + (sh.dark ? " dark" : ""), title: row.label + " jam " + heatColLabel(c) + ": " + fmt(v),
+                style: { background: "color-mix(in srgb, var(--hm-base) " + sh.pct + "%, transparent)" } }, h("span", { className: "rk-sr" }, fmt(v)));
+            }));
+          })))),
+      h("div", { className: "ap-hm-legend", "aria-hidden": "true" }, h("span", null, "Sepi"), h("span", { className: "ap-hm-bar" }), h("span", null, "Ramai"),
+        max > 0 ? h("span", { className: "ap-hm-max" }, "tertinggi " + fmt(max)) : null));
   }
 
   /* A dashboard list: the table on a laptop; under 490px (K-A8) a card per row with the same slots as the phone list
@@ -238,7 +338,8 @@
     r = r || {};
     if (w.type === "number") return !(Number(r.value) || 0) && !(Number(r.count) || 0);
     if (w.type === "chart") return !(r.data || []).length;
-    if (w.type === "list") return !((r.rows || r.data || []).length);
+    if (w.type === "list" || w.type === "table") return !((r.rows || r.data || []).length);
+    if (w.type === "heatmap") return !(r.counts || []).some(function (row) { return (row || []).some(function (c) { return c > 0; }); });
     return true;
   }
   function foldCounts(defs, results) {
@@ -246,7 +347,7 @@
     defs.forEach(function (w, i) {
       var r = results[i];
       if ((r && r.hidden) || isAttention(w)) return;
-      if (w.type === "number") n++; else if (w.type === "list") l++; else c++;
+      if (w.type === "number") n++; else if (w.type === "list" || w.type === "table") l++; else c++;
       if (!widgetEmpty(w, r)) empty = false;
     });
     return { numbers: n, charts: c, lists: l, empty: empty };

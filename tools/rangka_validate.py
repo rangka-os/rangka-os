@@ -3456,6 +3456,9 @@ def check_screen_counter(rep, p, b, visible, prints):
             slot_field(rep, p, "counter/document/line/price", ln, lf, line.get("price"), NUMERIC_KINDS)
             slot_field(rep, p, "counter/document/line/note", ln, lf, line.get("note"))
             slot_field(rep, p, "counter/document/line/amount", ln, lf, line.get("amount"), NUMERIC_KINDS)
+            asg = slot_field(rep, p, "counter/document/line/assignee", ln, lf, line.get("assignee"), ["link"])
+            if asg is not None and asg.get("to") != "user":
+                rep.add("error", p, "counter/document/line/assignee", "screen_slot_type", f'"{line.get("assignee")}" links to {asg.get("to")}; the assignee is a user')
             fl = slot_field(rep, p, "counter/document/line/flag", ln, lf, line.get("flag"), ["check"])
             if fl is not None and (fl.get("compute") is not None or fl.get("read_only") is True):
                 rep.add("error", p, "counter/document/line/flag", "screen_slot_type", f'"{line.get("flag")}" is computed or read-only; the cashier cannot switch it')

@@ -343,6 +343,9 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 			v.slotField(p, "counter/document/line/price", lm, lf, line["price"], numericKinds)
 			v.slotField(p, "counter/document/line/note", lm, lf, line["note"], nil)
 			v.slotField(p, "counter/document/line/amount", lm, lf, line["amount"], numericKinds)
+			if as := v.slotField(p, "counter/document/line/assignee", lm, lf, line["assignee"], linkKind); as != nil && str(as, "to") != "user" {
+				v.rep.extra("error", p, "counter/document/line/assignee", "screen_slot_type", fmt.Sprintf(`"%s" links to %s; the assignee is a user`, pyStr(line["assignee"]), str(as, "to")))
+			}
 			if fl := v.slotField(p, "counter/document/line/flag", lm, lf, line["flag"], []string{"check"}); fl != nil && (fl["compute"] != nil || fl["read_only"] == true) {
 				v.rep.extra("error", p, "counter/document/line/flag", "screen_slot_type", fmt.Sprintf(`"%s" is computed or read-only; the cashier cannot switch it`, pyStr(line["flag"])))
 			}

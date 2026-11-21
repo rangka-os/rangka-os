@@ -124,6 +124,15 @@ test("cartAdd never merges into a flagged line (a free gift stays its own line)"
   assert.deepStrictEqual(plain(c).map((l) => [l.item, l.qty, !!l.flag]), [["MNU-2", 1, true], ["MNU-2", 1, false]]);
 });
 
+test("line.assignee (rangka-apps#110): saleBody sends the line's staff, a line with its own staff is never merged", () => {
+  const slots = { document: { model: "pos_sale", lines: "items", line: { item: "item", qty: "qty", assignee: "staff" }, checkout: ["staff"] } };
+  let c = A.cartSet(A.cartAdd([], kopi), 0, { assignee: "USR-001" });
+  c = A.cartAdd(c, kopi);
+  assert.deepStrictEqual(plain(c).map((l) => [l.item, l.qty, l.assignee || ""]), [["MNU-1", 1, "USR-001"], ["MNU-1", 1, ""]]);
+  const body = A.saleBody(slots, c, null, null, {}, "", { staff: "USR-002" });
+  assert.deepStrictEqual(plain(body), { staff: "USR-002", items: [{ item: "MNU-1", qty: 1, staff: "USR-001" }, { item: "MNU-1", qty: 1 }] });
+});
+
 test("lineAmount: the model's amount of a line from the computed record, null without the slot or the row", () => {
   const doc = { lines: "items", line: { item: "item", qty: "qty", amount: "amount" } };
   const rec = { items: [{ amount: 28800 }, { amount: 0 }] };

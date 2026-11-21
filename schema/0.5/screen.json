@@ -281,6 +281,10 @@
                 "flag": {
                   "$ref": "model.json#/$defs/name",
                   "description": "A check field of the line the cashier can switch on a cart line, e.g. a promo's free gift (contract 0069 §1); its label names the switch"
+                },
+                "assignee": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "A link field of the line to user: who did the work on this line (a stylist, a mechanic), picked on a cart line the cashier opens (rangka-apps#110). A document checkout field can hold the default for the whole sale"
                 }
               }
             },
@@ -305,7 +309,7 @@
             },
             "checkout": {
               "type": "array",
-              "maxItems": 6,
+              "maxItems": 8,
               "items": {
                 "oneOf": [
                   {

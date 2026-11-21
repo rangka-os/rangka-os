@@ -4,12 +4,14 @@
  *   catalogue {model, filter, title, search, group_by, price, barcode, image, limit}: the items to tap, loaded once
  *     (GET /r/<model>?filter=…&limit=…) and kept in the device cache for offline use; searched on the device; a barcode
  *     typed or scanned into the search box and ended with Enter adds that item.
- *   document {model, lines, line {item, qty, price, note, amount, flag}, total, change, summary, checkout, set}: one sale. Prices, discounts,
+ *   document {model, lines, line {item, qty, price, note, amount, flag, assignee}, total, change, summary, checkout, set}: one sale. Prices, discounts,
  *     tax and totals are the model's computes. With summary (contract 0034) the cart is sent to POST /compute/<model>
  *     (debounced, and again before the tender opens) and the breakdown, the Bayar amount and the tender use the
  *     model's numbers; without it, or offline, the screen's own sum shows, marked "perkiraan". The receipt panel
  *     shows the server's total and change fields. set: values are fetched again for every sale. line.amount: with summary
  *     each cart line shows the model's amount (a promo, a free gift), the plain qty x price struck through when lower.
+ *     line.assignee: a link of the line to user, the staff who did the work, picked on a line the cashier opens (like its note);
+ *     the sale's default staff is a checkout field. A line with its own staff is never merged with another.
  *     line.flag: a check of the line the cashier switches on a cart line (e.g. a promo's free gift); a flagged line is
  *     never merged with another. checkout [field | {field, filter}] (contract 0069 §1): fields of the document filled
  *     before paying (customer, promo, voucher code); they ride in the compute call, so the breakdown follows them.
@@ -44,7 +46,7 @@
   function cartAdd(cart, item) {
     var out = (cart || []).map(function (l) { return Object.assign({}, l); });
     for (var i = 0; i < out.length; i++) {
-      if (out[i].item === item.item && !out[i].note && !out[i].flag) { out[i].qty += 1; return out; }
+      if (out[i].item === item.item && !out[i].note && !out[i].flag && !out[i].assignee) { out[i].qty += 1; return out; }
     }
     out.push({ key: item.item + "#" + out.length + "#" + Date.now(), item: item.item, title: item.title, price: Number(item.price) || 0, qty: 1, note: "" });
     return out;
@@ -103,6 +105,7 @@
       r[doc.line.qty] = l.qty;
       if (doc.line.note && l.note) r[doc.line.note] = l.note;
       if (doc.line.flag && l.flag) r[doc.line.flag] = true;
+      if (doc.line.assignee && l.assignee) r[doc.line.assignee] = l.assignee;
       return r;
     });
     if (slots.payments && pay) {
@@ -833,6 +836,7 @@
     var paying = wide && pay && !stuck;
     // line.amount (0069 §1): the model's amount per line once computed; the plain qty x price struck through when lower
     var lineMeta = doc.line && ((ctx.meta.models || {})[((docMeta.fields || []).filter(function (f) { return f.name === doc.lines; })[0] || {}).of] || {});
+    var assigneeField = doc.line && doc.line.assignee ? ((lineMeta.fields || []).filter(function (f) { return f.name === doc.line.assignee; })[0] || { name: doc.line.assignee, type: "link", to: "user" }) : null;
     var flagField = doc.line && doc.line.flag ? ((lineMeta.fields || []).filter(function (f) { return f.name === doc.line.flag; })[0] || { name: doc.line.flag }) : null;
     function amountView(l, i) {
       var plainAmt = Math.round(l.qty * l.price), modelAmt = fresh ? lineAmount(doc, fresh.rec, i) : null;
@@ -844,7 +848,7 @@
       return h("li", { key: l.key },
         h("div", { className: "ap-counter-line" },
           h("button", { type: "button", className: "ap-counter-line-t", onClick: function () { setNoteLine(noteLine === i ? null : i); } }, l.title,
-            l.note ? h("small", null, l.note) : doc.line && (doc.line.note || doc.line.flag) ? h("small", { className: "ap-counter-addnote" }, doc.line.note ? "+ catatan" : "+ pilihan") : null,
+            l.note ? h("small", null, l.note) : doc.line && (doc.line.note || doc.line.flag || doc.line.assignee) ? h("small", { className: "ap-counter-addnote" }, doc.line.note ? "+ catatan" : "+ pilihan") : null,
             h("small", { className: "ap-counter-unit" }, rp(l.price))),
           h("div", { className: "ap-counter-qty" },
             h("button", { type: "button", "aria-label": "Kurangi " + l.title, onClick: function () { setLine(i, { qty: l.qty - 1 }); } }, "−"),
@@ -854,6 +858,9 @@
         // the switch shows on a line the cashier opened (tap its name, like the note) or one already switched on
         flagField && (l.flag || noteLine === i) ? h("button", { type: "button", className: "ap-counter-flag", "aria-pressed": l.flag ? "true" : "false",
           onClick: function () { setLine(i, { flag: !l.flag }); } }, h(R.Icon, { name: l.flag ? "check" : "add" }), L(flagField.label) || flagField.name) : null,
+        // the staff of the line: shown on a line the cashier opened or one that already has its own staff
+        assigneeField && (l.assignee || noteLine === i) ? h("div", { className: "ap-work-fields ap-counter-assignee" }, h(RA.FieldEditor, { ctx: ctx, model: lineMeta.name || doc.model, field: assigneeField, rec: { [assigneeField.name]: l.assignee || "" }, readOnly: !!jobRef.current,
+          onChange: function (n, v) { setLine(i, { assignee: v || "" }); } })) : null,
         noteLine === i && doc.line.note ? h("input", { className: "ap-counter-note", "aria-label": "Catatan " + l.title, placeholder: "Catatan, misalnya kurang manis",
           value: l.note, autoFocus: true, onChange: function (e) { setLine(i, { note: e.target.value }); }, onKeyDown: function (e) { if (e.key === "Enter") setNoteLine(null); } }) : null);
     }));

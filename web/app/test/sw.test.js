@@ -77,7 +77,7 @@ test("pushView: Cloud's JSON, links kept only inside the app's scope", () => {
   assert.strictEqual(a.options.tag, "n1");
   assert.strictEqual(a.options.requireInteraction, true);
   assert.strictEqual(a.options.data.url, "/app/#/d/saya");
-  for (const bad of ["https://evil.example/app/", "//evil.example/app/", "/\\evil.example", "/other/page", "/app/ x", "javascript:alert(1)", 5, null]) {
+  for (const bad of ["https://evil.example/app/", "//evil.example/app/", "/\\evil.example", "/other/page", "/app/ x", "/app/../admin", "/app/%2e%2e/admin", "/app/./../../x", "/app/%2e%2e/%2f%2fevil.example", "javascript:alert(1)", 5, null]) {
     assert.strictEqual(v({ title: "t", url: bad }).options.data.url, "/app/", String(bad));
   }
   const g = v(null);

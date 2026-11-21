@@ -123,6 +123,14 @@
     var url = typeof d.url === "string" ? d.url : "";
     // one leading "/", no backslash or whitespace (browsers read "/\\host" as "//host"), inside the scope
     var ok = url.charAt(0) === "/" && url.charAt(1) !== "/" && !/[\\\s]/.test(url) && url.indexOf(scopePath) === 0;
+    if (ok) {
+      // resolve dot segments ("/app/../x", "/app/%2e%2e/x") the way the browser will, and keep the resolved path
+      try {
+        var u = new URL(url, "https://scope.invalid");
+        ok = u.origin === "https://scope.invalid" && u.pathname.indexOf(scopePath) === 0;
+        if (ok) url = u.pathname + u.search + u.hash;
+      } catch (e) { ok = false; }
+    }
     return {
       title: typeof d.title === "string" && d.title ? d.title : "Kabar baru",
       options: {

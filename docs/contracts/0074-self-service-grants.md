@@ -87,7 +87,7 @@ Issue rangka-os#261 slice a
 - The numbers per plan are a business call (Toni, Dede); the issue proposes Mulai 10, Juragan 50, Pro 200, Grup 500.
   Kernel and rangka-apps demo sites only carry example values.
 
-### 6. Web push (as built, slice b)
+### 6. Web push (slice b; the Cloud side is pending)
 - Hosted businesses: push goes through Rangka Cloud (rangka-cloud#236), which owns the browser permission, the VAPID
   key and the subscription. The app is framed by Cloud, so the page only relays the ask with `postMessage` to the
   parent origin: `{type: "rangka:push", op: "state" | "enable" | "disable", id}`; the parent answers
@@ -97,6 +97,10 @@ Issue rangka-os#261 slice a
   `blocked` explains how to allow it in the browser.
 - `sw.js` handles `push` (JSON `{title, body, url, tag, severity}`; anything else shows a generic notice) and
   `notificationclick` (focus or open the app). `url` is kept only when it is a path inside the worker's scope.
+- Cloud side (not built yet, needs a rangka-cloud card): the page that frames the app listens for `rangka:push`, checks
+  the frame's window and origin, and answers from its own permission and subscription. Until then every ask times out
+  and the app shows nothing. The Cloud service worker owns the subscription and receives the push; the `sw.js`
+  handlers below serve a worker that owns a subscription itself (self-hosted, later) and stay harmless otherwise.
 - Kernel-native push for self-hosted sites is deferred; they keep the notices inbox (0066).
 
 ## Consequences

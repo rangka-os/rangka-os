@@ -1394,10 +1394,10 @@
       else if (k === "app:update") RA.pwa.applyUpdate();
       else if (k === "app:install") RA.pwa.install().then(function (r) { if (r === "accepted") toast("ok", "Rangka terpasang", "Buka dari layar utama HP-mu."); });
       else if (k === "app:push") RA.pwa.push.enable().then(function (r) {
-        if (r === "on") toast("ok", "Notifikasi menyala", "Slip gaji dan persetujuan sampai ke HP-mu, walau aplikasi ditutup.");
+        if (r === "on") toast("ok", "Notifikasi menyala", "Kabar penting sampai ke HP-mu, walau aplikasi ditutup.");
         else if (r === "blocked") toast("info", "Notifikasi diblokir", "Izinkan notifikasi untuk situs ini di pengaturan browser, lalu coba lagi.");
       });
-      else if (k === "app:push-off") RA.pwa.push.disable().then(function () { toast("info", "Notifikasi dimatikan", "Kamu tetap bisa melihat kabar di lonceng."); });
+      else if (k === "app:push-off") RA.pwa.push.disable().then(function (r) { if (r === "off") toast("info", "Notifikasi dimatikan", "Kamu tetap bisa melihat kabar di lonceng."); });
       else if (k === "app:push-blocked") toast("info", "Notifikasi diblokir", "Izinkan notifikasi untuk situs ini di pengaturan browser, lalu nyalakan lagi dari menu ini.");
       else if (k === "app:ios") toast("info", "Pasang di iPhone atau iPad", "Di Safari, ketuk Bagikan lalu Tambahkan ke Layar Utama.");
       else if (k.indexOf("theme:") === 0) {

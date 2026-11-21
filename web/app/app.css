@@ -1425,10 +1425,12 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 .ap-dt-kv { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
 .ap-dt-kv dt { font-size: 12px; color: var(--muted); } .ap-dt-kv dd { margin: 0; font-variant-numeric: tabular-nums; }
 .ap-dt-kv .ap-dt-val { align-items: flex-start; }
-.ap-hm { border-collapse: separate; border-spacing: 2px; margin: 8px 12px; font-size: 11px; }
+.ap-hm { border-collapse: separate; border-spacing: 2px; margin: 8px 12px; font-size: 11px; width: calc(100% - 24px); table-layout: fixed; }
+.ap-hm th[scope=row] { width: 64px; }
+.ap-dt-note { margin: 0; padding: 0 16px 8px; font-size: 12px; color: var(--muted); }
 .ap-hm th { font-weight: 500; color: var(--muted); text-align: center; padding: 0 2px; }
 .ap-hm th[scope=row] { text-align: left; padding-right: 8px; white-space: nowrap; font-size: 12px; }
-.ap-hm-c { min-width: 18px; height: 24px; border-radius: 3px; }
+.ap-hm-c { height: 24px; border-radius: 3px; }
 .ap-hm-c.empty { background: var(--soft); }
 .ap-hm-wrap, .ap-hm-legend { --hm-base: #475569; }
 :root[data-theme="dark"] .ap-hm-wrap, :root[data-theme="dark"] .ap-hm-legend { --hm-base: #94a3b8; }
@@ -1437,4 +1439,4 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 .ap-hm-legend { display: flex; align-items: center; gap: 8px; padding: 4px 16px 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .ap-hm-bar { width: 120px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, color-mix(in srgb, var(--hm-base) 8%, transparent), var(--hm-base)); }
 .ap-hm-max { margin-left: auto; }
-@media (max-width: 489px) { .ap-hm-skip { visibility: hidden; font-size: 0; } .ap-hm-c { min-width: 12px; } .ap-hm { margin: 8px 8px; } }
+@media (max-width: 489px) { .ap-hm-skip { visibility: hidden; font-size: 0; } .ap-hm { margin: 8px 8px; width: calc(100% - 16px); border-spacing: 1px; } .ap-hm th[scope=row] { width: 48px; font-size: 11px; } .ap-hm-c { height: 20px; border-radius: 2px; } }

@@ -128,9 +128,12 @@
         h("p", { className: "ap-dash-empty" }, L(w.empty) || "Belum ada data di periode ini."));
     }
     var sub = r.compare ? "dibanding " + p.days + " hari sebelumnya" : null;
+    // under 490px the card title gets the whole header; the comparison note moves into the body
+    var subNode = sub && !narrow ? h("span", { className: "rk-card-sub" }, sub) : null;
     var cell = function (row, c) { return h("span", { className: "ap-dt-val" }, h("span", null, cellText(c, row.values[c.name])), r.compare ? deltaNode(row, c) : null); };
     if (narrow) {
-      return h(R.Card, { span: p.span, title: p.title, flush: true, extra: sub ? h("span", { className: "rk-card-sub" }, sub) : null },
+      return h(R.Card, { span: p.span, title: p.title, flush: true },
+        sub ? h("p", { className: "ap-dt-note" }, sub) : null,
         h("ul", { className: "ap-dt-cards", "aria-label": p.title }, rows.concat(r.total ? [Object.assign({}, r.total, { label: "Total" })] : []).map(function (row, i) {
           return h("li", { key: row.key + ":" + i, className: "ap-dt-card" + (i === rows.length ? " total" : "") },
             h("strong", { className: "ap-dt-name" }, row.label),
@@ -139,7 +142,7 @@
             })));
         })));
     }
-    return h(R.Card, { span: p.span, title: p.title, flush: true, extra: sub ? h("span", { className: "rk-card-sub" }, sub) : null },
+    return h(R.Card, { span: p.span, title: p.title, flush: true, extra: subNode },
       h("div", { className: "ap-dt-wrap" },
         h("table", { className: "ap-dt", "aria-label": p.title },
           h("thead", null, h("tr", null, h("th", { scope: "col" }, ""), cols.map(function (c) { return h("th", { key: c.name, scope: "col", className: "num" }, c.label); }))),

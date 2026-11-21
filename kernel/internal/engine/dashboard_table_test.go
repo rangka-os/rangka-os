@@ -105,3 +105,14 @@ func TestDashboardTableAndHeatmap(t *testing.T) {
 		t.Errorf("heatmap max = %v", hm["max"])
 	}
 }
+
+// A change that rounds to 0% is flat, never a red or green arrow.
+func TestTableDeltaRoundsToFlat(t *testing.T) {
+	trend, delta, ok := tableDelta(34076.0, 34090.0)
+	if !ok || trend != "flat" || delta != "0%" {
+		t.Errorf("got %q %v %v; want flat 0%%", trend, delta, ok)
+	}
+	if trend, delta, _ := tableDelta(150.0, 100.0); trend != "up" || delta != "50%" {
+		t.Errorf("got %q %v; want up 50%%", trend, delta)
+	}
+}

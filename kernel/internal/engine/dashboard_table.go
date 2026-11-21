@@ -122,7 +122,11 @@ func tableDelta(v, prev any) (trend string, delta any, ok bool) {
 	}
 	switch {
 	case pf != 0:
-		delta = formatInt(int64(cel.JSRound(abs(vf-pf)/pf*100))) + "%"
+		pct := int64(cel.JSRound(abs(vf-pf) / pf * 100))
+		if pct == 0 {
+			trend = "flat" // a change that rounds to 0% is no change, never a red or green arrow
+		}
+		delta = formatInt(pct) + "%"
 	case vf != 0:
 		delta = "baru"
 	}

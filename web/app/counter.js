@@ -46,7 +46,7 @@
   function cartAdd(cart, item) {
     var out = (cart || []).map(function (l) { return Object.assign({}, l); });
     for (var i = 0; i < out.length; i++) {
-      if (out[i].item === item.item && !out[i].note && !out[i].flag) { out[i].qty += 1; return out; }
+      if (out[i].item === item.item && !out[i].note && !out[i].flag && !out[i].saved) { out[i].qty += 1; return out; }
     }
     out.push({ key: item.item + "#" + out.length + "#" + Date.now(), item: item.item, title: item.title, price: Number(item.price) || 0, qty: 1, note: "" });
     return out;
@@ -743,7 +743,7 @@
       sendingRef.current = true;
       setBusy(true); setErr("");
       var payRows = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
-      if (bill && !devOn) { billPay(payRows, { total: total, change: change }); return; }
+      if (bill) { billPay(payRows, { total: total, change: change }); return; } // an open table bill is a server draft, also on a paired device
       if (devOn) { deviceSale(payRows); return; }
       var est = { total: total, change: change };
       // a new sale takes set: values again (contract 0030 §2: today's date after midnight, audit WS3 M2); offline or

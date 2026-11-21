@@ -729,3 +729,110 @@ func walkNotify(steps []map[string]any, fn func(st map[string]any)) {
 	}
 	walk(steps)
 }
+
+// ChangesetNotice is what the change-set service tells the engine about a proposal (kernel.changeset.proposed).
+type ChangesetNotice struct {
+	ID, Title, Risk, Source, Author string
+	Approvers                       []string // roles that may approve it, besides the owner
+}
+
+// NoticeChangesetProposed raises kernel.changeset.proposed (contract 0066 as built): a change set waits for someone
+// who decides, so the owner and the roles that may approve it hear about it, never the person who proposed it. It
+// runs after the proposal is saved and never fails it: a failure is logged.
+func (e *Engine) NoticeChangesetProposed(ctx context.Context, org string, c ChangesetNotice) {
+	ctx = pg.WithOrg(ctx, org)
+	sev := "warn"
+	switch c.Risk {
+	case "high":
+		sev = "high"
+	case "low":
+		sev = "info"
+	}
+	who := "Perubahan baru"
+	if c.Source == "ai" {
+		who = "Raka mengusulkan perubahan"
+	}
+	roles := []string{}
+	for _, r := range c.Approvers {
+		if r != "owner" {
+			roles = append(roles, r)
+		}
+	}
+	err := e.run(ctx, Actor{Org: org, ID: "system", System: true}, func(o *op) error {
+		return o.notice(NoticeEvent{
+			ID: "kernel.changeset.proposed:" + c.ID, Kind: "kernel.changeset.proposed", Severity: sev,
+			To:    NoticeTo{Owner: true, Roles: roles},
+			Title: "Perubahan sistem menunggu keputusanmu", Text: who + ": " + c.Title,
+			Link: "/app/#/approvals?tab=sistem", Data: map[string]any{"changeset": c.ID, "risk": c.Risk, "source": c.Source},
+		}, noticeOpts{except: []string{c.Author}})
+	})
+	if err != nil {
+		e.Log("notice: kernel.changeset.proposed %s: %v", c.ID, err)
+	}
+}
+
+// exceptionWords names an exception kind for the head-office notice (contract 0058 §10).
+var exceptionWords = map[string]string{"edge_price_drift": "harga kasir beda", "negative_stock": "stok minus",
+	"device_number_gap": "nomor perangkat loncat", "rule_overridden": "aturan dilewati"}
+
+// NoticeExceptionDigest raises the hourly kernel.exceptions.new (contract 0066 as built): the exceptions raised and
+// still open since the last digest, as one notice to the owner and head office. It tells nobody when there are none.
+// The event id carries the hour, and the window starts at the newest digest (at most a day back), so a rerun inside
+// the hour or a job retried after it committed cannot tell twice.
+func (e *Engine) NoticeExceptionDigest(ctx context.Context, org string, now time.Time) error {
+	ctx = pg.WithOrg(ctx, org)
+	const kind = "kernel.exceptions.new"
+	// whole seconds: a notice's time is stored to the second, so the window of the next digest starts exactly where
+	// this one ends, and an exception raised in the second that is still running is told next time, not twice
+	now = now.UTC().Truncate(time.Second)
+	return e.run(ctx, Actor{Org: org, ID: "system", System: true}, func(o *op) error {
+		since, err := store.LastNoticeAt(o.ctx, o.tx, org, kind)
+		if err != nil {
+			return err
+		}
+		if floor := now.Add(-24 * time.Hour); since.Before(floor) {
+			since = floor
+		}
+		counts, err := store.OpenExceptionsBetween(o.ctx, o.tx, org, since, now)
+		if err != nil || len(counts) == 0 {
+			return err
+		}
+		total, parts, by := 0, []string{}, map[string]any{}
+		for _, c := range counts {
+			total += c.Count
+			w := exceptionWords[c.Kind]
+			if w == "" {
+				w = "lainnya"
+			}
+			parts = append(parts, fmt.Sprintf("%d %s", c.Count, w))
+			by[c.Kind] = c.Count
+		}
+		return o.notice(NoticeEvent{
+			ID: fmt.Sprintf("%s:%d", kind, now.Truncate(time.Hour).Unix()), Kind: kind, Severity: "warn",
+			To:    NoticeTo{Owner: true, Roles: []string{"head_office"}},
+			Title: fmt.Sprintf("%d pengecualian baru", total), Text: strings.Join(parts, ", "),
+			Link: "/app/", Data: map[string]any{"count": total, "kinds": by}, At: now.Format(time.RFC3339),
+		}, noticeOpts{})
+	})
+}
+
+// ExceptionDigestDue reports whether the org has unresolved exceptions the next digest would tell. The scheduler asks
+// first so a quiet org never gets a queue job (no job event, no row) each hour.
+func (e *Engine) ExceptionDigestDue(ctx context.Context, org string, now time.Time) bool {
+	ctx = pg.WithOrg(ctx, org)
+	now = now.UTC().Truncate(time.Second)
+	due := false
+	err := e.run(ctx, Actor{Org: org, ID: "system", System: true}, func(o *op) error {
+		since, err := store.LastNoticeAt(o.ctx, o.tx, org, "kernel.exceptions.new")
+		if err != nil {
+			return err
+		}
+		if floor := now.Add(-24 * time.Hour); since.Before(floor) {
+			since = floor
+		}
+		counts, err := store.OpenExceptionsBetween(o.ctx, o.tx, org, since, now)
+		due = err == nil && len(counts) > 0
+		return err
+	})
+	return err == nil && due
+}

@@ -225,6 +225,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		e.Notices.Host = true
 	}
 	s.Queue.Handlers["notice_host"] = s.runNoticeHostJob
+	s.Queue.Handlers["exception_digest"] = s.runExceptionDigestJob
 	s.Queue.Handlers["action"] = s.runActionJob
 	s.Queue.Handlers["flow"] = s.runFlowJob
 	loc := time.UTC
@@ -241,6 +242,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Sched.Log = logFor(logx.CompScheduler)
 	// scheduled flows run for every org on the host, not only the default one (rangka-os#263 slice a)
 	s.Sched.Orgs = s.listOrgs
+	s.Sched.DigestDue = e.ExceptionDigestDue
 	s.Sched.Stagger = time.Duration(intCfg(reg, "scheduler.stagger_s", 300)) * time.Second
 	s.Sched.SetFlows(reg, cfg.Org)
 	s.Hub = realtime.NewHub()
@@ -281,6 +283,11 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			}
 			return ""
 		}}
+	// contract 0066 as built: a proposed change set tells the owner and its approvers (never its author)
+	s.Changes.OnProposed = func(ctx context.Context, cs *changeset.ChangeSet, a changeset.Actor) {
+		e.NoticeChangesetProposed(ctx, cs.Org, engine.ChangesetNotice{ID: cs.ID, Title: cs.Title, Risk: cs.Risk, Source: cs.Source,
+			Author: a.ID, Approvers: s.Changes.ApprovableBy(cs)})
+	}
 	site := ""
 	if cfg.SiteDir != "" {
 		site = filepath.Base(filepath.Clean(cfg.SiteDir))

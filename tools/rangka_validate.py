@@ -688,6 +688,9 @@ NUMERIC = ("currency", "int", "float", "percent")
 GROUPABLE = ("select", "link", "check", "date", "data")
 
 
+SOURCE_WIDGET_BANNED = ("model", "field", "filter", "group_by", "grain", "period", "aggregate", "sort", "columns", "chart")
+
+
 def check_dashboard(rep, p, db, visible, optional, allmodels, app):
     seen = set()
     for i, w in enumerate(db.get("widgets", [])):
@@ -695,7 +698,13 @@ def check_dashboard(rep, p, db, visible, optional, allmodels, app):
         if w.get("name") in seen:
             rep.add("error", p, f"{at}/name", "duplicate_widget", f'widget "{w.get("name")}" appears twice')
         seen.add(w.get("name"))
-        mn = w.get("model")
+        if w.get("source"):
+            # a source widget reads the kernel's own queue, not a model (contract 0066 as built)
+            for k in SOURCE_WIDGET_BANNED:
+                if k in w:
+                    rep.add("error", p, f"{at}/{k}", "source_conflict", f"a widget with source: {w['source']} reads the kernel's queue and takes no {k}")
+            continue
+        mn = w.get("model") or ""  # a widget without model: "" in the message, as the Go validator
         if mn not in visible:
             owner = allmodels.get(mn, (None,))[0]
             if owner in optional:

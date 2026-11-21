@@ -81,3 +81,35 @@ func ResolveException(ctx context.Context, q pg.Querier, org string, id int64, w
 	}
 	return len(res.Rows) > 0, nil
 }
+
+// ExceptionKindCount is how many open exceptions of one kind a batch covers.
+type ExceptionKindCount struct {
+	Kind  string
+	Count int
+}
+
+// OpenExceptionsBetween counts the org's unresolved exceptions raised after since and up to until, by kind (the
+// hourly head-office notice, contract 0066 as built). Kinds come back in name order.
+func OpenExceptionsBetween(ctx context.Context, q pg.Querier, org string, since, until time.Time) ([]ExceptionKindCount, error) {
+	res, err := q.Query(ctx, `select kind, count(*) from rk_exceptions where org_id = $1 and resolved_at is null
+		and created_at > $2 and created_at <= $3 group by kind order by kind`, org, since, until)
+	if err != nil {
+		return nil, err
+	}
+	out := []ExceptionKindCount{}
+	for _, r := range res.Rows {
+		n, _ := r[1].(int64)
+		out = append(out, ExceptionKindCount{Kind: r[0].(string), Count: int(n)})
+	}
+	return out, nil
+}
+
+// LastNoticeAt is the time of the org's newest notice of kind, or the zero time when there is none.
+func LastNoticeAt(ctx context.Context, q pg.Querier, org, kind string) (time.Time, error) {
+	res, err := q.Query(ctx, `select max(at) from rk_notices where org_id = $1 and kind = $2`, org, kind)
+	if err != nil || len(res.Rows) == 0 {
+		return time.Time{}, err
+	}
+	t, _ := res.Rows[0][0].(time.Time)
+	return t, nil
+}

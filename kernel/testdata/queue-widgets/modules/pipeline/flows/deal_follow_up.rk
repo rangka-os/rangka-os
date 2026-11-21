@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: deal_follow_up
+label: {id: Pengingat peluang}
+schedule: 0 8 * * 1-5
+steps:
+  - {find_all: deal, where: "stage == 'prospect'", as: open}
+  - for_each: open
+    as: d
+    do:
+      - notify: sales_rep
+        notice: deal_stuck
+        record: d
+        title: {id: 'Peluang {d.deal_name} belum bergerak'}
+        template: {id: 'Nilai Rp {d.value}, tahap {d.stage}.'}
+        id: "'stuck:' + d.name"
+        channel: in_app
+  - notify: owner
+    if: size(open) > 0
+    notice: deal_digest
+    template: {id: 'Ada {size(open)} peluang di tahap prospek.'}

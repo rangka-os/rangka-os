@@ -469,3 +469,23 @@ func TestBrokenMapsMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-maps-subdomains.expected.txt", Options{AppsDir: "testdata/modules-apps/apps", SiteDir: "testdata/broken-maps/site-subdomains"})
 	golden(t, "testdata/broken-maps-unused.expected.txt", Options{AppsDir: "testdata/modules-apps/apps", SiteDir: "testdata/broken-maps/site-unused"})
 }
+
+// Dashboard widgets with a source (approvals, exceptions) read the kernel's queue: valid without a model, and every
+// model-shaped key beside a source is source_conflict. The Python validator prints the same (make compare-python).
+func TestQueueWidgets(t *testing.T) {
+	_, rep := ValidateOpts(Options{AppsDir: "../../testdata/queue-widgets/apps", SiteDir: "../../testdata/queue-widgets/site"}, nil, schema.Embedded())
+	if rep.Errors() != 0 {
+		t.Fatalf("queue widgets are valid: %v", rep.All())
+	}
+	_, rep = ValidateOpts(Options{AppsDir: "../../testdata/broken-queue-widgets/apps", SiteDir: "../../testdata/broken-queue-widgets/site"}, nil, schema.Embedded())
+	var got []string
+	for _, it := range rep.All() {
+		if it.Code == "source_conflict" {
+			got = append(got, it.Where)
+		}
+	}
+	want := []string{"widgets/2/model", "widgets/3/field", "widgets/3/aggregate", "widgets/3/sort", "widgets/3/columns", "widgets/4/group_by", "widgets/4/chart"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("source_conflict at %q, want %q", got, want)
+	}
+}

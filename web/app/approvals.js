@@ -94,6 +94,39 @@
     return (items || []).filter(function (x) { return x && (verbs || []).indexOf(x.verb || "submit") >= 0; });
   }
 
+  var SYSTEM_OPEN = { proposed: 1, validated: 1, previewed: 1, approved: 1 };
+
+  /** The change sets the "Perubahan sistem" tab lists: those still waiting for a decision or an apply (not invalid, applied,
+   *  rejected or reverted), newest first, each id once. */
+  function systemChangesets(list) {
+    var seen = {}, out = [];
+    (list || []).forEach(function (c) { if (c && SYSTEM_OPEN[c.status] && !seen[c.id]) { seen[c.id] = 1; out.push(c); } });
+    return out.sort(function (a, b) { var x = a.updated_at || a.created_at || "", y = b.updated_at || b.created_at || ""; return x < y ? 1 : x > y ? -1 : 0; });
+  }
+
+  /** Whether the person decides change sets (meta.changesets from /meta): the tab is theirs only. */
+  function maySystemTab(meta) {
+    var c = (meta && meta.changesets) || {};
+    return !!(c.approve || c.approve_high);
+  }
+
+  /** The tab named by a hash like "#/approvals?tab=sistem"; "" for none. */
+  function tabFromHash(hash) {
+    var m = /[?&]tab=([a-z]+)/.exec(String(hash || ""));
+    return m ? m[1] : "";
+  }
+
+  /** Where a change set comes from, in the owner's words. */
+  function systemWho(cs) {
+    if (cs && cs.source === "ai") return "Diusulkan oleh Raka";
+    var a = (cs && cs.author) || {};
+    return a.id ? "Diusulkan oleh " + a.id : "Diusulkan";
+  }
+
+  RA.systemChangesets = systemChangesets;
+  RA.maySystemTab = maySystemTab;
+  RA.tabFromHash = tabFromHash;
+  RA.systemWho = systemWho;
   RA.waitingVerbs = waitingVerbs;
   RA.pendingFor = pendingFor;
   RA.approverText = approverText;
@@ -282,6 +315,8 @@
 
   /* ---------------------------------------------------------------- the inbox */
   var TABS = [{ value: "pending", label: "Menunggu" }, { value: "approved", label: "Disetujui" }, { value: "rejected", label: "Ditolak" }];
+  /** The tab of change sets waiting for the owner (kernel.changeset.proposed links here with ?tab=sistem). */
+  var SYSTEM_TAB = { value: "sistem", label: "Perubahan sistem" };
 
   /** True from 1024px (the detail panel sits beside the list); follows the window. */
   function useWide() {
@@ -349,7 +384,8 @@
 
   function ApprovalInbox() {
     var ctx = useContext(RA.Ctx);
-    var ts = useState("pending"), tab = ts[0], setTab = ts[1];
+    var sysOk = maySystemTab(ctx.meta);
+    var ts = useState(function () { var t = tabFromHash(global.location && global.location.hash); return t === "sistem" && sysOk ? t : "pending"; }), tab = ts[0], setTab = ts[1];
     var ds = useState(null), data = ds[0], setData = ds[1];
     var es = useState(null), err = es[0], setErr = es[1];
     var ks = useState(0), tick = ks[0], setTick = ks[1];
@@ -361,6 +397,11 @@
       var dead = false;
       setData(null);
       setErr(null);
+      if (tab === "sistem") {
+        ctx.api.changesets({}).then(function (r) { if (!dead) setData(systemChangesets((r && r.data) || [])); },
+          function (e) { if (!dead) setErr(e); });
+        return function () { dead = true; };
+      }
       ctx.api.approvals({ state: tab, limit: 100 }).then(function (r) { if (!dead) setData((r && r.data) || []); },
         function (e) { if (!dead) setErr(e); });
       return function () { dead = true; };
@@ -380,7 +421,13 @@
       if (d.refresh) { refreshCount(ctx); setTick(function (x) { return x + 1; }); }
     }
 
-    if (err && err.status === 403) return h(React.Fragment, null, h(R.PageHeader, { title: "Persetujuan" }), h(RA.ForbiddenState || "div", { what: "Persetujuan" }));
+    if (err && err.status === 403 && tab !== "sistem") return h(React.Fragment, null, h(R.PageHeader, { title: "Persetujuan" }), h(RA.ForbiddenState || "div", { what: "Persetujuan" }));
+
+    function openSystem(cs) {
+      if (typeof ctx.openChangeSet === "function") { ctx.openChangeSet(cs.id); return; }
+      ctx.api.changeset(cs.id).then(function (full) { if (ctx.showChangeSet) ctx.showChangeSet(full); },
+        function (e) { setMsg(decisionError(e).text); });
+    }
 
     var body;
     if (err) {
@@ -388,6 +435,20 @@
         actions: h(R.Button, { onClick: function () { setTick(tick + 1); } }, "Coba lagi") }, err.status === 0 ? "Server tidak terjangkau." : err.message);
     } else if (!data) {
       body = h(React.Fragment, null, h(R.Skeleton, { variant: "card", height: 120 }), h("span", { className: "rk-sr", role: "status" }, "Memuat…"));
+    } else if (tab === "sistem") {
+      body = !data.length
+        ? h(R.EmptyState, { title: "Tidak ada perubahan sistem yang menunggu" }, "Perubahan dari Raka atau timmu yang perlu keputusanmu muncul di sini.")
+        : h("ul", { className: "ap-inbox ap-inbox-system", "aria-label": "Daftar perubahan sistem" }, data.map(function (cs) {
+          var tone = cs.risk === "high" ? "bad" : cs.risk === "medium" ? "warn" : "ok";
+          var risk = RA.riskLabel ? RA.riskLabel(cs.risk) : cs.risk;
+          return h("li", { key: cs.id, className: "ap-inbox-row" },
+            h("div", { className: "ap-inbox-main" },
+              h("div", { className: "ap-inbox-head" }, h("b", { className: "ap-inbox-party" }, cs.title || cs.id)),
+              h("div", { className: "ap-inbox-sub" }, h("span", null, cs.status === "approved" ? "Disetujui, belum diterapkan" : cs.status === "previewed" ? "Siap diputuskan" : "Menunggu pratinjau"),
+                h(R.Lozenge, { tone: tone }, risk)),
+              h("span", { className: "ap-muted" }, systemWho(cs) + (cs.created_at ? " · " + tanggal(cs.created_at) : ""))),
+            h(R.Button, { onClick: function () { openSystem(cs); } }, "Buka"));
+        }));
     } else if (!data.length) {
       body = h(R.EmptyState, { title: tab === "pending" ? "Tidak ada yang menunggu persetujuan" : tab === "approved" ? "Belum ada yang disetujui" : "Belum ada yang ditolak" },
         tab === "pending" ? "Dokumen yang perlu disetujui muncul di sini." : null);
@@ -421,7 +482,7 @@
       }
     }
 
-    var tabs = TABS.map(function (t) { return t.value === tab && data ? Object.assign({ count: data.length }, t) : t; });
+    var tabs = (sysOk ? TABS.concat([SYSTEM_TAB]) : TABS).map(function (t) { return t.value === tab && data ? Object.assign({ count: data.length }, t) : t; });
     var head = h(R.PageHeader, { title: "Persetujuan",
       tabs: h(R.Tabs, { tabs: tabs, value: tab, onChange: function (v) { setMsg(null); setTab(v); } }) });
     return h(React.Fragment, null, head,

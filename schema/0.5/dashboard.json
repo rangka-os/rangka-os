@@ -66,13 +66,19 @@
       "type": "object",
       "required": [
         "name",
-        "type",
-        "model"
+        "type"
       ],
       "additionalProperties": false,
       "properties": {
         "name": {
           "$ref": "model.json#/$defs/name"
+        },
+        "source": {
+          "enum": [
+            "approvals",
+            "exceptions"
+          ],
+          "description": "Read the kernel's own queue instead of a model (contract 0066 as built): approvals = requests waiting for the viewer's decision, exceptions = open head-office exceptions. Only for number and list widgets, which then take no model, field, filter, group_by, period, aggregate, sort or columns; limit and span still apply. The widget shows only what the viewer may act on and is hidden for anyone else."
         },
         "label": {
           "$ref": "model.json#/$defs/label"
@@ -90,7 +96,7 @@
         },
         "model": {
           "$ref": "model.json#/$defs/name",
-          "description": "Model to read. Must be in this app or an app it requires (optional apps: guard with app_installed())."
+          "description": "Model to read. Must be in this app or an app it requires (optional apps: guard with app_installed()). Required unless the widget has a source."
         },
         "filter": {
           "$ref": "model.json#/$defs/cel",
@@ -185,6 +191,28 @@
       "allOf": [
         {
           "if": {
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "number",
+                  "list"
+                ]
+              }
+            }
+          },
+          "else": {
+            "required": [
+              "model"
+            ]
+          }
+        },
+        {
+          "if": {
             "properties": {
               "type": {
                 "const": "chart"
@@ -204,6 +232,11 @@
               "type": {
                 "const": "list"
               }
+            },
+            "not": {
+              "required": [
+                "source"
+              ]
             }
           },
           "then": {

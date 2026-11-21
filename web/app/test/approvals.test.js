@@ -99,3 +99,39 @@ test("lineAmountText: the line's own amount in the currency the document bills, 
   // only a unit price: nothing, rather than a price posing as the line's value
   assert.strictEqual(T({ fields: [{ name: "price", type: "money", currency_field: "currency" }, { name: "price_idr", type: "currency", money_of: "price" }], row: { price: 50, price_idr: 800000 }, rec: { currency: "USD" } }), "");
 });
+
+test("systemChangesets keeps what waits for a decision or an apply, newest first, each id once", () => {
+  const list = [
+    { id: "a", status: "applied", created_at: "2026-11-20T01:00:00Z" },
+    { id: "b", status: "proposed", created_at: "2026-11-21T01:00:00Z" },
+    { id: "c", status: "previewed", created_at: "2026-11-22T01:00:00Z" },
+    { id: "d", status: "invalid", created_at: "2026-11-22T02:00:00Z" },
+    { id: "e", status: "approved", updated_at: "2026-11-22T03:00:00Z", created_at: "2026-11-19T01:00:00Z" },
+    { id: "c", status: "previewed", created_at: "2026-11-22T01:00:00Z" },
+    { id: "f", status: "rejected", created_at: "2026-11-22T04:00:00Z" },
+    null,
+  ];
+  assert.deepStrictEqual(A.systemChangesets(list).map((c) => c.id), ["e", "c", "b"]);
+  assert.deepStrictEqual(A.systemChangesets(null), []);
+});
+
+test("maySystemTab is for people who decide change sets", () => {
+  assert.strictEqual(A.maySystemTab({ changesets: { propose: true, approve: true, approve_high: false } }), true);
+  assert.strictEqual(A.maySystemTab({ changesets: { propose: false, approve: false, approve_high: true } }), true);
+  assert.strictEqual(A.maySystemTab({ changesets: { propose: true, approve: false, approve_high: false } }), false);
+  assert.strictEqual(A.maySystemTab({}), false);
+  assert.strictEqual(A.maySystemTab(null), false);
+});
+
+test("tabFromHash reads the tab the notice link names", () => {
+  assert.strictEqual(A.tabFromHash("#/approvals?tab=sistem"), "sistem");
+  assert.strictEqual(A.tabFromHash("#/approvals?x=1&tab=approved"), "approved");
+  assert.strictEqual(A.tabFromHash("#/approvals"), "");
+  assert.strictEqual(A.tabFromHash(undefined), "");
+});
+
+test("systemWho says who proposed in the owner's words", () => {
+  assert.strictEqual(A.systemWho({ source: "ai", author: { id: "owner@contoh.id" } }), "Diusulkan oleh Raka");
+  assert.strictEqual(A.systemWho({ author: { id: "budi@contoh.id" } }), "Diusulkan oleh budi@contoh.id");
+  assert.strictEqual(A.systemWho({}), "Diusulkan");
+});

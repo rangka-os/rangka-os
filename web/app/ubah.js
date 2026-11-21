@@ -454,8 +454,8 @@
   };
 
   var DASH_KEYS = ["label", "description", "periods", "default_period", "roles", "cache"];
-  var WIDGET_KEYS = ["name", "label", "description", "type", "model", "filter", "period", "aggregate", "field", "chart", "group_by", "grain",
-    "sort", "limit", "columns", "span", "good_when", "compact", "if"];
+  var WIDGET_KEYS = ["name", "label", "description", "type", "source", "model", "filter", "period", "aggregate", "field", "chart", "group_by", "grain",
+    "sort", "limit", "columns", "span", "good_when", "compact", "if", "empty"];
   function pick(o, keys) {
     var out = {};
     keys.forEach(function (k) { if (o && o[k] !== undefined) out[k] = clone(o[k]); });

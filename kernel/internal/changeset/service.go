@@ -178,7 +178,10 @@ type Service struct {
 	// before) that this kernel does not serve (RANGKA_HOST_CONNECTORS does not name them); validate refuses each
 	// with connector_host_unavailable. Nil = no check.
 	HostUnavailable func(before, after *meta.Registry) []string
-	mu              sync.Mutex
+	// OnProposed runs after a change set is saved as proposed (contract 0066 as built: kernel.changeset.proposed). It
+	// cannot fail the proposal. Nil = nothing.
+	OnProposed func(ctx context.Context, cs *ChangeSet, a Actor)
+	mu         sync.Mutex
 }
 
 func (s *Service) now() string {

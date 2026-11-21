@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/dashboard.json
+name: bad_tables
+label: {id: Tabel salah}
+roles: [owner]
+widgets:
+  - name: no_group
+    type: table
+    label: {id: Tanpa grup}
+    model: sales_invoice
+    columns:
+      - {name: sales, label: {id: Penjualan}, fn: sum, field: grand_total}
+    span: 12
+  - name: bad_columns
+    type: table
+    label: {id: Kolom salah}
+    model: sales_invoice
+    group_by: customer
+    sort: -nothing
+    compare: previous_period
+    columns:
+      - {name: sales, label: {id: Penjualan}, fn: sum, field: status}
+      - {name: sales, label: {id: Dobel}, fn: count}
+      - {name: both, label: {id: Keduanya}, fn: count, expr: sales}
+      - {name: later, label: {id: Nanti}, expr: sales / ghost}
+      - {name: nofield, label: {id: Tanpa field}, fn: avg}
+    span: 12
+  - name: bad_heat
+    type: heatmap
+    label: {id: Heatmap salah}
+    model: sales_invoice
+    group_by: grand_total
+    series_by: grand_total
+    series_range: [0, 30]
+    span: 12

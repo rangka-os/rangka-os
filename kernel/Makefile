@@ -66,6 +66,7 @@ compare-python: build
 	            "testdata/broken-print-apps/apps --site testdata/broken-print-site" \
 	            "testdata/canvas/apps --site testdata/canvas/site" \
 	            "testdata/broken-canvas/apps --site testdata/broken-canvas/site" \
+	            "testdata/broken-table/apps --site testdata/broken-table/site" \
 	            "testdata/modules-apps/apps --site testdata/site-module" \
 	            "testdata/modules-apps/apps --site testdata/broken-site-module" \
 	            "testdata/stock-apps/apps --site testdata/stock-apps/site" \

@@ -23,10 +23,19 @@ export interface DocumentHeaderProps { number: string; title: string; status: Do
 export declare function DocumentHeader(props: DocumentHeaderProps): React.ReactElement;
 export interface PosKeypadProps { initial?: number; offline?: boolean; queued?: number; payLabel?: string; payIcon?: IconName | null }
 export declare function PosKeypad(props: PosKeypadProps): React.ReactElement;
-export type RakaState = 'netral' | 'mikir' | 'kerja' | 'senang' | 'tidur';
-/** Raka, the AI agent: ink head, square eyes, titik status light. `state` swaps the eyes; mikir and kerja light the titik teal. Alive by default: follows the pointer, blinks and bounces on click (one shared listener; reduced motion keeps only the state swaps); `interactive: false` keeps it still. `title: ""` hides it from assistive tech. */
-export interface RakaProps { size?: number; title?: string; withName?: boolean; company?: string; state?: RakaState; interactive?: boolean; onClick?: () => void }
+export type RakaState = 'netral' | 'senang' | 'tidur' | 'gagal' | 'mikir' | 'ngetik' | 'cari' | 'baca' | 'kerja' | 'nyusun' | 'muter' | 'sinkron';
+export type RakaReaction = 'lompat' | 'angguk' | 'geleng' | 'kaget' | 'ide' | 'dadah' | 'kedip' | 'lihat' | 'pusing';
+/** Raka, the AI agent: ink head, square eyes, titik status light. `state` loops: the working states (mikir, ngetik, cari, baca, kerja = old baca, nyusun, muter, sinkron) light the titik teal, gagal turns it red. `react` plays a reaction once on top of the state (change `reactKey` to replay). Alive by default (one shared loop: follows the pointer, blinks, a click plays lompat); `playful` (default from 48 px) adds drag, five clicks = pusing; `idle` (default = playful) fidgets while netral. Reduced motion draws one still pose and plays no reaction. `interactive: false` keeps it still. `title: ""` hides it from assistive tech. */
+export interface RakaProps { size?: number; title?: string; withName?: boolean; company?: string; state?: RakaState; react?: RakaReaction; reactKey?: string | number; interactive?: boolean; playful?: boolean; idle?: boolean; onClick?: () => void }
 export declare function Raka(props: RakaProps): React.ReactElement;
+/** Plays a reaction on every live Raka, or only on those inside `scope`; returns how many played (0 under reduced motion). */
+export declare function rakaReact(name: RakaReaction, scope?: Element): number;
+/** The working state for a step label: "Membaca berkasmu" → baca, "Menyusun usulan" → nyusun; muter when nothing matches. */
+export declare function rakaMood(label: string): RakaState;
+/** A chat turn's avatar state: ngetik while text streams, the running step's mood, mikir before anything; gagal or netral after. */
+export declare function rakaTurnState(turn: { text?: string; activity?: string[]; error?: string }, running: boolean): RakaState;
+export declare const RAKA_STATES: RakaState[];
+export declare const RAKA_REACTIONS: RakaReaction[];
 type Node = React.ReactNode;
 export interface Option { value: string; label: string; hint?: string; icon?: IconName }
 export interface TableColumn extends DataTableColumn { sortable?: boolean }
@@ -254,7 +263,7 @@ export declare function OfferCompare(props: { offer: Offer; closedLabel?: string
 export declare function markdownBlocks(text: string): Array<{ t: "h" | "p" | "list" | "kv" | "table" | "code" | "quote" | "callout" | "hr"; [k: string]: unknown }>;
 /** The link a Raka answer may open, or "" (javascript:, data:, //host and the like stay text). */
 export declare function safeHref(url: string): string;
-export declare function RakaLauncher(props: { open: boolean; pending?: number; busy?: boolean; state?: RakaState; tucked?: boolean; onToggle: () => void; onTuck?: (tucked: boolean) => void }): React.ReactElement;
+export declare function RakaLauncher(props: { open: boolean; pending?: number; busy?: boolean; failed?: boolean; state?: RakaState; react?: RakaReaction; reactKey?: string | number; tucked?: boolean; onToggle: () => void; onTuck?: (tucked: boolean) => void }): React.ReactElement;
   renderChangeset?: (cs: ChatChangeset) => Node; onPreview?: (id: string) => void; onOpenUbah?: (id: string) => void;
   /** same as mode="float" */ floating?: boolean; mode?: 'drawer' | 'float' | 'dock' | 'full'; width?: number; onResize?: (width: number) => void; onExpand?: () => void; onCollapse?: () => void; /** no longer shown */ subtitle?: string; /** the page title as a context chip */ context?: string | null }): React.ReactElement | null;
 /** Dock width: NaN or a non-number gives 400; clamped to 360..640, and with a viewport width at most viewport - 640 (never below 360). */

@@ -390,20 +390,19 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 
 /* ---------------------------------------------------------------- mascot, brand */
 .rk-mascot { display: block; flex: none; color: var(--ink); overflow: visible; }
-/* Raka's titik: body colour at rest, teal while Raka thinks (blinks) or works (pulses, with a ring). */
-.rk-mascot-titik[data-on] { fill: var(--raka); }
+/* Raka's titik and particles: body colour at rest, teal while Raka works, red when something failed. The pose is
+   drawn per frame by the shared loop in bundle.js; CSS only colours it and pulses the ring. */
+.rk-mascot-titik[data-on], .rk-mascot-fx[data-on] { fill: var(--raka); }
+.rk-mascot-fx { fill: currentColor; }
+.rk-mascot-titik[data-bad] { fill: var(--bad-solid); }
 .rk-mascot-ring { fill: none; stroke: var(--raka); stroke-width: 6; opacity: 0; transform-box: fill-box; transform-origin: center; }
-.rk-mascot[data-state=mikir] .rk-mascot-titik { animation: rk-raka-blink .9s ease-in-out infinite; }
-.rk-mascot[data-state=kerja] .rk-mascot-ring { animation: rk-raka-ring 1.1s ease-out infinite; }
-.rk-mascot[data-state=kerja] .rk-mascot-eyes { animation: rk-raka-scan 1.2s ease-in-out infinite alternate; }
+.rk-mascot-ring[data-show] { animation: rk-raka-ring 1.1s ease-out infinite; }
+.rk-mascot-ring[data-show=ink] { stroke: currentColor; }
 .rk-mascot.live { cursor: pointer; }
-.rk-mascot.pop { animation: rk-raka-pop 460ms cubic-bezier(.3, 1.6, .5, 1); transform-origin: 50% 80%; }
-@keyframes rk-raka-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+.rk-mascot.playful { touch-action: none; -webkit-user-select: none; user-select: none; }
 @keyframes rk-raka-ring { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(2.1); } }
-@keyframes rk-raka-scan { from { transform: translateX(-12px); } to { transform: translateX(12px); } }
-@keyframes rk-raka-pop { 0% { transform: scale(1, 1); } 25% { transform: scale(1.07, .9); } 60% { transform: scale(.97, 1.05); } 100% { transform: scale(1, 1); } }
 @media (prefers-reduced-motion: reduce) {
-  .rk-mascot .rk-mascot-titik, .rk-mascot .rk-mascot-ring, .rk-mascot .rk-mascot-eyes, .rk-mascot.pop { animation: none; }
+  .rk-mascot-ring[data-show] { animation: none; }
 }
 .rk-brand { display: inline-flex; align-items: center; gap: 8px; }
 .rk-brand b { display: block; font: 600 14px/1.2 var(--font-display); letter-spacing: -.01em; color: var(--ink); }

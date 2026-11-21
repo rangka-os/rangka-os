@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 )
 
 // keyEnv is kopi-senja with the owner signed in.
@@ -172,6 +174,16 @@ func TestIntegrationKeyAccountHiddenFromTeam(t *testing.T) {
 	}
 	if n := countRows(e, "select 1 from rk_signin_links l join rk_users u on u.id = l.user_id where u.service"); n != 0 {
 		t.Fatalf("a sign-in link exists for a key account: %d", n)
+	}
+	// the Member API (owner token with members:write) cannot link an upstream subject to the key account
+	e.s.Auth.Upstreams = []auth.Upstream{{ID: "kantor", Label: "Kantor", Issuer: memberIssuer}}
+	tok := e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "cloud", "scopes": []any{"members:write"}})
+	host := &env{t: t, ts: e.ts, token: tok.JSON["token"].(string)}
+	if r := host.do("PUT", memberPath("sub-svc"), map[string]any{"email": email, "role": "sales_rep"}); r.Status != 422 {
+		t.Fatalf("member API reached a key account: %d %s", r.Status, r.Body)
+	}
+	if n := countRows(e, "select 1 from rk_identities i join rk_users u on u.id = i.user_id where u.service"); n != 0 {
+		t.Fatalf("an identity is linked to a key account: %d", n)
 	}
 	ok := map[string]any{"name": "k2", "role": "sales_rep", "scopes": []any{"api:read:customer"}, "expires_in_days": 200000}
 	if r := e.do("POST", "/api/v1/integration-keys", ok); r.Status != 422 {

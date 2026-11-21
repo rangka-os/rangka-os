@@ -404,6 +404,12 @@ func (s *Service) resolveUpstreamUser(ctx context.Context, r *http.Request, up *
 
 // enterOrg loads the membership to enter: the preferred organisation, else the user's first one.
 func (s *Service) enterOrg(ctx context.Context, uid int64, prefer string) (*User, error) {
+	// the service member of an integration key never signs in through a browser (contract 0075 §2)
+	if res, err := s.DB.Query(ctx, "select 1 from rk_users where id = $1 and service", uid); err != nil {
+		return nil, err
+	} else if len(res.Rows) > 0 {
+		return nil, ErrBadLogin
+	}
 	u, err := LoadUser(ctx, s.DB, uid, prefer)
 	if errors.Is(err, ErrNoMembership) && prefer != "" {
 		u, err = LoadUser(ctx, s.DB, uid, "")

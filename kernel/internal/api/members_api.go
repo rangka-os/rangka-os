@@ -290,6 +290,12 @@ func (s *Server) writeMember(ctx context.Context, tx *pg.Tx, org string, in memb
 		}
 	}
 
+	// the service member of an integration key is not a person: no member write reaches it (contract 0075 §2)
+	if res, err := tx.Query(ctx, "select 1 from rk_users where service and (id = $1 or lower(email) = $2)", in.userID, strings.ToLower(in.Email)); err != nil {
+		return 0, false, err
+	} else if len(res.Rows) > 0 {
+		return 0, false, &memberError{http.StatusUnprocessableEntity, "bad_request", "Alamat e-mail ini dipakai kunci integrasi dan tidak bisa ditambahkan sebagai anggota."}
+	}
 	// resolve the target, writing nothing yet
 	email := in.Email
 	target, linked := in.userID, in.userID != 0

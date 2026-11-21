@@ -2523,11 +2523,11 @@
       document.addEventListener("keydown", onKey);
       return function () { document.removeEventListener("keydown", onKey); };
     }, [inFull]);
+    var finish = useRakaFinish(p.busy, !!(last && last.error)); // before the early return: hooks keep their order
     if (!p.open) return null;
     var canSend = !p.busy && !!text.trim();
     function send() { if (!canSend) return; if (p.onSend) p.onSend(text); setText(""); }
     var waiting = p.busy && (!last || last.role === "user");
-    var finish = useRakaFinish(p.busy, !!(last && last.error));
     var mode = p.mode || (p.floating ? "float" : "drawer"), full = mode === "full", dock = mode === "dock";
     var width = clampDockWidth(p.width);
     function resize(w) { if (p.onResize) p.onResize(w); }

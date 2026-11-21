@@ -499,22 +499,55 @@ test("ChatDrawer keeps the same wrapper chain to the log and composer in Dock an
   }
 });
 
-// ---- Raka (Lampu status, 20 Nov 2026): ink head with cut-out eyes, titik lit teal only while Raka thinks or works
-test("Raka draws the head, two eyes in the mask and the titik; teal only for mikir and kerja", () => {
-  for (const s of ["netral", "mikir", "kerja", "senang", "tidur"]) {
+// ---- Raka (Lampu status, 20 Nov 2026; actions 21 Nov): ink head with cut-out eyes, titik teal only while Raka works
+test("Raka draws the head, two visible eyes in the mask and the titik; teal only while working, red when failed", () => {
+  for (const s of R.RAKA_STATES) {
     const tree = render(R.Raka({ size: 40, state: s }));
     assert.strictEqual(tree.type, "svg");
     assert.strictEqual(tree.props["data-state"], s);
     const mask = nodes(tree, (n) => n.type === "mask")[0];
     assert.ok(mask, s + ": eyes are cut out with a mask");
-    assert.strictEqual(nodes(mask, (n) => (n.type === "rect" || n.type === "polygon") && n.props.fill === "#000").length, 2, s + ": two eyes");
+    const eyes = nodes(mask, (n) => (n.type === "rect" || n.type === "polygon") && n.props.fill === "#000");
+    assert.strictEqual(eyes.filter((n) => n.props.display !== "none").length, 2, s + ": two visible eyes");
     const titik = nodes(tree, (n) => hasClass(n, "rk-mascot-titik"))[0];
-    assert.strictEqual(titik.props["data-on"] !== undefined, s === "mikir" || s === "kerja", s + ": titik lit only while working");
-    assert.strictEqual(nodes(tree, (n) => n.type === "path" && n.props.fill === "currentColor").length, 1, s + ": body follows currentColor");
+    const working = ["mikir", "ngetik", "cari", "baca", "kerja", "nyusun", "muter", "sinkron"].includes(s);
+    assert.strictEqual(titik.props["data-on"] !== undefined, working, s + ": titik lit only while working");
+    assert.strictEqual(titik.props["data-bad"] !== undefined, s === "gagal", s + ": red only when failed");
+    assert.strictEqual(nodes(tree, (n) => n.type === "path" && n.props.fill === "currentColor" && n.props.mask).length, 1, s + ": body follows currentColor");
   }
   assert.strictEqual(render(R.Raka({ state: "bogus" })).props["data-state"], "netral", "unknown state falls back to netral");
   assert.strictEqual(render(R.Raka({ title: "" })).props["aria-hidden"], "true", "an empty title hides a decorative Raka");
   assert.match(render(R.Raka({ state: "kerja" })).props["aria-label"], /sedang bekerja/);
+  assert.match(render(R.Raka({ state: "nyusun" })).props["aria-label"], /sedang menyusun/);
+  const happy = nodes(render(R.Raka({ state: "senang" })), (n) => n.type === "polygon" && n.props.display !== "none");
+  assert.strictEqual(happy.length, 2, "senang shows the chevron eyes");
+});
+
+test("Raka keeps a particle pool and lists its states and reactions", () => {
+  const tree = render(R.Raka({ size: 56 }));
+  assert.strictEqual(nodes(tree, (n) => hasClass(n, "rk-mascot-fx")).length, 12, "12 reusable squares");
+  assert.strictEqual(nodes(tree, (n) => n.type === "path" && n.props["data-rk"] === "fz").length, 3, "3 z letters for tidur");
+  assert.deepStrictEqual(Array.from(R.RAKA_REACTIONS), ["lompat", "angguk", "geleng", "kaget", "ide", "dadah", "kedip", "lihat", "pusing"]);
+  for (const s of ["mikir", "ngetik", "cari", "baca", "nyusun", "muter", "sinkron", "gagal", "tidur", "senang"]) assert.ok(R.RAKA_STATES.includes(s), s);
+  assert.ok(hasClass(tree, "playful"), "56 px is playful");
+  assert.ok(!hasClass(render(R.Raka({ size: 22 })), "playful"), "22 px is not");
+  assert.ok(!hasClass(render(R.Raka({ size: 56, playful: false })), "playful"), "playful: false turns it off");
+  assert.strictEqual(R.rakaReact("lompat"), 0, "nothing live in a test, nothing played");
+});
+
+test("rakaMood maps a step label to a working state; rakaTurnState follows a chat turn", () => {
+  assert.strictEqual(R.rakaMood("Membaca berkasmu"), "baca");
+  assert.strictEqual(R.rakaMood("Membaca panduan kepingan"), "baca");
+  assert.strictEqual(R.rakaMood("Melihat kepingan yang tersedia"), "cari");
+  assert.strictEqual(R.rakaMood("Mengambil data penjualan…"), "cari");
+  assert.strictEqual(R.rakaMood("Menyusun usulan perubahan"), "nyusun");
+  assert.strictEqual(R.rakaMood("Menyambungkan WhatsApp"), "sinkron");
+  assert.strictEqual(R.rakaMood("Menyiapkan pratinjau"), "muter");
+  assert.strictEqual(R.rakaTurnState({}, true), "mikir");
+  assert.strictEqual(R.rakaTurnState({ activity: ["Membaca berkasmu"] }, true), "baca");
+  assert.strictEqual(R.rakaTurnState({ activity: ["Membaca berkasmu"], text: "Hal" }, true), "ngetik");
+  assert.strictEqual(R.rakaTurnState({ error: "x" }, false), "gagal");
+  assert.strictEqual(R.rakaTurnState({ text: "ok" }, false), "netral");
 });
 
 test("every Raka is alive by default; interactive: false keeps one still", () => {
@@ -527,15 +560,20 @@ test("every Raka is alive by default; interactive: false keeps one still", () =>
   assert.ok(avatars.length >= 1 && avatars.every(live), "chat drawer avatars are live");
 });
 
-test("RakaLauncher shows Raka working while busy; pending changesets do not light the titik", () => {
+test("RakaLauncher shows Raka working (muter) while busy; pending changesets do not light the titik", () => {
   const raka = (p) => nodes(render(R.RakaLauncher(Object.assign({ open: false, onToggle() {} }, p))), (n) => n.type === "svg" && hasClass(n, "rk-mascot"))[0];
-  assert.strictEqual(raka({ busy: true }).props["data-state"], "kerja");
+  assert.strictEqual(raka({ busy: true }).props["data-state"], "muter");
+  assert.strictEqual(raka({ state: "nyusun" }).props["data-state"], "nyusun");
   assert.strictEqual(raka({ pending: 2 }).props["data-state"], "netral");
 });
 
-test("ChatDrawer: the waiting row shows Raka thinking and the head shows it working while busy", () => {
+test("ChatDrawer: Raka thinks before the first word, follows the running step, and shows gagal on a failed turn", () => {
   const tree = render(R.ChatDrawer({ open: true, busy: true, turns: [{ role: "user", text: "rekap minggu ini" }] }));
   const states = nodes(tree, (n) => n.type === "svg" && hasClass(n, "rk-mascot")).map((n) => n.props["data-state"]);
-  assert.ok(states.indexOf("kerja") >= 0, "head avatar works while busy: " + states);
-  assert.ok(states.indexOf("mikir") >= 0, "waiting row thinks: " + states);
+  assert.ok(states.filter((x) => x === "mikir").length >= 2, "head and waiting row think before the first word: " + states);
+  const working = render(R.ChatDrawer({ open: true, busy: true, turns: [{ role: "user", text: "x" }, { role: "assistant", text: "", activity: ["Menyusun usulan"] }] }));
+  const ws = nodes(working, (n) => n.type === "svg" && hasClass(n, "rk-mascot")).map((n) => n.props["data-state"]);
+  assert.ok(ws.filter((x) => x === "nyusun").length >= 2, "head and turn follow the running step: " + ws);
+  const failed = render(R.ChatDrawer({ open: true, turns: [{ role: "user", text: "x" }, { role: "assistant", text: "", error: "Raka tidak bisa dihubungi." }] }));
+  assert.ok(nodes(failed, (n) => n.type === "svg" && hasClass(n, "rk-mascot")).some((n) => n.props["data-state"] === "gagal"), "a failed turn shows gagal");
 });

@@ -220,97 +220,388 @@
   }
 
   /* Raka, the Rangka AI agent ("Lampu status", 20 Nov 2026; matches the zafdoz.ai logo): an Ink head (256-unit grid)
-     with two square eyes cut out, and the titik, a square status light top right. The body takes currentColor; the
-     titik lights teal (--raka) only while Raka thinks (mikir) or works (kerja). States: netral, mikir, kerja, senang,
-     tidur. interactive: the eyes and head follow the pointer, Raka blinks, and a click bounces it and shows senang.
-     prefers-reduced-motion keeps the state swaps and drops every movement. */
+     with two square eyes cut out, and the titik, a square status light top right. The body takes currentColor.
+     The titik has one colour per meaning: teal (--raka) while Raka works, red (--bad-solid) when something failed,
+     the body colour otherwise.
+     state (loops until it changes):
+       netral, senang, tidur, gagal, and the working states, which light the titik:
+       mikir (waiting for the first word), ngetik (writing the answer), cari (reading data), baca (reading a file
+       or page; kerja is the old name), nyusun (drafting a change set), muter (a long job: build, preview,
+       migration), sinkron (a connector sync or import).
+     react (plays once on top of the state, then returns): lompat (done), angguk (approved), geleng (failed),
+       kaget (a message while asleep), ide (a suggestion), dadah (hello), kedip, lihat, pusing.
+       Play one with the react prop (change reactKey to replay) or Rangka.rakaReact(name, scope).
+     Alive by default: one shared pointer listener and one animation frame loop draw every Raka (pose per frame:
+     eyes, head, titik, a pool of particles). A click plays lompat (kedip while working). playful (default from
+     48 px): drag with a spring, five quick clicks play pusing, and Raka fidgets when idle. interactive: false keeps
+     one still. prefers-reduced-motion draws the state as one still pose and plays no reaction. */
   var RAKA_HEAD = "M80 72 H176 A52 52 0 0 1 228 124 V148 A52 52 0 0 1 176 200 H80 A52 52 0 0 1 28 148 V124 A52 52 0 0 1 80 72 Z";
-  var RAKA_STATES = { netral: 1, mikir: 1, kerja: 1, senang: 1, tidur: 1 };
-  var RAKA_ON = { mikir: 1, kerja: 1 };
+  var RAKA_Z = "M-56 -65 H56 V-35 L-13.57 34.6 H56 V64.6 H-56 V34.6 L13.57 -35 H-56 Z";
+  var RAKA_HAPPY = "-22,4 0,-18 22,4 22,19 0,-3 -22,19";
+  var RAKA_TX = 221, RAKA_TY = 47, RAKA_TAU = Math.PI * 2;
+  var RAKA_WORK = ["mikir", "ngetik", "cari", "baca", "kerja", "nyusun", "muter", "sinkron"];
+  var RAKA_STATES = { netral: 1, senang: 1, tidur: 1, gagal: 1 };
+  var RAKA_ON = {};
+  RAKA_WORK.forEach(function (s) { RAKA_STATES[s] = 1; RAKA_ON[s] = 1; });
+  var RAKA_REACTIONS = ["lompat", "angguk", "geleng", "kaget", "ide", "dadah", "kedip", "lihat", "pusing"];
+  var RAKA_SAY = { mikir: "sedang berpikir", ngetik: "sedang menulis", cari: "sedang mencari", baca: "sedang membaca", kerja: "sedang bekerja",
+    nyusun: "sedang menyusun", muter: "sedang memproses", sinkron: "sedang menyinkronkan", tidur: "sedang istirahat", gagal: "ada yang gagal" };
   function rakaState(s) { return RAKA_STATES[s] ? s : "netral"; }
-  function rakaEyes(s) {
-    var k = "#000";
-    if (s === "kerja") return [h("rect", { key: "l", x: 76, y: 120, width: 40, height: 16, rx: 4, fill: k }), h("rect", { key: "r", x: 140, y: 120, width: 40, height: 16, rx: 4, fill: k })];
-    if (s === "tidur") return [h("rect", { key: "l", x: 76, y: 130, width: 40, height: 9, rx: 3, fill: k }), h("rect", { key: "r", x: 140, y: 130, width: 40, height: 9, rx: 3, fill: k })];
-    if (s === "senang") return [h("polygon", { key: "l", points: "74,138 96,116 118,138 118,153 96,131 74,153", fill: k }), h("polygon", { key: "r", points: "138,138 160,116 182,138 182,153 160,131 138,153", fill: k })];
-    return [h("rect", { key: "l", x: 76, y: 108, width: 40, height: 40, rx: 6, fill: k }), h("rect", { key: "r", x: 140, y: 108, width: 40, height: 40, rx: 6, fill: k })];
+  /** The working state for a step label ("Membaca berkasmu", "Menyusun usulan…"); "muter" when nothing matches. */
+  function rakaMood(label) {
+    var t = String(label == null ? "" : label).toLowerCase();
+    if (/sinkron|sync|impor|import|menyambung|sambung|connector|integrasi/.test(t)) return "sinkron";
+    if (/susun|usul|change ?set|rancang|draf|draft|tambah|ubah|membuat|bikin/.test(t)) return "nyusun";
+    if (/berkas|file|lampiran|dokumen|panduan|halaman|membaca|baca/.test(t)) return "baca";
+    if (/cari|mencari|data|melihat|lihat|cek|memeriksa|periksa|hitung|katalog|kepingan/.test(t)) return "cari";
+    if (/tulis|menulis|jawab|membalas/.test(t)) return "ngetik";
+    return "muter";
   }
+  function rakaClamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function rakaEase(q) { return q < .5 ? 2 * q * q : 1 - Math.pow(-2 * q + 2, 2) / 2; }
+  function rakaBounce(x) { var n = 7.5625, d = 2.75; if (x < 1 / d) return n * x * x; if (x < 2 / d) return n * (x -= 1.5 / d) * x + .75; if (x < 2.5 / d) return n * (x -= 2.25 / d) * x + .9375; return n * (x -= 2.625 / d) * x + .984375; }
+  function rakaFrac(x) { return x - Math.floor(x); }
   function rakaReduced() { return !!(typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
-  /* One pointer listener and one animation frame loop for every interactive Raka on the page. */
+
+  /* Actions: fn(s, p) edits the pose s for progress p (0..1). tone: on (teal), bad (red) or ink. */
+  var RAKA_ACT = {
+    netral: { dur: 3600, fn: function (s, p) { s.head.sy = 1 + .012 * Math.sin(RAKA_TAU * p); s.head.sx = 1 - .006 * Math.sin(RAKA_TAU * p); s.blink = true; } },
+    senang: { dur: 3600, fn: function (s, p) { s.happy = true; s.head.sy = 1 + .015 * Math.sin(RAKA_TAU * p); } },
+    mikir: { dur: 900, fn: function (s, p) { s.look = { x: 8, y: -10 }; s.ti.op = .35 + .65 * (.5 + .5 * Math.cos(RAKA_TAU * p)); s.L.h = s.R.h = 36; } },
+    ngetik: { dur: 900, fn: function (s, p) {
+      s.look = { x: -5, y: 9 }; s.L.h = s.R.h = 30; s.ti.op = 0; s.head.y = 1.4 * Math.abs(Math.sin(RAKA_TAU * p * 2));
+      for (var i = 0; i < 3; i++) s.fx.push({ x: 200 + i * 19, y: 52 - 12 * Math.max(0, Math.sin(RAKA_TAU * (p - i * .16))), s: 13, on: true });
+    } },
+    cari: { dur: 2600, fn: function (s, p) {
+      var T = [[-10, -4], [-10, -4], [10, -7], [10, -7], [4, 8], [-7, 5]], k = T[Math.floor(p * T.length) % T.length];
+      s.ring = "on"; s.ti.s = .85; s.look = { x: k[0], y: k[1] }; s.L.h = s.R.h = 32; s.head.r = k[0] * .35;
+    } },
+    baca: { dur: 1200, fn: function (s, p) { s.ring = "on"; s.look = { x: Math.sin(RAKA_TAU * p) * 12, y: 2 }; s.L.h = s.R.h = 16; s.head.r = Math.sin(RAKA_TAU * p) * 1.2; } },
+    nyusun: { dur: 1900, fn: function (s, p) {
+      var C = [[212, 38], [230, 38], [212, 56], [230, 56]], land = 0;
+      s.ti.op = 0; s.look = { x: 9, y: -8 }; s.L.h = s.R.h = 38;
+      for (var i = 0; i < 4; i++) {
+        var st = i * .15, q = rakaClamp((p - st) / .2, 0, 1);
+        if (p < st) continue;
+        var x = C[i][0], y = C[i][1] - 56 * (1 - rakaBounce(q)), sz = 16;
+        if (q > .85 && q < 1) land = 1;
+        if (p > .8) { var m = rakaEase((p - .8) / .2); x += (RAKA_TX - x) * m; y += (RAKA_TY - y) * m; sz = 16 + 14 * m; }
+        s.fx.push({ x: x, y: y, s: sz, on: true, op: Math.min(1, q * 5) });
+      }
+      s.head.y = land * 1.5;
+    } },
+    muter: { dur: 1150, fn: function (s, p, small) {
+      var rx = small ? 108 : 122, ry = small ? 90 : 102;
+      var a0 = Math.atan2((RAKA_TY - 136) / ry, (RAKA_TX - 128) / rx), a = a0 + RAKA_TAU * p;
+      function pos(a) { return { x: 128 + rx * Math.cos(a), y: 136 + ry * Math.sin(a) }; }
+      var c = pos(a); s.ti.x = c.x - RAKA_TX; s.ti.y = c.y - RAKA_TY; s.ti.r = p * 360; s.ti.snap = true;
+      for (var i = 1; i <= 3; i++) { var g = pos(a - i * .28); s.fx.push({ x: g.x, y: g.y, s: 30 - i * 6, on: true, op: .5 - i * .13, r: p * 360 - i * 25 }); }
+      var dx = c.x - 128, dy = c.y - 128, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      s.look = { x: dx / d * 10, y: dy / d * 9 }; s.head.r = dx / d * 2;
+    } },
+    sinkron: { dur: 1000, fn: function (s, p) {
+      var f = rakaFrac(p * 2); s.ti.r = (Math.floor(p * 2) + rakaEase(f)) * 90; s.ti.s = 1 - .18 * Math.sin(Math.PI * f); s.ti.snap = true;
+      s.look = { x: 8, y: -9 }; s.L.w = s.R.w = s.L.h = s.R.h = 38;
+    } },
+    tidur: { dur: 2700, fn: function (s, p) {
+      s.look = { x: 0, y: 0 }; s.still = true; s.L.h = s.R.h = 9; s.L.dy = s.R.dy = 6;
+      s.head.y = 3 + 2 * Math.sin(RAKA_TAU * p); s.head.sy = 1 + .025 * Math.sin(RAKA_TAU * p); s.head.sx = 1 - .012 * Math.sin(RAKA_TAU * p);
+      for (var k = 0; k < 3; k++) {
+        var q = rakaFrac(p + k / 3), op = q < .15 ? q / .15 : 1 - (q - .15) / .85;
+        s.fx.push({ z: true, x: 232 + 22 * q + 5 * Math.sin(q * 7), y: 22 - 70 * q, s: 9 + 15 * q, op: op * .9, r: -12 + 10 * q });
+      }
+    } },
+    gagal: { dur: 3000, fn: function (s, p) {
+      s.ti.bad = true; s.L.h = s.R.h = 22; s.L.dy = s.R.dy = 6; s.look = { x: -2, y: 5 }; s.L.rot = 8; s.R.rot = -8; s.head.sy = 1 + .01 * Math.sin(RAKA_TAU * p);
+    } },
+    lompat: { dur: 760, fn: function (s, p) {
+      function jump(p) {
+        if (p < .15) { var a = p / .15; return { y: 0, sx: 1 + .08 * a, sy: 1 - .12 * a }; }
+        if (p < .75) { var q = (p - .15) / .6, k = 1 - Math.abs(2 * q - 1); return { y: -36 * 4 * q * (1 - q), sx: 1 - .04 * k, sy: 1 + .07 * k }; }
+        var r = (p - .75) / .25; return { y: 0, sx: 1 + .05 * Math.sin(Math.PI * r), sy: 1 - .08 * Math.sin(Math.PI * r) };
+      }
+      var j = jump(p), jt = jump(rakaClamp(p - .09, 0, 1));
+      s.happy = true; s.still = true; s.head.y = j.y; s.head.sx = j.sx; s.head.sy = j.sy; s.ti.y = jt.y * 1.25; s.ti.r = jt.y * -1.4; s.ti.snap = true;
+    } },
+    angguk: { dur: 950, fn: function (s, p) {
+      var n = Math.max(0, Math.sin(RAKA_TAU * 2 * p)) * (1 - p * .4);
+      s.still = true; s.head.y = 8 * n; s.head.sy = 1 - .03 * n; s.look = { x: 0, y: 6 * n }; s.happy = p > .55;
+      s.ti.y = 10 * Math.max(0, Math.sin(RAKA_TAU * 2 * (p - .05)));
+    } },
+    geleng: { dur: 900, fn: function (s, p) {
+      var w = Math.sin(RAKA_TAU * 3 * p) * (1 - p);
+      s.still = true; s.head.x = 10 * w; s.head.r = 3 * w; s.look = { x: -6 * w, y: 4 };
+      s.L.h = s.R.h = 16; s.L.dy = s.R.dy = 5; s.L.rot = 8; s.R.rot = -8; s.ti.bad = true; s.ti.x = 15 * Math.sin(RAKA_TAU * 3 * (p - .06)) * (1 - p);
+    } },
+    kaget: { dur: 950, fn: function (s, p) {
+      var up = p < .1 ? p / .1 : p < .45 ? 1 : 1 - rakaBounce(rakaClamp((p - .45) / .3, 0, 1)), tp = rakaClamp(p / .6, 0, 1);
+      s.still = true; s.head.y = -16 * up; s.head.sy = 1 + .07 * up; s.head.sx = 1 - .04 * up;
+      if (p < .75) { s.L.w = s.R.w = 46; s.L.h = s.R.h = 54; s.L.dy = s.R.dy = -3; s.look = { x: 0, y: -2 }; }
+      s.ti.y = -34 * Math.sin(Math.PI * tp) - 16 * up; s.ti.r = 90 * rakaEase(tp); s.ti.snap = true;
+    } },
+    ide: { dur: 1300, fn: function (s, p) {
+      var ox = 128 - RAKA_TX, oy = 2 - RAKA_TY, q;
+      s.still = true; s.L.w = s.R.w = 42; s.L.h = s.R.h = 46; s.ti.snap = true;
+      if (p < .25) { q = rakaEase(p / .25); s.ti.x = ox * q; s.ti.y = oy * q - 28 * Math.sin(Math.PI * q); }
+      else if (p < .75) { s.ti.x = ox; s.ti.y = oy; s.ti.s = 1 + .22 * Math.sin(Math.PI * (p - .25) / .5); s.ring = "ink"; }
+      else { q = rakaEase((p - .75) / .25); s.ti.x = ox * (1 - q); s.ti.y = oy * (1 - q) - 22 * Math.sin(Math.PI * q); s.ti.r = 90 * q; }
+      var dx = s.ti.x + RAKA_TX - 128, dy = s.ti.y + RAKA_TY - 128, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      s.look = { x: dx / d * 9, y: dy / d * 10 }; s.head.y = -3 * Math.sin(Math.PI * p);
+    } },
+    dadah: { dur: 1600, fn: function (s, p) {
+      var env = Math.pow(Math.max(0, Math.sin(Math.PI * p)), .6), w = Math.sin(RAKA_TAU * 2.5 * p);
+      s.still = true; s.happy = true; s.ti.x = (12 * w - 4) * env; s.ti.y = -16 * env; s.ti.r = 24 * w * env; s.ti.snap = true;
+      s.head.r = -3 * env; s.head.y = -2 * env; s.look = { x: 4 * env, y: -3 * env };
+    } },
+    kedip: { dur: 700, fn: function (s, p) {
+      if (p > .1 && p < .75) s.R.happy = true;
+      s.head.r = -4 * Math.sin(Math.PI * p); s.ti.y = -6 * Math.sin(Math.PI * p);
+    } },
+    lihat: { dur: 1900, fn: function (s, p) {
+      var x = p < .1 ? 0 : p < .45 ? -11 : p < .55 ? 0 : p < .9 ? 11 : 0;
+      s.still = true; s.look = { x: x, y: -2 }; s.head.r = x * .5; s.head.x = x * .4; if (p > .48 && p < .52) s.L.h = s.R.h = 5;
+    } },
+    pusing: { dur: 2000, fn: function (s, p) {
+      var d = 1 - p;
+      s.still = true; s.head.r = 9 * Math.sin(RAKA_TAU * 2.5 * p) * d; s.head.x = 6 * Math.sin(RAKA_TAU * 2.5 * p + 1) * d;
+      s.L.w = s.R.w = s.L.h = s.R.h = 32; s.L.rot = p * 540 * d; s.R.rot = -p * 540 * d;
+      s.look = { x: 6 * Math.cos(RAKA_TAU * 3 * p) * d, y: 5 * Math.sin(RAKA_TAU * 3 * p) * d };
+      s.ti.x = 12 * Math.cos(RAKA_TAU * 3 * p) * d; s.ti.y = 8 * Math.sin(RAKA_TAU * 3 * p) * d; s.ti.r = p * 360; s.ti.snap = true;
+    } }
+  };
+  RAKA_ACT.kerja = RAKA_ACT.baca;
+  var RAKA_FIDGET = ["kedip", "lihat", "kedip", "dadah"];
+
+  function rakaPose() {
+    return { L: { w: 40, h: 40, dx: 0, dy: 0, rot: 0 }, R: { w: 40, h: 40, dx: 0, dy: 0, rot: 0 }, look: null, happy: false,
+      head: { x: 0, y: 0, r: 0, sx: 1, sy: 1 }, ti: { x: 0, y: 0, r: 0, s: 1, op: 1 }, ring: null, fx: [], blink: false, still: false };
+  }
+  /** The still pose of a state (first render, reduced motion): the eyes and the titik only. */
+  function rakaStill(s) {
+    var o = rakaPose();
+    if (s === "mikir") o.look = { x: 8, y: -10 };
+    else if (s === "baca" || s === "kerja") o.L.h = o.R.h = 16;
+    else if (s === "ngetik") { o.look = { x: -5, y: 9 }; o.L.h = o.R.h = 30; }
+    else if (s === "cari") { o.look = { x: -10, y: -4 }; o.L.h = o.R.h = 32; }
+    else if (s === "nyusun" || s === "muter" || s === "sinkron") { o.look = { x: 8, y: -8 }; o.L.h = o.R.h = 38; }
+    else if (s === "tidur") { o.L.h = o.R.h = 9; o.L.dy = o.R.dy = 6; }
+    else if (s === "senang") o.happy = true;
+    else if (s === "gagal") { o.L.h = o.R.h = 22; o.L.dy = o.R.dy = 6; o.look = { x: -2, y: 5 }; }
+    return o;
+  }
+  function rakaEyeProps(e, cx, cy) {
+    return { x: +(cx - e.w / 2).toFixed(2), y: +(cy - e.h / 2).toFixed(2), width: e.w, height: e.h, rx: +Math.min(6, e.h / 2.6).toFixed(2) };
+  }
+
+  /* One pointer listener and one animation frame loop for every live Raka on the page. */
   var rakaLive = { list: [], bound: false, raf: 0 };
-  function rakaTick() {
-    rakaLive.raf = 0;
-    if (!rakaLive.list.length) return;
-    var now = Date.now(), reduce = rakaReduced();
-    rakaLive.list.forEach(function (r) {
-      var s = r.state(), tx = r.tx, ty = r.ty;
-      if (s === "mikir") { tx = 8; ty = -10; } else if (s === "kerja" || s === "tidur" || reduce) { tx = 0; ty = 0; }
-      r.x += (tx - r.x) * 0.15; r.y += (ty - r.y) * 0.15;
-      var moving = !(reduce || s === "tidur");
-      r.hx += ((moving ? r.x * 0.4 : 0) - r.hx) * 0.15; r.hy += ((moving ? r.y * 0.4 : 0) - r.hy) * 0.15; r.hr += ((moving ? r.x * 0.3 : 0) - r.hr) * 0.15;
-      if (r.look) r.look.setAttribute("transform", "translate(" + r.x.toFixed(2) + " " + r.y.toFixed(2) + ")");
-      if (r.head) r.head.setAttribute("transform", "translate(" + r.hx.toFixed(2) + " " + r.hy.toFixed(2) + ") rotate(" + r.hr.toFixed(2) + " 128 136)");
-      if (r.blink) {
-        if (s === "netral" && !reduce && now > r.nextBlink) { r.blinkUntil = now + 120; r.nextBlink = now + 3000 + Math.random() * 3000; }
-        r.blink.setAttribute("transform", s === "netral" && now < r.blinkUntil ? "translate(0 128) scale(1 0.12) translate(0 -128)" : "");
+  function rakaAt(r, now) {
+    var st = r.state();
+    if (st !== r.base) { // React rewrote the static pose: forget what was set
+      r.base = st; r.t0 = now;
+      [r.head, r.eL, r.eR, r.hL, r.hR, r.ti, r.ring, r.ringg].concat(r.fr, r.fz).forEach(function (el) { if (el) el.__rk = {}; });
+    }
+    var s = rakaPose(), b = RAKA_ACT[r.base] || RAKA_ACT.netral, tb = Math.max(0, now - r.t0);
+    b.fn(s, rakaFrac(tb / b.dur), r.small);
+    if (r.base === "netral" && r.idle && !r.shot && !r.drag.on && now > r.nextFidget) {
+      r.shot = { name: RAKA_FIDGET[Math.floor(Math.random() * RAKA_FIDGET.length)], t0: now }; r.nextFidget = now + 8000 + Math.random() * 6000;
+    }
+    if (r.shot) {
+      var a = RAKA_ACT[r.shot.name], ts = Math.max(0, now - r.shot.t0);
+      if (!a || ts >= a.dur) r.shot = null;
+      else {
+        var on = !!RAKA_ON[r.base], bad = s.ti.bad, ring = s.ring === "on" ? "on" : null;
+        s = rakaPose(); s.ring = ring; s.ti.bad = bad;
+        a.fn(s, ts / a.dur, r.small);
+        s.on = on;
+        return s;
+      }
+    }
+    s.on = !!RAKA_ON[r.base];
+    return s;
+  }
+  function rakaLerp(c, k, v, f) { if (c[k] === undefined) c[k] = v; c[k] += (v - c[k]) * f; return c[k]; }
+  function rakaLerpSq(c, k, v, f) { if (c[k] === undefined) c[k] = v; c[k] += (((v - c[k]) % 90 + 135) % 90 - 45) * f; return c[k]; }
+  function rakaSet(el, k, v) { if (el.__rk === undefined) el.__rk = {}; if (el.__rk[k] !== v) { el.__rk[k] = v; if (v == null) el.removeAttribute(k); else el.setAttribute(k, v); } }
+  function rakaDraw(r, now) {
+    var s = rakaAt(r, now), c = r.c, d = r.drag;
+    var follow = !s.still;
+    var lx = s.look ? s.look.x : (follow ? r.tx : 0), ly = s.look ? s.look.y : (follow ? r.ty : 0);
+    if (r.playful) {
+      if (d.on) { var px = d.x, py = d.y; d.x += (d.tx - d.x) * .35; d.y += (d.ty - d.y) * .35; d.vx = d.x - px; d.vy = d.y - py; }
+      else { d.vx += -.14 * d.x; d.vy += -.14 * d.y; d.vx *= .8; d.vy *= .8; d.x += d.vx; d.y += d.vy; }
+      r.lag.x += (d.x - r.lag.x) * .16; r.lag.y += (d.y - r.lag.y) * .16;
+      if (d.on) { s.L.w = s.R.w = 46; s.L.h = s.R.h = 52; s.happy = false; s.L.happy = s.R.happy = false; lx = -d.x * .08; ly = -d.y * .08; }
+    }
+    lx = rakaLerp(c, "lx", lx, .2); ly = rakaLerp(c, "ly", ly, .2);
+    var hf = follow && !s.look ? 1 : 0;
+    var hx = rakaLerp(c, "hx", s.head.x + lx * .4 * hf, .25) + d.x, hy = rakaLerp(c, "hy", s.head.y + ly * .4 * hf, .25) + d.y;
+    var hr = rakaLerp(c, "hr", s.head.r + lx * .3 * hf, .25) + d.x * .12;
+    var vs = rakaClamp((Math.abs(d.vx) - Math.abs(d.vy)) * .012, -.14, .14);
+    var sx = rakaLerp(c, "sx", s.head.sx, .35) * (1 + vs), sy = rakaLerp(c, "sy", s.head.sy, .35) * (1 - vs);
+    rakaSet(r.head, "transform", "translate(" + hx.toFixed(2) + " " + hy.toFixed(2) + ") rotate(" + hr.toFixed(2) + " 128 136) translate(128 200) scale(" + sx.toFixed(4) + " " + sy.toFixed(4) + ") translate(-128 -200)");
+    var blink = false;
+    if (s.blink) { if (now > r.nextBlink) { r.blinkUntil = now + 120; r.nextBlink = now + 3000 + Math.random() * 3000; } blink = now < r.blinkUntil; }
+    [["L", 96, r.eL, r.hL], ["R", 160, r.eR, r.hR]].forEach(function (e) {
+      var E = s[e[0]], k = e[0];
+      var w = rakaLerp(c, k + "w", E.w, .4), hh = rakaLerp(c, k + "h", E.h, .4);
+      var ex = e[1] + rakaLerp(c, k + "dx", E.dx, .3) + lx, ey = 128 + rakaLerp(c, k + "dy", E.dy, .3) + ly;
+      var rot = rakaLerpSq(c, k + "rot", E.rot, .3);
+      if (s.happy || E.happy) {
+        rakaSet(e[2], "display", "none"); rakaSet(e[3], "display", null);
+        rakaSet(e[3], "transform", "translate(" + ex.toFixed(2) + " " + (ey + 6).toFixed(2) + ")");
+      } else {
+        rakaSet(e[3], "display", "none"); rakaSet(e[2], "display", null);
+        var p = rakaEyeProps({ w: w, h: blink ? Math.max(4, hh * .12) : hh }, ex, ey);
+        rakaSet(e[2], "x", p.x); rakaSet(e[2], "y", p.y); rakaSet(e[2], "width", p.width.toFixed(2)); rakaSet(e[2], "height", p.height.toFixed(2)); rakaSet(e[2], "rx", p.rx);
+        rakaSet(e[2], "transform", Math.abs(rot) > .05 ? "rotate(" + rot.toFixed(2) + " " + ex.toFixed(2) + " " + ey.toFixed(2) + ")" : null);
       }
     });
+    var f = s.ti.snap ? .45 : .22;
+    var tx = rakaLerp(c, "tx", s.ti.x, f) + r.lag.x * 1.1 + (hx - d.x) * .7, ty = rakaLerp(c, "ty", s.ti.y, f) + r.lag.y * 1.1 + (hy - d.y) * .7;
+    var tr = rakaLerpSq(c, "tr", s.ti.r + r.lag.x * .5, f), ts = rakaLerp(c, "ts", s.ti.s, .3), to = rakaLerp(c, "to", s.ti.op, .35);
+    var tf = "translate(" + (RAKA_TX + tx).toFixed(2) + " " + (RAKA_TY + ty).toFixed(2) + ") rotate(" + tr.toFixed(2) + ") scale(" + ts.toFixed(3) + ") translate(" + (-RAKA_TX) + " " + (-RAKA_TY) + ")";
+    rakaSet(r.ti, "transform", tf); rakaSet(r.ti, "opacity", to.toFixed(2));
+    rakaSet(r.ti, "data-on", s.on && !s.ti.bad ? "" : null); rakaSet(r.ti, "data-bad", s.ti.bad ? "" : null);
+    rakaSet(r.ringg, "transform", tf);
+    rakaSet(r.ring, "data-show", s.ring && to > .3 ? s.ring : null);
+    var ri = 0, zi = 0;
+    s.fx.forEach(function (q) {
+      var x = q.x + (hx - d.x) * .7 + r.lag.x, y = q.y + (hy - d.y) * .7 + r.lag.y, el;
+      if (q.z) {
+        if (r.small || !(el = r.fz[zi++])) return;
+        rakaSet(el, "display", null); rakaSet(el, "opacity", (q.op == null ? 1 : q.op).toFixed(2));
+        rakaSet(el, "transform", "translate(" + x.toFixed(2) + " " + y.toFixed(2) + ") rotate(" + (q.r || 0).toFixed(1) + ") scale(" + (q.s / 130).toFixed(4) + ")");
+      } else {
+        if (!(el = r.fr[ri++])) return;
+        rakaSet(el, "display", null); rakaSet(el, "data-on", q.on ? "" : null); rakaSet(el, "opacity", rakaClamp(q.op == null ? 1 : q.op, 0, 1).toFixed(2));
+        rakaSet(el, "transform", "translate(" + x.toFixed(2) + " " + y.toFixed(2) + ") rotate(" + (q.r || 0).toFixed(1) + ") scale(" + q.s.toFixed(2) + ") translate(-.5 -.5)");
+      }
+    });
+    for (; ri < r.fr.length; ri++) rakaSet(r.fr[ri], "display", "none");
+    for (; zi < r.fz.length; zi++) rakaSet(r.fz[zi], "display", "none");
+  }
+  function rakaTick(now) {
+    rakaLive.raf = 0;
+    if (!rakaLive.list.length) return;
+    now = typeof now === "number" ? now : Date.now();
+    rakaLive.list.forEach(function (r) { rakaDraw(r, now); });
     if (!document.hidden) rakaLive.raf = window.requestAnimationFrame(rakaTick);
     else setTimeout(function () { if (!rakaLive.raf) rakaLive.raf = window.requestAnimationFrame(rakaTick); }, 500);
   }
+  function rakaNow() { return typeof performance !== "undefined" && performance.now ? performance.now() : Date.now(); }
   function rakaPoint(e) {
     rakaLive.list.forEach(function (r) {
       if (!r.svg) return;
       var b = r.svg.getBoundingClientRect(), dx = e.clientX - (b.left + b.width / 2), dy = e.clientY - (b.top + b.height * 0.55);
       var d = Math.sqrt(dx * dx + dy * dy) || 1, k = Math.min(1, d / 320);
       r.tx = dx / d * 10 * k; r.ty = dy / d * 10 * k;
+      if (r.drag.down && r.playful) {
+        var mx = e.clientX - r.drag.down.x, my = e.clientY - r.drag.down.y, m = Math.sqrt(mx * mx + my * my);
+        if (!r.drag.on && m > 6) r.drag.on = true;
+        if (r.drag.on) { var u = 224 / (b.width || 1), mm = m * u, kk = mm ? 70 * Math.tanh(mm / 70 / 1.6) / mm : 0; r.drag.tx = mx * u * kk; r.drag.ty = my * u * kk; }
+      }
     });
+  }
+  function rakaUp() {
+    rakaLive.list.forEach(function (r) { if (r.drag.down) { r.wasDrag = r.drag.on; r.drag.down = null; r.drag.on = false; r.drag.tx = r.drag.ty = 0; } });
   }
   function rakaJoin(r) {
     rakaLive.list.push(r);
-    if (!rakaLive.bound) { window.addEventListener("pointermove", rakaPoint, { passive: true }); window.addEventListener("pointerdown", rakaPoint, { passive: true }); rakaLive.bound = true; }
+    if (!rakaLive.bound) {
+      window.addEventListener("pointermove", rakaPoint, { passive: true }); window.addEventListener("pointerdown", rakaPoint, { passive: true });
+      window.addEventListener("pointerup", rakaUp, { passive: true }); window.addEventListener("pointercancel", rakaUp, { passive: true });
+      rakaLive.bound = true;
+    }
     if (!rakaLive.raf) rakaLive.raf = window.requestAnimationFrame(rakaTick);
   }
   function rakaLeave(r) {
     rakaLive.list = rakaLive.list.filter(function (x) { return x !== r; });
-    if (!rakaLive.list.length && rakaLive.bound) { window.removeEventListener("pointermove", rakaPoint); window.removeEventListener("pointerdown", rakaPoint); rakaLive.bound = false; }
+    if (!rakaLive.list.length && rakaLive.bound) {
+      window.removeEventListener("pointermove", rakaPoint); window.removeEventListener("pointerdown", rakaPoint);
+      window.removeEventListener("pointerup", rakaUp); window.removeEventListener("pointercancel", rakaUp);
+      rakaLive.bound = false;
+    }
+  }
+  function rakaPlay(r, name) { if (RAKA_ACT[name] && RAKA_REACTIONS.indexOf(name) >= 0) { r.shot = { name: name, t0: rakaNow() }; r.nextFidget = rakaNow() + 9000; } }
+  /** Plays a reaction on every live Raka, or only on those inside scope (an element). Returns how many played. */
+  function rakaReact(name, scope) {
+    var n = 0;
+    if (rakaReduced()) return 0;
+    rakaLive.list.forEach(function (r) { if (!scope || (r.svg && scope.contains && scope.contains(r.svg))) { rakaPlay(r, name); n++; } });
+    return n;
+  }
+  /** The state of a chat turn's avatar: writing → ngetik, a running step → its mood, nothing yet → mikir; after:
+      gagal when the turn failed, netral otherwise. */
+  function rakaTurnState(t, running) {
+    t = t || {};
+    var acts = t.activity || [];
+    if (running) return t.text ? "ngetik" : acts.length ? rakaMood(acts[acts.length - 1]) : "mikir";
+    return t.error ? "gagal" : "netral";
+  }
+  /** A reaction for the moment work stops: { react, reactKey } for <Raka>; lompat when done, geleng when failed. */
+  function useRakaFinish(busy, failed) {
+    var prev = React.useRef(!!busy), out = React.useRef({ react: undefined, reactKey: 0 });
+    if (prev.current && !busy) out.current = { react: failed ? "geleng" : "lompat", reactKey: out.current.reactKey + 1 };
+    prev.current = !!busy;
+    return out.current;
   }
   var rakaN = 0;
   function Raka(p) {
     var size = p.size || 32, id = React.useRef("rk-raka-" + (++rakaN)).current;
-    var fl = React.useState(null), flash = fl[0], setFlash = fl[1];
-    var base = rakaState(p.state), s = flash && !RAKA_ON[base] ? flash : base;
-    var svgRef = React.useRef(null), lookRef = React.useRef(null), blinkRef = React.useRef(null), headRef = React.useRef(null);
-    var stRef = React.useRef(s); stRef.current = s;
+    var s = rakaState(p.state);
+    var svgRef = React.useRef(null), headRef = React.useRef(null), stRef = React.useRef(s), rRef = React.useRef(null);
+    stRef.current = s;
     var live = p.interactive !== false; // every Raka is alive; interactive: false keeps one still (a tucked launcher)
+    var playful = p.playful != null ? !!p.playful : size >= 48, idle = p.idle != null ? !!p.idle : playful;
     React.useEffect(function () {
-      if (!live || typeof window === "undefined" || !window.requestAnimationFrame) return;
-      var r = { svg: svgRef.current, look: lookRef.current, blink: blinkRef.current, head: headRef.current, state: function () { return stRef.current; },
-        tx: 0, ty: 0, x: 0, y: 0, hx: 0, hy: 0, hr: 0, blinkUntil: 0, nextBlink: Date.now() + 3000 };
+      if (!live || typeof window === "undefined" || !window.requestAnimationFrame || rakaReduced()) return;
+      var el = svgRef.current; if (!el) return;
+      var q = function (k) { return el.querySelector("[data-rk=" + k + "]"); };
+      var all = function (k) { return Array.prototype.slice.call(el.querySelectorAll("[data-rk=" + k + "]")); };
+      var r = { svg: el, head: headRef.current, eL: q("el"), eR: q("er"), hL: q("hl"), hR: q("hr"), ti: q("ti"), ring: q("ring"), ringg: q("ringg"), fr: all("fr"), fz: all("fz"),
+        state: function () { return stRef.current; }, base: null, t0: 0, shot: null, c: {}, small: size <= 32, playful: playful, idle: idle,
+        tx: 0, ty: 0, blinkUntil: 0, nextBlink: rakaNow() + 3000, nextFidget: rakaNow() + 9000,
+        drag: { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0, on: false, down: null }, lag: { x: 0, y: 0 }, clicks: [] };
+      rRef.current = r;
       rakaJoin(r);
-      return function () { rakaLeave(r); };
-    }, [live]);
+      return function () { rakaLeave(r); rRef.current = null; };
+    }, [live, playful, idle, size <= 32]);
     React.useEffect(function () {
-      if (!flash) return;
-      var t = setTimeout(function () { setFlash(null); }, 700);
-      return function () { clearTimeout(t); };
-    }, [flash]);
+      if (p.react && rRef.current) rakaPlay(rRef.current, p.react);
+    }, [p.react, p.reactKey]);
+    function down(e) { var r = rRef.current; if (r && r.playful) r.drag.down = { x: e.clientX, y: e.clientY }; }
     function poke() {
-      var el = svgRef.current;
-      if (el && !rakaReduced()) { el.classList.remove("pop"); void el.getBoundingClientRect(); el.classList.add("pop"); }
-      if (!RAKA_ON[base]) setFlash("senang");
+      var r = rRef.current;
+      if (r && r.wasDrag) { r.wasDrag = false; return; }
+      if (r) {
+        var now = rakaNow();
+        r.clicks = r.clicks.filter(function (t) { return now - t < 1800; }).concat([now]);
+        if (r.playful && r.clicks.length >= 5) { r.clicks = []; rakaPlay(r, "pusing"); }
+        else rakaPlay(r, r.base === "tidur" ? "kaget" : RAKA_ON[r.base] ? "kedip" : "lompat");
+      }
       if (p.onClick) p.onClick();
     }
-    var label = p.title === "" ? undefined : (p.title || "Raka") + (s === "mikir" ? ", sedang berpikir" : s === "kerja" ? ", sedang bekerja" : s === "tidur" ? ", sedang istirahat" : "");
-    var svg = h("svg", { ref: svgRef, className: cx("rk-mascot", live && "live"), viewBox: "20 4 224 224", width: size, height: size, "data-state": s,
-      role: label ? "img" : undefined, "aria-label": label, "aria-hidden": label ? undefined : "true", onClick: live ? poke : undefined },
-      h("defs", null, h("mask", { id: id, maskUnits: "userSpaceOnUse", x: 0, y: 0, width: 256, height: 256 },
-        h("rect", { width: 256, height: 256, fill: "#fff" }),
-        h("g", { ref: lookRef, transform: !live && s === "mikir" ? "translate(8 -10)" : undefined },
-          h("g", { className: "rk-mascot-eyes" }, h("g", { ref: blinkRef }, rakaEyes(s)))))),
+    var o = rakaStill(s), lx = o.look ? o.look.x : 0, ly = o.look ? o.look.y : 0, k = "#000";
+    function eye(e, cx0, key) {
+      var cx = cx0 + lx, cy = 128 + e.dy + ly;
+      return [h("rect", Object.assign({ key: key, "data-rk": "e" + key, fill: k, display: o.happy ? "none" : undefined }, rakaEyeProps(e, cx, cy))),
+        h("polygon", { key: key + "h", "data-rk": "h" + key, points: RAKA_HAPPY, fill: k, transform: "translate(" + cx + " " + (cy + 6) + ")", display: o.happy ? undefined : "none" })];
+    }
+    var pool = [];
+    for (var i = 0; i < 12; i++) pool.push(h("rect", { key: "r" + i, "data-rk": "fr", className: "rk-mascot-fx", width: 1, height: 1, rx: .14, display: "none" }));
+    for (var j = 0; j < 3; j++) pool.push(h("path", { key: "z" + j, "data-rk": "fz", d: RAKA_Z, fill: "currentColor", display: "none" }));
+    var label = p.title === "" ? undefined : (p.title || "Raka") + (RAKA_SAY[s] ? ", " + RAKA_SAY[s] : "");
+    var svg = h("svg", { ref: svgRef, className: cx("rk-mascot", live && "live", playful && live && "playful"), viewBox: "20 4 224 224", width: size, height: size, "data-state": s,
+      role: label ? "img" : undefined, "aria-label": label, "aria-hidden": label ? undefined : "true", onClick: live ? poke : undefined, onPointerDown: live ? down : undefined },
+      h("defs", null, h("mask", { id: id, maskUnits: "userSpaceOnUse", x: -64, y: -64, width: 384, height: 384 },
+        h("rect", { x: -64, y: -64, width: 384, height: 384, fill: "#fff" }),
+        h("g", { className: "rk-mascot-eyes" }, eye(o.L, 96, "l"), eye(o.R, 160, "r")))),
       h("g", { ref: headRef }, h("path", { d: RAKA_HEAD, fill: "currentColor", mask: "url(#" + id + ")" })),
-      h("rect", { className: "rk-mascot-ring", x: 206, y: 32, width: 30, height: 30, rx: 4 }),
-      h("rect", { className: "rk-mascot-titik", x: 206, y: 32, width: 30, height: 30, rx: 4, fill: "currentColor", "data-on": RAKA_ON[s] ? "" : undefined }));
+      h("g", { className: "rk-mascot-fxs" }, pool),
+      h("g", { "data-rk": "ringg" }, h("rect", { "data-rk": "ring", className: "rk-mascot-ring", x: 206, y: 32, width: 30, height: 30, rx: 4 })),
+      h("rect", { "data-rk": "ti", className: "rk-mascot-titik", x: 206, y: 32, width: 30, height: 30, rx: 4, fill: "currentColor",
+        "data-on": RAKA_ON[s] ? "" : undefined, "data-bad": s === "gagal" ? "" : undefined }));
     if (!p.withName) return svg;
     return h("span", { className: "rk-brand" }, svg, h("span", null, h("b", null, "Rangka"), p.company ? h("small", null, p.company) : null));
   }
@@ -2159,7 +2450,7 @@
     var t = q.turn, p = q.p;
     if (t.role === "user") return h("div", { className: "rk-chat-me" }, t.text);
     var running = !!q.running;
-    var mood = running ? (t.activity && t.activity.length ? "kerja" : "mikir") : "netral";
+    var mood = rakaTurnState(t, running);
     return h("div", { className: "rk-chat-raka", "data-last": q.last ? "" : undefined }, h("span", { className: "rk-chat-av" }, h(Raka, { size: 22, title: "", state: mood })),
       h("div", { className: "body" },
         h("div", { className: "rk-chat-who" }, h("b", null, "Raka")),
@@ -2232,6 +2523,7 @@
       document.addEventListener("keydown", onKey);
       return function () { document.removeEventListener("keydown", onKey); };
     }, [inFull]);
+    var finish = useRakaFinish(p.busy, !!(last && last.error)); // before the early return: hooks keep their order
     if (!p.open) return null;
     var canSend = !p.busy && !!text.trim();
     function send() { if (!canSend) return; if (p.onSend) p.onSend(text); setText(""); }
@@ -2256,7 +2548,7 @@
       onKeyDown: onGripKey, onPointerDown: onGripDown, onPointerMove: onGripMove }) : null;
     var body = [
       h("div", { key: "head", className: "rk-chat-head" },
-        h("span", { className: "rk-chat-av rk-chat-av-lg" }, h(Raka, { size: 28, title: "", state: p.busy ? "kerja" : "netral" })),
+        h("span", { className: "rk-chat-av rk-chat-av-lg" }, h(Raka, Object.assign({ size: 28, title: "", state: p.busy && last && last.role !== "user" ? rakaTurnState(last, true) : p.busy ? "mikir" : last && last.role !== "user" ? rakaTurnState(last, false) : "netral" }, finish))),
         h("span", { className: "rk-chat-title" }, h("b", null, full ? conversationTitle(turns) : "Raka")),
         h(IconButton, { icon: "edit", label: "Percakapan baru", onClick: p.onNew }),
         dock && p.onExpand ? h(IconButton, { icon: "open", label: "Perbesar", onClick: p.onExpand }) : null,
@@ -2297,6 +2589,7 @@
      button tucks it against the right edge (p.tucked), where it shows half of Raka. Open, it turns ink with a chevron. */
   function RakaLauncher(p) {
     var open = !!p.open, tucked = !!p.tucked && !open, n = p.pending || 0;
+    var finish = useRakaFinish(p.busy, p.failed);
     var sub = n ? n + " usulan menunggu kamu" : tucked ? "Tampilkan lagi" : "Tanya soal data bisnismu";
     return h("div", { className: "rk-fab", "data-state": open ? "open" : tucked ? "tucked" : "rest" },
       h("button", { type: "button", className: "rk-fab-btn", "aria-expanded": open ? "true" : "false", "aria-haspopup": "dialog",
@@ -2305,7 +2598,8 @@
           h("span", { className: "rk-fab-tx", "aria-hidden": "true" },
             h("span", { className: "t" }, h("b", null, "Tanya Raka"), tucked ? null : h(Kbd, null, ASK_KEY)),
             h("small", { className: n ? "on" : undefined }, sub)),
-          h("span", { className: "rk-fab-m", "aria-hidden": "true" }, h(Raka, { size: 52, title: "", state: p.state || (p.busy ? "kerja" : "netral"), interactive: !tucked })),
+          h("span", { className: "rk-fab-m", "aria-hidden": "true" }, h(Raka, { size: 52, title: "", state: p.state || (p.busy ? "muter" : "netral"), interactive: !tucked, playful: false, idle: !tucked,
+            react: p.react || finish.react, reactKey: p.react ? p.reactKey : finish.reactKey })),
           n ? h("span", { className: "rk-fab-n", "aria-hidden": "true" }, tucked ? null : n > 9 ? "9+" : n) : null)),
       !open && !tucked && p.onTuck ? h("button", { type: "button", className: "rk-fab-hide", "aria-label": "Sembunyikan Raka ke tepi", title: "Sembunyikan ke tepi",
         onClick: function () { p.onTuck(true); } }, h(Icon, { name: "right" })) : null);
@@ -2332,7 +2626,7 @@
   }
 
   var api = { Button: Button, Icon: Icon, StatusChip: StatusChip, Amount: Amount, Field: Field, Segmented: Segmented, StatCard: StatCard,
-    DataTable: DataTable, DocumentHeader: DocumentHeader, PosKeypad: PosKeypad, Raka: Raka, formatRupiah: formatRupiah, Card: Card, Descriptions: Descriptions, Steps: Steps, Breadcrumb: Breadcrumb, PageHeader: PageHeader, AppShell: AppShell, LinkField: LinkField, ChildTable: ChildTable, DatePicker: DatePicker, DateRangePicker: DateRangePicker, formatTanggal: formatTanggal, Table: Table, Pagination: Pagination, Dialog: Dialog, Drawer: Drawer, DrawerSection: DrawerSection, CommandMenu: CommandMenu, Menu: Menu, ContextMenu: ContextMenu, Alert: Alert, Banner: Banner, Toast: Toast, Toaster: Toaster, Sidebar: Sidebar, Topbar: Topbar, Checkbox: Checkbox, RadioGroup: RadioGroup, Switch: Switch, Textarea: Textarea, NativeSelect: NativeSelect, Select: Select, MultiSelect: MultiSelect, Form: Form, FormSection: FormSection, ChatComposer: ChatComposer, Avatar: Avatar, AvatarGroup: AvatarGroup, ImagePreview: ImagePreview, ImageViewer: ImageViewer, Tabs: Tabs, EmptyState: EmptyState, Kbd: Kbd, IconButton: IconButton, ICONS: Object.keys(ICONS) };
+    DataTable: DataTable, DocumentHeader: DocumentHeader, PosKeypad: PosKeypad, Raka: Raka, rakaReact: rakaReact, rakaMood: rakaMood, RAKA_STATES: Object.keys(RAKA_STATES), RAKA_REACTIONS: RAKA_REACTIONS.slice(), rakaTurnState: rakaTurnState, formatRupiah: formatRupiah, Card: Card, Descriptions: Descriptions, Steps: Steps, Breadcrumb: Breadcrumb, PageHeader: PageHeader, AppShell: AppShell, LinkField: LinkField, ChildTable: ChildTable, DatePicker: DatePicker, DateRangePicker: DateRangePicker, formatTanggal: formatTanggal, Table: Table, Pagination: Pagination, Dialog: Dialog, Drawer: Drawer, DrawerSection: DrawerSection, CommandMenu: CommandMenu, Menu: Menu, ContextMenu: ContextMenu, Alert: Alert, Banner: Banner, Toast: Toast, Toaster: Toaster, Sidebar: Sidebar, Topbar: Topbar, Checkbox: Checkbox, RadioGroup: RadioGroup, Switch: Switch, Textarea: Textarea, NativeSelect: NativeSelect, Select: Select, MultiSelect: MultiSelect, Form: Form, FormSection: FormSection, ChatComposer: ChatComposer, Avatar: Avatar, AvatarGroup: AvatarGroup, ImagePreview: ImagePreview, ImageViewer: ImageViewer, Tabs: Tabs, EmptyState: EmptyState, Kbd: Kbd, IconButton: IconButton, ICONS: Object.keys(ICONS) };
   api.Lozenge = Lozenge; api.Badge = Badge; api.TopNav = TopNav; api.AppSwitcher = AppSwitcher; api.AccountMenu = AccountMenu; api.Spinner = Spinner; api.Skeleton = Skeleton; api.FilterBar = FilterBar; api.FilterBuilder = FilterBuilder; api.SettingsLayout = SettingsLayout; api.SettingsSection = SettingsSection; api.SettingsRow = SettingsRow; api.NumberCard = NumberCard; api.Chart = Chart; api.ChartCard = ChartCard; api.ListCard = ListCard; api.DashGrid = DashGrid; api.Sparkline = Sparkline; api.filterCel = filterCel; api.compactNumber = compact;
   api.ViewSwitcher = ViewSwitcher; api.BulkBar = BulkBar; api.GroupList = GroupList; api.ReportTable = ReportTable; api.DocPanel = DocPanel;
   api.Logo = Logo; api.AuthLayout = AuthLayout;

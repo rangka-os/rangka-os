@@ -80,6 +80,29 @@
   }
   RA.gridFxCols = gridFxCols;
 
+  /** The columns a table shows. A `hidden: true` column stays out (internal fields), except a required one without a
+   *  default, which the person must be able to fill (the same rule as the main form). Foreign-currency columns drop
+   *  unless fxShown. */
+  function gridCols(fields, fxCols, fxShown) {
+    return (fields || []).filter(function (c) {
+      if (c.hidden && !(c.required && c["default"] == null)) return false;
+      return fxShown || (fxCols || []).indexOf(c) < 0;
+    });
+  }
+  RA.gridCols = gridCols;
+
+  /** A value as plain text (never a React element), for summaries that join strings. */
+  function fieldPlain(ctx, f, v) {
+    if (f && f.type === "link" && v != null && v !== "") return String(ctx.cache.title(f.to, v) || v);
+    if (f && f.type === "select" && v != null && v !== "") {
+      var o = (f.options || []).filter(function (x) { return x.value === v; })[0];
+      return o ? String(L(o.label)) : String(v);
+    }
+    var t = RA.fieldText ? RA.fieldText(ctx, f, v) : v;
+    return typeof t === "string" || typeof t === "number" ? String(t) : String(v);
+  }
+  RA.fieldPlain = fieldPlain;
+
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
   if (!React || !R || !global.document) return;
@@ -300,7 +323,7 @@
       });
     var fxs = useState(null), fxPick = fxs[0], setFxPick = fxs[1];
     var fxShown = !fxCols.length || ro || fxUsed || !!fxPick; // in use: always on show, and no way to hide them
-    var cols = fxShown ? cm.fields : cm.fields.filter(function (c) { return fxCols.indexOf(c) < 0; });
+    var cols = gridCols(cm.fields, fxCols, fxShown);
 
     function set(i, k, v) {
       var n = rows.map(function (r) { return Object.assign({}, r); });
@@ -324,6 +347,10 @@
       if (c.type === "link") {
         if (ro || c.read_only) return { el: h("div", { className: "rk-cell-item" }, h("b", null, v ? ctx.cache.title(c.to, v) : "—"), v ? h("small", null, v) : null) };
         return { cls: "ap-grid-link", el: h(GridLink, { ctx: ctx, field: c, value: v, label: lbl, onChange: function (x) { set(i, c.name, x); } }) };
+      }
+      if (c.type === "select" && (ro || c.compute || c.read_only)) {
+        var st = fieldPlain(ctx, c, v);
+        return { ro: true, el: h("div", { className: "rk-cell-item" }, st) };
       }
       if (ro || c.compute || c.read_only) {
         var txt = num ? formatNumber(v, c.type === "currency" ? 0 : 3) : c.type === "check" ? (v ? "Ya" : "Tidak") : v == null ? "" : String(v);

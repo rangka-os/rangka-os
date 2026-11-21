@@ -89,3 +89,28 @@ test("gridFxCols: only the *_fx twin of a Rupiah column and its companion are ex
   assert.strictEqual(names(A.gridFxCols([{ name: "qty", type: "float" }])), "");
   assert.strictEqual(names(A.gridFxCols(undefined)), "");
 });
+
+test("gridCols: a hidden child field stays out of a table, unless it is required with no default", () => {
+  const A = load();
+  const fields = [
+    { name: "text", type: "string" },
+    { name: "match", type: "select", hidden: true },
+    { name: "quoted_rate", type: "currency", hidden: true },
+    { name: "must", type: "string", hidden: true, required: true },
+    { name: "must_def", type: "string", hidden: true, required: true, default: "x" },
+    { name: "qty", type: "float" }
+  ];
+  assert.strictEqual(A.gridCols(fields, [], true).map((c) => c.name).join(","), "text,must,qty");
+  const fx = [{ name: "rate_fx", type: "money" }];
+  assert.strictEqual(A.gridCols(fx.concat(fields), fx, false).map((c) => c.name).join(","), "text,must,qty");
+  assert.strictEqual(A.gridCols(fx.concat(fields), fx, true).map((c) => c.name).join(","), "rate_fx,text,must,qty");
+});
+
+test("fieldPlain: a read-only select shows its option label, a link its title, never an object", () => {
+  const A = load();
+  const ctx = { cache: { title: (to, v) => "Title of " + v }, meta: { models: { customer: {} } } };
+  const sel = { name: "match", type: "select", options: [{ value: "sama", label: { id: "Sama" } }] };
+  assert.strictEqual(A.fieldPlain(ctx, sel, "sama"), "Sama");
+  assert.strictEqual(A.fieldPlain(ctx, { name: "c", type: "link", to: "customer" }, "C-1"), "Title of C-1");
+  assert.strictEqual(typeof A.fieldPlain(ctx, { name: "d", type: "int" }, 3), "string");
+});

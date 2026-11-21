@@ -648,6 +648,10 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-counter-paytop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ap-counter-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .ap-counter-row > .rk-btn { flex: 1; min-height: 44px; justify-content: center; }
+.ap-counter-split { display: flex; flex-direction: column; gap: 10px; }
+.ap-counter-splitn { flex: 2; align-self: center; text-align: center; font-weight: 600; }
+.ap-counter-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.ap-counter-tabs > .rk-btn { flex: 0 0 auto; min-height: 44px; }
 .ap-counter-foot .rk-btn-primary, .ap-counter-pay > .rk-btn, .ap-counter-paydone .rk-btn { min-height: 52px; font-size: 16px; }
 .ap-counter-pay .ap-pad button { min-height: 44px; }
 .ap-counter-paydone .rk-btn, .ap-counter-pay > .rk-btn { width: 100%; justify-content: center; }

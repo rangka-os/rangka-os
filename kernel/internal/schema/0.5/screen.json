@@ -297,7 +297,7 @@
             },
             "summary": {
               "type": "array",
-              "maxItems": 8,
+              "maxItems": 12,
               "items": {
                 "$ref": "model.json#/$defs/name"
               },
@@ -353,6 +353,14 @@
             },
             "ref": {
               "$ref": "model.json#/$defs/name"
+            },
+            "party": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Numeric field of the payment row: which part of a split bill the row pays (1-based)"
+            },
+            "parties": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Numeric field of the document: how many people split the bill. With it the tender offers Bayar terpisah"
             },
             "methods": {
               "type": "array",

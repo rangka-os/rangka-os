@@ -390,6 +390,8 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 			method := v.slotField(p, "counter/payments/method", pm, pf, pay["method"], nil)
 			v.slotField(p, "counter/payments/amount", pm, pf, pay["amount"], numericKinds)
 			v.slotField(p, "counter/payments/ref", pm, pf, pay["ref"], nil)
+			v.slotField(p, "counter/payments/party", pm, pf, pay["party"], numericKinds)
+			v.slotField(p, "counter/payments/parties", docModel, docFields, pay["parties"], numericKinds)
 			if method != nil && str(method, "type") == "select" {
 				opts := map[string]bool{}
 				for _, o := range asList(method["options"]) {

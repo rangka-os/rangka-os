@@ -588,14 +588,15 @@
       var body = billBody(extra), r0;
       if (!bill.name) {
         if (!billKey.current) billKey.current = RA.newKey();
+        body.rev = 1;
         r0 = ctx.api.create(doc.model, body, { key: billKey.current });
       } else {
-        body._if = { modified_at: bill.modified_at };
+        body._if = { rev: bill.rev }; body.rev = bill.rev + 1;
         r0 = ctx.api.update(doc.model, bill.name, body);
       }
       return r0.then(function (r) {
         var rec = r && r.record ? r.record : r;
-        setBill(Object.assign({}, bill, { name: rec.name, modified_at: rec.modified_at, asked: !!rec[tbl.bill] }));
+        setBill(Object.assign({}, bill, { name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill] }));
         setCart(RA.tables.cartFromBill(doc, rec));
         return rec;
       });
@@ -610,8 +611,8 @@
     function pickTable(x) {
       if (tmode === "move") {
         setBusy(true); setErr("");
-        ctx.api.update(doc.model, bill.name, (function () { var b = {}; b[tbl.link] = x.name; b._if = {}; b._if[tbl.link] = bill.table; return b; })())
-          .then(function (rec) { ctx.toast("ok", "Pindah meja", "Meja " + bill.title + " ke meja " + x.title); setBill(Object.assign({}, bill, { table: x.name, title: x.title, modified_at: rec.modified_at })); setTmode(null); },
+        ctx.api.update(doc.model, bill.name, (function () { var b = {}; b[tbl.link] = x.name; b.rev = bill.rev + 1; b._if = { rev: bill.rev }; b._if[tbl.link] = bill.table; return b; })())
+          .then(function (rec) { ctx.toast("ok", "Pindah meja", "Meja " + bill.title + " ke meja " + x.title); setBill(Object.assign({}, bill, { table: x.name, title: x.title, rev: bill.rev + 1 })); setTmode(null); },
             function (e) { setErr(billErr(e)); setTmode(null); }).then(function () { setBusy(false); });
         return;
       }
@@ -619,7 +620,7 @@
         var target = x.drafts[0];
         setBusy(true); setErr("");
         saveBill().then(function (rec) {
-          var b = { merge_into: target.name }; b._if = { modified_at: rec.modified_at };
+          var b = { merge_into: target.name, rev: Number(rec.rev) + 1 }; b._if = { rev: Number(rec.rev) };
           return ctx.api.update(doc.model, rec.name, b);
         }).then(function () { ctx.toast("ok", "Tagihan digabung", "Meja " + bill.title + " ke meja " + x.title); backToMap(); },
           function (e) { setErr(billErr(e)); setTmode(null); }).then(function () { setBusy(false); });
@@ -632,20 +633,20 @@
         var rec = r && r.data && r.data[0];
         if (!rec) throw new Error("Tagihan tidak ditemukan");
         billKey.current = null;
-        setBill({ table: x.name, title: x.title, guests: Number(rec[tbl.guests]) || 1, name: rec.name, modified_at: rec.modified_at, asked: !!rec[tbl.bill] });
+        setBill({ table: x.name, title: x.title, guests: Number(rec[tbl.guests]) || 1, name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill] });
         setCart(RA.tables.cartFromBill(doc, rec)); setCustomer(rec[c.customer.field] || ""); setTmode(null);
       }, function (e) { setErr(errText(e)); }).then(function () { setBusy(false); });
     }
     function startBill() {
       var x = guestFor.table;
       billKey.current = null;
-      setBill({ table: x.name, title: x.title, guests: Math.max(1, Number(guestFor.guests) || 1), name: null, modified_at: null, asked: false });
+      setBill({ table: x.name, title: x.title, guests: Math.max(1, Number(guestFor.guests) || 1), name: null, rev: 0, asked: false });
       setCart([]); setCustomer(""); setGuestFor(null); setTmode(null);
     }
     function splitBill(keys) {
       setBusy(true); setErr("");
       saveBill().then(function (rec) {
-        var b = { split_lines: keys }; b._if = { modified_at: rec.modified_at };
+        var b = { split_lines: keys, rev: Number(rec.rev) + 1 }; b._if = { rev: Number(rec.rev) };
         return ctx.api.update(doc.model, rec.name, b);
       }).then(function () { ctx.toast("ok", "Tagihan dipisah", "Meja " + bill.title); backToMap(); },
         function (e) { setErr(billErr(e)); setTmode(null); }).then(function () { setBusy(false); });

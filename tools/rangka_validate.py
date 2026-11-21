@@ -3478,6 +3478,8 @@ def check_screen_counter(rep, p, b, visible, prints):
                 parens(rep, p, f"counter/document/checkout/{i}/filter", x.get("filter"))
         if isinstance(b.get("customer"), dict):
             slot_field(rep, p, "counter/customer/field", dn, df, b["customer"].get("field"))
+            if isinstance(b["customer"].get("table"), dict):
+                check_counter_table(rep, p, b, b["customer"]["table"], dn, df, visible)
         if isinstance(b.get("print"), str):
             if not any(st == b["print"] and isinstance(d, dict) and d.get("model") == dn for (_a, _r, st, _p, d) in prints):
                 rep.add("error", p, "counter/print", "unknown_print", f'"{b["print"]}" is not a print format of {dn}')
@@ -3546,6 +3548,33 @@ def check_screen_counter(rep, p, b, visible, prints):
                 slot_field(rep, p, f"{where}/match/{k}", an, af, k)
                 if sn2:
                     slot_field(rep, p, f"{where}/match/{k}", sn2, sf2, match[k])
+
+
+def check_counter_table(rep, p, b, t, dn, df, visible):
+    """The customer.table slot (contract 0048 section 2)."""
+    where = "counter/customer/table"
+    tn, tm, tf = slot_model(rep, p, where + "/model", t, visible)
+    lf = slot_field(rep, p, where + "/link", dn, df, t.get("link"), ["link"])
+    if lf is not None and tn and lf.get("to") != tn:
+        rep.add("error", p, where + "/link", "screen_slot_type", f'"{t.get("link")}" links to {lf.get("to")}; the table model is {tn}')
+    slot_field(rep, p, where + "/guests", dn, df, t.get("guests"), NUMERIC_KINDS)
+    slot_field(rep, p, where + "/bill", dn, df, t.get("bill"), ["check"])
+    if not tn:
+        return
+    slot_field(rep, p, where + "/title", tn, tf, t.get("title"))
+    slot_field(rep, p, where + "/area", tn, tf, t.get("area"))
+    slot_field(rep, p, where + "/seats", tn, tf, t.get("seats"), NUMERIC_KINDS)
+    match = t.get("match") if isinstance(t.get("match"), dict) else {}
+    ses = b.get("session") if isinstance(b.get("session"), dict) else None
+    if match and ses is None:
+        rep.add("error", p, where + "/match", "screen_slot_type", "match compares with the open session; add the session slot")
+    sn = sf = None
+    if ses is not None and isinstance(ses.get("model"), str) and ses["model"] in visible:
+        sn, sf = ses["model"], fields_of(visible[ses["model"]][2])
+    for k in sorted(match):
+        slot_field(rep, p, f"{where}/match/{k}", tn, tf, k)
+        if sn:
+            slot_field(rep, p, f"{where}/match/{k}", sn, sf, match[k])
 
 
 def screen_model(rep, p, where, b, visible):

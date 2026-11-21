@@ -457,6 +457,30 @@
             },
             "required": {
               "type": "boolean"
+            },
+            "table": {
+              "type": "object",
+              "description": "Dining tables and a table map (contract 0048 section 2): open bills are server drafts that link a table",
+              "required": [
+                "model",
+                "link",
+                "title"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "model": {"$ref": "model.json#/$defs/name"},
+                "link": {"$ref": "model.json#/$defs/name"},
+                "title": {"$ref": "model.json#/$defs/name"},
+                "area": {"$ref": "model.json#/$defs/name"},
+                "seats": {"$ref": "model.json#/$defs/name"},
+                "filter": {"type": "string"},
+                "match": {
+                  "type": "object",
+                  "additionalProperties": {"$ref": "model.json#/$defs/name"}
+                },
+                "guests": {"$ref": "model.json#/$defs/name"},
+                "bill": {"$ref": "model.json#/$defs/name"}
+              }
             }
           }
         },

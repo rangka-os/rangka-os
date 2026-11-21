@@ -20,7 +20,9 @@
  *     fields and creates it. Closing creates the close document with close.fields and submits it; the expected amount
  *     never shows (blind count: the model hides it, contract 0027).
  *   hold: park the cart ("Tahan") and pick it up later (kept on this device per user).
- *   customer {field, required}: a name, table or queue number on the sale.
+ *   customer {field, required, table}: a name, table or queue number on the sale. With table (contract 0048 section 2,
+ *     tables.js) the counter opens on a table map: a free table starts an open bill (a server draft), a busy one loads it;
+ *     Simpan, Kirim ke dapur, Minta tagihan, Pindah, Gabung and Pisah work on the draft; Bayar patches it and submits.
  *   print: the print format of the receipt ("Cetak struk" prints it through the browser dialog, 80 mm).
  * A sale is one outbox job (outbox.js): created and submitted with Idempotency-Keys, queued when offline.
  * On a paired device with an unlocked cashier (contract 0058) whose pulled config names the document model's number
@@ -370,6 +372,13 @@
     var cas = useState(null), calc = cas[0], setCalc = cas[1]; // {key, rec, errors} | {key, failed}
     var bls = useState(null), bal = bls[0], setBal = bls[1]; // contract 0039: {item: qty} for the open session, or null
     var jobRef = useRef(null), searchRef = useRef(null), calcSeq = useRef(0);
+    // tables (contract 0048 section 2): the open bill {table, title, guests, name, modified_at, asked} and the map mode
+    var tbl = c.customer && c.customer.table || null;
+    var bis = useState(null), bill = bis[0], setBill = bis[1];
+    var tms = useState(tbl ? "pick" : null), tmode = tms[0], setTmode = tms[1]; // pick | move | merge | split | null
+    var tks = useState(0), tmKey = tks[0], setTmKey = tks[1];
+    var guestAsk = useState(null), guestFor = guestAsk[0], setGuestFor = guestAsk[1]; // a free table waiting for its guest count
+    var billKey = useRef(null);
     // a paired device (contract 0058): {device, actor, data} once the device, its unlocked cashier and pulled data are known
     var dvs = useState(null), dev = dvs[0], setDev = dvs[1];
     useEffect(function () {
@@ -561,6 +570,107 @@
       setCart(h0.cart); setCustomer(h0.customer || ""); setCheckout(h0.checkout || {}); setHeldOpen(false);
     }
 
+    /* ---- tables: an open bill is a server draft (contract 0048 section 2) ---- */
+    function billBody(extra) {
+      var body = saleBody(c, cart, null, shiftName, sets.document, customer, checkout);
+      body[doc.lines] = RA.tables.billLines(doc, cart, body[doc.lines]);
+      body[tbl.link] = bill.table;
+      if (tbl.guests) body[tbl.guests] = bill.guests;
+      return Object.assign(body, extra || {});
+    }
+    function billErr(e) {
+      if (e && e.status === 409) return "Tagihan ini sudah diubah di perangkat lain. Buka lagi dari peta meja.";
+      return errText(e);
+    }
+    /* Create the draft (one Idempotency-Key per bill, so a retry never makes two) or patch it conditionally on the
+       version this device read, so two devices on one bill get a conflict, not a lost update. */
+    function saveBill(extra) {
+      var body = billBody(extra), r0;
+      if (!bill.name) {
+        if (!billKey.current) billKey.current = RA.newKey();
+        r0 = ctx.api.create(doc.model, body, { key: billKey.current });
+      } else {
+        body._if = { modified_at: bill.modified_at };
+        r0 = ctx.api.update(doc.model, bill.name, body);
+      }
+      return r0.then(function (r) {
+        var rec = r && r.record ? r.record : r;
+        setBill(Object.assign({}, bill, { name: rec.name, modified_at: rec.modified_at, asked: !!rec[tbl.bill] }));
+        setCart(RA.tables.cartFromBill(doc, rec));
+        return rec;
+      });
+    }
+    function billAct(extra, okMsg, then) {
+      if (busy || !bill) return;
+      setBusy(true); setErr("");
+      saveBill(extra).then(function (rec) { if (okMsg) ctx.toast("ok", okMsg, "Meja " + bill.title); if (then) then(rec); },
+        function (e) { setErr(billErr(e)); }).then(function () { setBusy(false); });
+    }
+    function backToMap() { setTmode("pick"); setBill(null); billKey.current = null; setCart([]); setCheckout({}); setSheet(false); setPay(null); setTmKey(tmKey + 1); }
+    function pickTable(x) {
+      if (tmode === "move") {
+        setBusy(true); setErr("");
+        ctx.api.update(doc.model, bill.name, (function () { var b = {}; b[tbl.link] = x.name; b._if = {}; b._if[tbl.link] = bill.table; return b; })())
+          .then(function (rec) { ctx.toast("ok", "Pindah meja", "Meja " + bill.title + " ke meja " + x.title); setBill(Object.assign({}, bill, { table: x.name, title: x.title, modified_at: rec.modified_at })); setTmode(null); },
+            function (e) { setErr(billErr(e)); setTmode(null); }).then(function () { setBusy(false); });
+        return;
+      }
+      if (tmode === "merge") {
+        var target = x.drafts[0];
+        setBusy(true); setErr("");
+        saveBill().then(function (rec) {
+          var b = { merge_into: target.name }; b._if = { modified_at: rec.modified_at };
+          return ctx.api.update(doc.model, rec.name, b);
+        }).then(function () { ctx.toast("ok", "Tagihan digabung", "Meja " + bill.title + " ke meja " + x.title); backToMap(); },
+          function (e) { setErr(billErr(e)); setTmode(null); }).then(function () { setBusy(false); });
+        return;
+      }
+      if (x.state === "free") { setGuestFor({ table: x, guests: 1 }); return; }
+      // a busy table: its draft (the first one of a split) with its lines
+      setBusy(true); setErr("");
+      ctx.api.list(doc.model, { filter: "name == '" + x.drafts[0].name + "'", children: true, limit: 1 }).then(function (r) {
+        var rec = r && r.data && r.data[0];
+        if (!rec) throw new Error("Tagihan tidak ditemukan");
+        billKey.current = null;
+        setBill({ table: x.name, title: x.title, guests: Number(rec[tbl.guests]) || 1, name: rec.name, modified_at: rec.modified_at, asked: !!rec[tbl.bill] });
+        setCart(RA.tables.cartFromBill(doc, rec)); setCustomer(rec[c.customer.field] || ""); setTmode(null);
+      }, function (e) { setErr(errText(e)); }).then(function () { setBusy(false); });
+    }
+    function startBill() {
+      var x = guestFor.table;
+      billKey.current = null;
+      setBill({ table: x.name, title: x.title, guests: Math.max(1, Number(guestFor.guests) || 1), name: null, modified_at: null, asked: false });
+      setCart([]); setCustomer(""); setGuestFor(null); setTmode(null);
+    }
+    function splitBill(keys) {
+      setBusy(true); setErr("");
+      saveBill().then(function (rec) {
+        var b = { split_lines: keys }; b._if = { modified_at: rec.modified_at };
+        return ctx.api.update(doc.model, rec.name, b);
+      }).then(function () { ctx.toast("ok", "Tagihan dipisah", "Meja " + bill.title); backToMap(); },
+        function (e) { setErr(billErr(e)); setTmode(null); }).then(function () { setBusy(false); });
+    }
+    /* Bayar on an open bill: patch the lines and the payments, then submit the same draft. */
+    function billPay(payRows, est) {
+      var extra = {};
+      if (c.payments && payRows) {
+        var rows = [];
+        [["qris", payRows.qris], ["cash", payRows.cash]].forEach(function (x) {
+          if (Number(x[1]) > 0) { var r = {}; r[c.payments.method] = x[0]; r[c.payments.amount] = Number(x[1]); rows.push(r); }
+        });
+        extra[c.payments.table] = rows;
+      }
+      setBusy(true); setErr("");
+      saveBill(extra).then(function (rec) { return ctx.api.submit(doc.model, rec.name, { key: RA.newKey() }); }).then(function (res) {
+        sendingRef.current = false;
+        var rec = (res && res.record) || {}, dt = doc.total, dc = doc.change;
+        setDone({ name: rec.name || null, total: dt && rec[dt] != null ? Number(rec[dt]) : est.total, change: dc && rec[dc] != null ? Number(rec[dc]) : est.change,
+          estimate: false, queued: false, approval: !!(res && res.approval) });
+        loadBalances();
+        setCart([]); setCustomer(""); setCheckout({}); setCheckoutOpen(false); setPay(null); setBill(null); billKey.current = null;
+      }, function (e) { sendingRef.current = false; setErr(billErr(e)); }).then(function () { setBusy(false); });
+    }
+
     function openPay() {
       if (!cart.length) return;
       if (c.customer && c.customer.required && !customer.trim()) { setErr("Isi nama pembeli atau nomor meja dulu."); return; }
@@ -632,6 +742,7 @@
       sendingRef.current = true;
       setBusy(true); setErr("");
       var payRows = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
+      if (bill && !devOn) { billPay(payRows, { total: total, change: change }); return; }
       if (devOn) { deviceSale(payRows); return; }
       var est = { total: total, change: change };
       // a new sale takes set: values again (contract 0030 §2: today's date after midnight, audit WS3 M2); offline or
@@ -684,7 +795,7 @@
       RA.printer.print({ doc: rec, model: doc.model, outlet_name: (cfg.outlet && cfg.outlet.name) || "" }, { actor: dev && dev.actor && dev.actor.user })
         .then(null, function (e) { ctx.toast("bad", "Struk belum tercetak", (e && e.message) || ""); });
     }
-    function newSale() { setDone(null); setSheet(false); if (searchRef.current) searchRef.current.focus(); }
+    function newSale() { setDone(null); setSheet(false); if (tbl) { backToMap(); return; } if (searchRef.current) searchRef.current.focus(); }
 
     function openSession() {
       if (busy) return;
@@ -955,8 +1066,14 @@
       // the paired device's sync pill, on a row of its own under the header when the order is a sheet over the
       // catalogue (phone), so it never covers the header's menu (syncpill.js picks the dock on top)
       h("div", { className: "ap-sync-dock ap-counter-cart-sync", "data-sync-dock": "cart" }),
+      bill && !pay && !(done && !cart.length) ? h(RA.TableBar, { bill: bill, busy: busy, locked: stuck, hasLines: cart.length > 0, lineCount: cart.length,
+        onMap: function () { if (!cart.length && !bill.name) backToMap(); else if (!bill.name) { billAct(null, "Tagihan tersimpan", backToMap); } else { billAct(null, null, backToMap); } },
+        onSave: function () { billAct(null, "Tagihan tersimpan"); },
+        onKitchen: function () { var b = {}; b.send_kitchen = true; billAct(b, "Dikirim ke dapur"); },
+        onAsk: function () { var b = {}; b[tbl.bill] = true; billAct(b, "Tagihan diminta"); },
+        onMove: function () { setTmode("move"); }, onMerge: function () { setTmode("merge"); }, onSplit: function () { setTmode("split"); } }) : null,
       heldList,
-      c.customer && !(pay && !stuck) ? h("label", { className: "ap-counter-custbox" }, h(R.Icon, { name: "user" }),
+      c.customer && !tbl && !(pay && !stuck) ? h("label", { className: "ap-counter-custbox" }, h(R.Icon, { name: "user" }),
         h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
           value: customer, readOnly: stuck, onChange: function (e) { if (!stuck) setCustomer(e.target.value); } })) : null,
       pay && !stuck ? (paying ? h("div", { className: "ap-counter-body" }, h("ul", { className: "ap-counter-lines ap-counter-paidlines", "aria-label": "Pesanan dibayar" },
@@ -967,7 +1084,7 @@
       err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
       paying ? h("div", { className: "ap-counter-foot" }, summary) : tender || (cart.length ? h("div", { className: "ap-counter-foot" }, summary,
         h("div", { className: "ap-counter-row" },
-          c.hold ? h(R.Button, { onClick: hold }, "Tahan") : null,
+          c.hold && !tbl ? h(R.Button, { onClick: hold }, "Tahan") : null,
           h(R.Button, { variant: "primary", size: "lg", className: "ap-counter-paybtn", loading: busy && !pay, onClick: openPay, "aria-label": "Bayar " + rp(total) },
             h("span", null, "Bayar"), h("span", null, rp(total))))) : null));
 
@@ -975,6 +1092,22 @@
       "aria-label": cartCount(cart) + " item, " + rp(total) + ". Lihat pesanan" },
       h("span", null, cartCount(cart) + " item · Lihat pesanan", customer ? " · " + customer : ""), h("b", null, rp(total))) : null;
 
+    // the table map (or the split picker, the guest count of a free table) takes the whole screen until a bill is open
+    if (tbl && (tmode || guestFor)) {
+      var view = tmode === "split" ? h(RA.SplitPanel, { cart: cart, busy: busy, onCancel: function () { setTmode(null); }, onConfirm: splitBill })
+        : h(RA.TableMap, { ctx: ctx, spec: tbl, doc: doc, scope: scope, session: session, mode: tmode, exclude: bill && bill.table, reloadKey: tmKey, onPick: pickTable,
+            onTakeaway: tmode === "pick" ? function () { setTmode(null); setBill(null); } : null, onClose: function () { setTmode(null); } });
+      return h("div", { className: "ap-counter ap-counter-tables" }, view,
+        guestFor ? h("div", { className: "ap-tbl-guests", role: "dialog", "aria-label": "Jumlah tamu" },
+          h("b", null, "Meja " + guestFor.table.title + " · berapa tamu?"),
+          h("div", { className: "ap-tbl-stepper" },
+            h(R.Button, { onClick: function () { setGuestFor({ table: guestFor.table, guests: Math.max(1, guestFor.guests - 1) }); }, "aria-label": "Kurangi tamu" }, "−"),
+            h("output", null, String(guestFor.guests)),
+            h(R.Button, { onClick: function () { setGuestFor({ table: guestFor.table, guests: guestFor.guests + 1 }); }, "aria-label": "Tambah tamu" }, "+")),
+          h("div", { className: "ap-tbl-bar-a" }, h(R.Button, { onClick: function () { setGuestFor(null); } }, "Batal"),
+            h(R.Button, { variant: "primary", onClick: startBill }, "Buka tagihan"))) : null,
+        err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null);
+    }
     return h("div", { className: "ap-counter" + (sheet || pay || stuck || (done && !cart.length) ? " sheet" : "") + (paying ? " paying" : "") },
       paying ? h("section", { className: "ap-counter-tender", "aria-label": "Pembayaran" }, tender) : catalogue, side, bar);
   }

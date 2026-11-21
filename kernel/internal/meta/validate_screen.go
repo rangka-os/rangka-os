@@ -373,6 +373,9 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 		}
 		if c := asMap(b["customer"]); c != nil {
 			v.slotField(p, "counter/customer/field", docModel, docFields, c["field"], nil)
+			if t := asMap(c["table"]); t != nil {
+				v.counterTable(p, b, t, docModel, docFields, visible)
+			}
 		}
 		if pr, ok := b["print"].(string); ok {
 			found := false
@@ -567,6 +570,47 @@ func (v *validator) screenQueue(p string, b map[string]any, visible map[string]v
 					v.rep.extra("error", p, fmt.Sprintf("queue/columns/values/%d", i), "screen_slot_type", fmt.Sprintf(`"%s" is not an option of %s`, val, pyStr(cols["by"])))
 				}
 			}
+		}
+	}
+}
+
+// counterTable checks the customer.table slot (contract 0048 section 2): the table model, the document's link to it,
+// the number and check fields the map fills, and match (table field = session field, as 0039).
+func (v *validator) counterTable(p string, b, t map[string]any, docModel *Model, docFields map[string]map[string]any, visible map[string]vis) {
+	where := "counter/customer/table"
+	tm, tf := v.slotModel(p, where+"/model", t, visible)
+	if lf := v.slotField(p, where+"/link", docModel, docFields, t["link"], linkKind); lf != nil && tm != nil && str(lf, "to") != tm.Name {
+		v.rep.extra("error", p, where+"/link", "screen_slot_type", fmt.Sprintf(`"%s" links to %s; the table model is %s`, pyStr(t["link"]), str(lf, "to"), tm.Name))
+	}
+	v.slotField(p, where+"/guests", docModel, docFields, t["guests"], numericKinds)
+	v.slotField(p, where+"/bill", docModel, docFields, t["bill"], []string{"check"})
+	if tm == nil {
+		return
+	}
+	v.slotField(p, where+"/title", tm, tf, t["title"], nil)
+	v.slotField(p, where+"/area", tm, tf, t["area"], nil)
+	v.slotField(p, where+"/seats", tm, tf, t["seats"], numericKinds)
+	match := asMap(t["match"])
+	ses := asMap(b["session"])
+	if len(match) > 0 && ses == nil {
+		v.rep.extra("error", p, where+"/match", "screen_slot_type", "match compares with the open session; add the session slot")
+	}
+	var sm *Model
+	var sf map[string]map[string]any
+	if ses != nil {
+		if x, ok := visible[str(ses, "model")]; ok {
+			sm, sf = x.m, fieldMap(x.m)
+		}
+	}
+	ks := make([]string, 0, len(match))
+	for k := range match {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	for _, k := range ks {
+		v.slotField(p, where+"/match/"+k, tm, tf, k, nil)
+		if sm != nil {
+			v.slotField(p, where+"/match/"+k, sm, sf, match[k], nil)
 		}
 	}
 }

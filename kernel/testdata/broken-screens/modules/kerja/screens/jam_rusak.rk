@@ -9,5 +9,6 @@ clock:
   in: {field: text, location: text}
   out: {field: ghost, photo: text}
   site: {model: jam_kerja, link: text, location: hours, radius_m: note}
+  shift: {model: jam_kerja, filter: "text == (", start: text, end: ghost, title: note, outlet: text, link: text}
   reason: ghost
   submit: true

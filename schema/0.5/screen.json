@@ -934,6 +934,40 @@
           },
           "description": "Where the user clocks: link is the record's link to the site model, location its geo field, radius_m its radius"
         },
+        "shift": {
+          "type": "object",
+          "required": [
+            "model",
+            "start",
+            "end"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "filter": {
+              "type": "string",
+              "description": "List filter (field names, CEL, with user and today()): the user's shift of today"
+            },
+            "start": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "end": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "title": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "outlet": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "link": {
+              "$ref": "model.json#/$defs/name"
+            }
+          },
+          "description": "The user's shift of today, shown on the clock screen: start and end are datetime fields of the shift model, title a text field (the shift name), outlet a link field to the site model, link the field of the clock record that is filled with the shift at clock-in"
+        },
         "reason": {
           "$ref": "model.json#/$defs/name"
         },

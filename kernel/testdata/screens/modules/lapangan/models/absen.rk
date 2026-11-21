@@ -13,6 +13,7 @@ fields:
   - {name: clock_out, type: datetime, label: {id: Jam keluar}, set_once: true, in_list: true}
   - {name: out_pos, type: geo, label: {id: Posisi keluar}, set_once: true}
   - {name: out_photo, type: image, label: {id: Foto keluar}, set_once: true}
+  - {name: jadwal, type: link, to: jadwal, label: {id: Jadwal}}
   - {name: reason, type: text, label: {id: Alasan}}
   - {name: checked_sig, type: signature, label: {id: Paraf pemeriksa}, hidden_for: [pekerja]}
   - {name: in_m, type: float, label: {id: Jarak masuk (m)}, read_only: true, compute: "distance_m(in_pos, site.pos)"}

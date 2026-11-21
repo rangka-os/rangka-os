@@ -1011,6 +1011,21 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-counter-left { position: static; padding: 1px 8px; border-radius: 6px; font: 500 12px/18px var(--font-sans); }
 .ap-counter-left.out { background: var(--bad-tint); color: var(--bad); }
 .ap-counter-item.out .ap-counter-item-p > span { opacity: .5; }
+.ap-counter-more { padding: 1px 8px; border-radius: 6px; background: var(--neutral); color: var(--muted); font: 500 12px/18px var(--font-sans); font-style: normal; white-space: nowrap; }
+/* the choice sheet (counter.js ChoiceSheet): bottom sheet on a phone, centred card from tablet width */
+.ap-counter-choice-bg { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgba(20, 20, 20, .4); }
+.ap-counter-choice { width: 100%; max-height: 80vh; display: flex; flex-direction: column; box-sizing: border-box; padding: 16px 16px 20px; border-radius: 16px 16px 0 0; background: var(--surface); color: var(--ink); box-shadow: 0 -8px 32px rgba(0, 0, 0, .18); }
+.ap-counter-choice-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.ap-counter-choice-h h2 { margin: 0; font: 600 20px/26px var(--font-sans); }
+.ap-counter-choice-h p { margin: 2px 0 0; color: var(--muted); font: 400 14px/20px var(--font-sans); }
+.ap-counter-choice-rows { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 8px; }
+.ap-counter-choice-rows button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--touch); box-sizing: border-box; padding: 8px 14px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); cursor: pointer; font: 500 16px/22px var(--font-sans); }
+.ap-counter-choice-rows button:active { transform: scale(.99); }
+.ap-counter-choice-rows button.out .ap-counter-choice-t { opacity: .55; }
+.ap-counter-choice-t { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.ap-counter-choice-t strong { min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 11px; background: var(--ink); color: var(--surface); font: 600 12px/22px var(--font-sans); text-align: center; }
+.ap-counter-choice-rows b { font: 600 16px/22px var(--font-sans); white-space: nowrap; }
+@media (min-width: 700px) { .ap-counter-choice-bg { align-items: center; } .ap-counter-choice { width: 440px; border-radius: 16px; } }
 .ap-counter-nocat { display: grid; justify-items: center; gap: 6px; margin: 48px auto; max-width: 340px; text-align: center; color: var(--muted); }
 .ap-counter-nocat-i { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 6px; border-radius: 14px; background: var(--neutral); color: var(--ink-2); }
 .ap-counter-nocat-i .rk-icon { width: 26px; height: 26px; }

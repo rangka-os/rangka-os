@@ -321,6 +321,11 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 				v.slotField(p, fmt.Sprintf("counter/catalogue/search/%d", i), m, fields, x, nil)
 			}
 			v.parens(p, "counter/catalogue/filter", cat["filter"])
+			if vr := asMap(cat["variants"]); vr != nil {
+				for _, k := range []string{"group", "label", "title"} {
+					v.slotField(p, "counter/catalogue/variants/"+k, m, fields, vr[k], []string{"data"})
+				}
+			}
 		}
 	}
 	doc := asMap(b["document"])

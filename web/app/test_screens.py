@@ -179,6 +179,54 @@ def test_lost_answer_then_press_again_writes_once(browser, ctx):
     c.close()
 
 
+def test_counter_variants_one_tile_and_sheet(browser, ctx):
+    # issue #267: items sharing variant_group collapse into one tile; the sheet lists variants with price and stock
+    owner, _ = page_for(browser, ctx, OWNER, DESK)
+    hdr = {"Content-Type": "application/json"}
+    for name, price, label in (("Kaos Polos Kecil", 50000, "Kecil"), ("Kaos Polos Sedang", 55000, "Sedang"), ("Kaos Polos Besar", 60000, "Besar")):
+        r = owner.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": name, "category": "Pakaian", "price": price,
+                                                                  "variant_group": "KAOS-POLOS", "variant_label": label}), headers=hdr)
+        assert r.status == 201, r.text()
+    r = owner.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": "Topi Hitam", "category": "Pakaian", "price": 35000}), headers=hdr)
+    assert r.status == 201, r.text()
+    menus = {m["menu_name"]: m["name"] for m in owner.request.get("/api/v1/r/menu?limit=100").json()["data"]}
+    for menu, qty in (("Kaos Polos Kecil", 4), ("Kaos Polos Sedang", 9), ("Kaos Polos Besar", 0)):
+        r = owner.request.post("/api/v1/r/stok_menu", data=json.dumps({"menu": menus[menu], "outlet": "Pusat", "qty": qty}), headers=hdr)
+        assert r.status == 201, r.text()
+    owner.close()
+    for size, vp in (("tablet", TABLET), ("phone", PHONE375), ("desktop", DESK)):
+        c, p = page_for(browser, ctx, KASIR, vp)
+        p.goto("/app/")
+        p.wait_for_url("**/#/w/jual")
+        p.wait_for_selector(".ap-counter-open, .ap-counter-item")
+        if p.locator(".ap-counter-open").count():
+            p.locator(".ap-counter-open input").first.fill("100000")
+            p.get_by_role("button", name="Buka sesi").click()
+            p.wait_for_selector(".ap-counter-item")
+        p.wait_for_selector(".ap-counter-item.variants")
+        assert p.locator(".ap-counter-item", has_text="Kaos Polos").count() == 1, "one tile for the group of 3 sizes"
+        tile = p.locator(".ap-counter-item.variants")
+        assert "3 varian" in tile.inner_text() and "mulai" in tile.inner_text(), tile.inner_text()
+        assert p.locator(".ap-counter-item", has_text="Topi Hitam").count() == 1
+        if ctx["shots"]:
+            p.screenshot(path=os.path.join(ctx["shots"], f"variants-tile-{size}.png"))
+        tile.click()
+        dlg = p.get_by_role("dialog")
+        dlg.wait_for()
+        rows = dlg.locator("button[data-row]")
+        assert rows.count() == 3, rows.count()
+        txt = dlg.inner_text()
+        assert "Rp 50.000" in txt and "Rp 60.000" in txt and "sisa 4" in txt and "Habis" in txt, txt
+        if ctx["shots"]:
+            p.screenshot(path=os.path.join(ctx["shots"], f"variants-sheet-{size}.png"))
+        if size == "tablet":
+            dlg.locator("button[data-row]", has_text="Besar").click()
+            assert p.get_by_role("dialog").count() == 0, "picking a variant closes the sheet"
+            p.get_by_role("button", name="Bayar Rp 60.000").wait_for()   # Besar is in the order at its own price
+            assert "1 di pesanan" in p.locator(".ap-counter-item.variants").get_attribute("aria-label")
+        c.close()
+
+
 def test_counter_open_sell_split_hold_close(browser, ctx):
     owner, _ = page_for(browser, ctx, OWNER, DESK)
     for name, cat, price, code in (("Kopi susu", "Minuman", 18000, "899001"), ("Es teh", "Minuman", 8000, ""), ("Roti bakar", "Makanan", 15000, "")):

@@ -3440,6 +3440,10 @@ def check_screen_counter(rep, p, b, visible, prints):
             for i, x in enumerate(cat.get("search") if isinstance(cat.get("search"), list) else []):
                 slot_field(rep, p, f"counter/catalogue/search/{i}", cn, cf, x)
             parens(rep, p, "counter/catalogue/filter", cat.get("filter"))
+            vr = cat.get("variants") if isinstance(cat.get("variants"), dict) else None
+            if vr is not None:
+                for k in ("group", "label", "title"):
+                    slot_field(rep, p, f"counter/catalogue/variants/{k}", cn, cf, vr.get(k), ["data"])
     doc = b.get("document") if isinstance(b.get("document"), dict) else None
     dn, dm, df = slot_model(rep, p, "counter/document/model", doc, visible) if doc is not None else (None, None, None)
     if dn:

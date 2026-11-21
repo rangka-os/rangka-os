@@ -124,6 +124,12 @@
     return body;
   }
 
+  /** The label of a select value (the option's own text), so a folded checkout line never shows the raw value. */
+  function selectLabel(f, v) {
+    var o = (f.options || []).filter(function (x) { return x.value === v; })[0];
+    return o ? L(o.label) : String(v);
+  }
+
   /** The share of part k (0-based) of a bill split between n people: equal, rounded down, the remainder on part 1
    *  (the same rule as the model's party_share and party_first_share). */
   function partShare(total, n, k) {
@@ -903,7 +909,7 @@
       h("button", { type: "button", className: "ap-counter-ck-h", "aria-expanded": checkoutOpen ? "true" : "false", disabled: stuck, onClick: function () { setCheckoutOpen(!checkoutOpen); } },
         h(R.Icon, { name: "tag" }), h("span", null, checkoutOpen || !ckFilled.length ? ckTitle : ckFilled.map(function (x) {
           var v = checkout[x.f.name];
-          return x.f.type === "link" && ctx.cache && ctx.cache.title ? ctx.cache.title(x.f.to, v) || v : x.f.type === "check" ? L(x.f.label) : String(v);
+          return x.f.type === "link" && ctx.cache && ctx.cache.title ? ctx.cache.title(x.f.to, v) || v : x.f.type === "check" ? L(x.f.label) : x.f.type === "select" ? selectLabel(x.f, v) : String(v);
         }).join(" · ")), ckFilled.length && !checkoutOpen ? h("b", null, ckFilled.length) : null, h(R.Icon, { name: "down" })),
       checkoutOpen ? h("div", { className: "ap-work-fields ap-counter-ck-f" }, ckFields.map(function (x) {
         return h(RA.FieldEditor, { key: x.f.name, ctx: ctx, model: doc.model, field: x.f, rec: checkout, linkFilter: x.slot.filter, readOnly: stuck,

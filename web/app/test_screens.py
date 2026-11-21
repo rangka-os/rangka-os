@@ -262,6 +262,61 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     c.close()
 
 
+def test_counter_charges_and_split_bill(browser, ctx):
+    # rangka-apps#121: dine-in service 5% and PBJT 10% show in the breakdown (Rp 100.000 -> 115.500), and the tender's
+    # "Bayar terpisah" splits the bill into parts, one tab per person, each payment row naming its part
+    owner, _ = page_for(browser, ctx, OWNER, DESK)
+    r = owner.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": "Paket makan malam", "category": "Makanan", "price": 100000}), headers={"Content-Type": "application/json"})
+    assert r.status == 201, r.text()
+    owner.close()
+    for vp, tag in ((PHONE375, "375"), (TABLET, "1024"), (DESK, "1280")):
+        c, p = page_for(browser, ctx, KASIR, vp)
+        p.goto("/app/")
+        p.wait_for_url("**/#/w/jual")
+        p.wait_for_selector(".ap-counter-open, .ap-counter-item")
+        if p.locator(".ap-counter-open").count():
+            p.locator(".ap-counter-open input").first.fill("100000")
+            p.get_by_role("button", name="Buka sesi").click()
+            p.wait_for_selector(".ap-counter-item")
+        p.locator(".ap-counter-item", has_text="Paket makan malam").click()
+        if p.locator(".ap-counter-bar").is_visible():  # phone: the order is in a sheet
+            p.locator(".ap-counter-bar").click()
+        p.locator(".ap-counter-ck-h").click()
+        p.locator(".ap-counter-ck-f .rk-select-btn").first.click()
+        p.get_by_role("option", name="Makan di sini").click()
+        p.locator(".ap-counter-ck-h").click()
+        bayar = p.get_by_role("button", name="Bayar Rp 115.500")
+        bayar.wait_for()
+        sums = p.locator(".ap-counter-sum").inner_text()
+        for want in ("Service charge", "5.000", "Pajak restoran", "10.500", "Pembulatan", "Rp 115.500"):
+            assert want in sums, (want, sums)
+        p.wait_for_timeout(500)  # the buttons' colour transitions settle
+        assert "Makan di sini" in p.locator(".ap-counter-ck-h").inner_text(), "the folded checkout line says the label, not dine_in"
+        shot(ctx, p, f"kasir-biaya-keranjang-{tag}")
+        bayar.click()
+        p.get_by_role("button", name="Bayar terpisah").click()
+        p.get_by_role("button", name="Tambah orang").click()
+        assert "3 orang" in p.locator(".ap-counter-split").inner_text()
+        assert "Rp 38.500" in p.locator(".ap-counter-split").inner_text()
+        assert p.get_by_role("button", name=re.compile("Belum lunas")).is_disabled()
+        for k in (1, 2, 3):
+            p.get_by_role("tab", name=re.compile(f"Orang {k}")).click()
+            if k == 2:
+                p.get_by_role("button", name="QRIS", exact=True).click()
+            else:
+                p.get_by_role("button", name="Uang pas").click()
+        p.wait_for_timeout(500)  # the buttons' colour transitions settle
+        shot(ctx, p, f"kasir-bayar-terpisah-{tag}")
+        p.get_by_role("button", name="Selesai").click()
+        p.wait_for_selector(".ap-counter-done")
+        name = p.locator(".ap-counter-done p").inner_text().split(" · ")[0]
+        rec = c.request.get(f"/api/v1/r/penjualan/{name}").json()
+        assert rec["grand_total"] == 115500 and rec["parties"] == 3 and rec["service_charge"] == 5000 and rec["pbjt"] == 10500, rec
+        assert sorted(x["party"] for x in rec["payments"]) == [1, 2, 3], rec["payments"]
+        assert sum(x["amount"] for x in rec["payments"]) == 115500, rec["payments"]
+        c.close()
+
+
 def test_counter_lost_answer_then_press_again_is_one_sale(browser, ctx):
     # jual_online has no offline queue: the submit answer is lost after the server wrote, set: sold_at = now() changes,
     # and the cashier presses Kirim ulang: the same job and keys go again, one cart is one sale (audit WS3 R2-1, R3-1)

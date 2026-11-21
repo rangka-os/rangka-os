@@ -13,7 +13,20 @@ fields:
   - {name: promo, type: data, label: {id: Kode promo}}
   - {name: promo_menu, type: link, to: menu, label: {id: Menu promo}}
   - {name: items, type: table, of: penjualan_baris, label: {id: Barang}, min_rows: 1}
-  - {name: grand_total, type: currency, label: {id: Total}, compute: "items.map(l, l.amount).sum()", in_list: true}
+  - name: order_type
+    type: select
+    label: {id: Jenis pesanan}
+    default: "'takeaway'"
+    options:
+      - {value: takeaway, label: {id: Bawa pulang}}
+      - {value: dine_in, label: {id: Makan di sini}}
+  - {name: parties, type: int, label: {id: Dibagi untuk}, default: '1'}
+  - {name: subtotal, type: currency, label: {id: Subtotal}, compute: "items.map(l, l.amount).sum()"}
+  # restaurant charges as in rangka-apps#121: service 5% and PBJT 10% on dine-in, total rounded to Rp 100
+  - {name: service_charge, type: currency, label: {id: Service charge}, compute: "order_type == 'dine_in' ? round(subtotal * 5 / 100) : 0"}
+  - {name: pbjt, type: currency, label: {id: Pajak restoran}, compute: "order_type == 'dine_in' ? round((subtotal + service_charge) * 10 / 100) : 0"}
+  - {name: rounding, type: currency, label: {id: Pembulatan}, compute: "order_type == 'dine_in' ? round((subtotal + service_charge + pbjt) / 100.0) * 100 - (subtotal + service_charge + pbjt) : 0"}
+  - {name: grand_total, type: currency, label: {id: Total}, compute: "subtotal + service_charge + pbjt + rounding", in_list: true}
   - {name: payments, type: table, of: penjualan_bayar, label: {id: Bayar}}
   - name: cash_received
     type: currency

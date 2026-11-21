@@ -210,3 +210,12 @@ test("sectionFold: optional empty sections of a long form fold; a company-layer 
   assert.strictEqual(A.sectionFold(notes, 3, 4, false, (f) => f.name === "notes", no).keepOpen, true);
   assert.strictEqual(A.sectionFold(notes, 3, 4, false, no, (f) => f.name === "notes").keepOpen, true);
 });
+
+test("writerText: system writers read Otomatis, people keep their name", () => {
+  const A = load();
+  assert.strictEqual(A.writerText("flow:whatsapp_order_intake"), "Otomatis");
+  assert.strictEqual(A.writerText("connector:shopee"), "Otomatis");
+  assert.strictEqual(A.writerText("system"), "Otomatis");
+  assert.strictEqual(A.writerText("siti@example.com"), "siti@example.com");
+  assert.strictEqual(A.writerText(undefined), "");
+});

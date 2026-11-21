@@ -213,6 +213,12 @@
       keepOpen: company || fields.some(function (f) { return !!err(f); }) || fields.some(function (f) { return !!typed(f); }) };
   }
 
+  /** Who wrote a record, in owner words: system writers (flows, connectors, the system itself) read "Otomatis". */
+  function writerText(by) {
+    var b = String(by || "");
+    return /^(flow:|connector:|system)/.test(b) ? "Otomatis" : b;
+  }
+  RA.writerText = writerText;
   RA.sectionFold = sectionFold;
   RA.docSummary = docSummary;
   RA.summaryLine = summaryLine;
@@ -587,7 +593,7 @@
       var fold = sectionFold(fs, i, layout.length, ro, function (f) { return srvErr.fields[f.name]; },
         function (f) { return !f.compute && !f.read_only && !blankValue(f, rec[f.name]) && (touched[f.name] || !isNew); });
       var filled = fs.filter(function (f) { return f.type !== "table" && !blankValue(f, rec[f.name]); });
-      var text = filled.length ? filled.slice(0, 2).map(function (f) { return L(f.label) + " " + RA.fieldText(ctx, f, rec[f.name]); }).join(", ") : "Belum diisi";
+      var text = filled.length ? filled.slice(0, 2).map(function (f) { return L(f.label) + " " + RA.fieldPlain(ctx, f, rec[f.name]); }).join(", ") : "Belum diisi";
       return { foldable: fold.foldable, keepOpen: fold.keepOpen, text: text };
     }
     function section(i) {
@@ -689,7 +695,7 @@
       var rows = [];
       if (!isNew && title !== rec.name && !isDraftName(rec.name)) rows.push(["Nomor", rec.name]);
       if (rec.amended_from) rows.push(["Amandemen dari", h("a", { href: "#/r/" + m + "/" + enc(rec.amended_from) }, rec.amended_from)]);
-      if (rec.created_by || rec.created_at) rows.push(["Dibuat", [rec.created_by, day(rec.created_at)].filter(Boolean).join(" · ")]);
+      if (rec.created_by || rec.created_at) rows.push(["Dibuat", [writerText(rec.created_by), day(rec.created_at)].filter(Boolean).join(" · ")]);
       if (rec.modified_at) rows.push(["Diubah", day(rec.modified_at)]);
       if (isNew) rows.push(["Status", "Belum disimpan"]);
       var ls = sub ? lifecycleSteps(status) : null;

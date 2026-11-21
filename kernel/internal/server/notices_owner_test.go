@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"testing"
 	"time"
 
@@ -103,7 +104,16 @@ func TestExceptionDigestNotice(t *testing.T) {
 	if err := e.s.Engine.NoticeExceptionDigest(ctx, "kopi-senja", now.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
+	// a row that committed late (created before the last digest, never told) is told by the next one, not lost
+	raised(now.Add(-2*time.Hour), "OUT-02", "negative_stock", "BRG-LATE")
+	if err := e.s.Engine.NoticeExceptionDigest(ctx, "kopi-senja", now.Add(2*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
 	items, _ = inbox(t, e, "")
+	if len(items) != 3 || get(items[0], "text") != "1 stok minus" {
+		t.Fatalf("a late row is told: %v", items)
+	}
+	items = items[1:]
 	if len(items) != 2 || get(items[0], "title") != "1 pengecualian baru" || get(items[0], "text") != "1 nomor perangkat loncat" {
 		t.Fatalf("the next hour: %v", items)
 	}
@@ -143,5 +153,16 @@ func TestExceptionDigestScheduled(t *testing.T) {
 	res, _ = e.s.DB.Query(ctx, "select count(*) from rk_jobs where kind = 'exception_digest'")
 	if res.Rows[0][0] != first {
 		t.Fatalf("one job per org and hour: %v then %v", first, res.Rows[0][0])
+	}
+}
+
+// A change set Raka proposed tells the owner even when the session carries the owner's email.
+func TestNoticeAuthorRakaTellsOwner(t *testing.T) {
+	a := changeset.Actor{ID: "owner@contoh.test"}
+	if got := noticeAuthor(&changeset.ChangeSet{Source: "ai"}, a); got != "" {
+		t.Fatalf("raka proposal skips nobody, got %q", got)
+	}
+	if got := noticeAuthor(&changeset.ChangeSet{Source: "user"}, a); got != a.ID {
+		t.Fatalf("a person's own proposal skips them, got %q", got)
 	}
 }

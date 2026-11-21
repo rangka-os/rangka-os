@@ -776,43 +776,55 @@ var exceptionWords = map[string]string{"edge_price_drift": "harga kasir beda", "
 	"device_number_gap": "nomor perangkat loncat", "rule_overridden": "aturan dilewati"}
 
 // NoticeExceptionDigest raises the hourly kernel.exceptions.new (contract 0066 as built): the exceptions raised and
-// still open since the last digest, as one notice to the owner and head office. It tells nobody when there are none.
-// The event id carries the hour, and the window starts at the newest digest (at most a day back), so a rerun inside
-// the hour or a job retried after it committed cannot tell twice.
+// still open and not yet told (rk_exceptions.notified_at, at most a day back), as one notice to the owner and head
+// office. It tells nobody when there are none. The event id carries the hour and the rows are marked in the same
+// transaction as the notice, so a rerun inside the hour or a retried job cannot tell twice, and a row that commits
+// late is told next time.
 func (e *Engine) NoticeExceptionDigest(ctx context.Context, org string, now time.Time) error {
 	ctx = pg.WithOrg(ctx, org)
 	const kind = "kernel.exceptions.new"
-	// whole seconds: a notice's time is stored to the second, so the window of the next digest starts exactly where
-	// this one ends, and an exception raised in the second that is still running is told next time, not twice
 	now = now.UTC().Truncate(time.Second)
 	return e.run(ctx, Actor{Org: org, ID: "system", System: true}, func(o *op) error {
-		since, err := store.LastNoticeAt(o.ctx, o.tx, org, kind)
-		if err != nil {
+		id := fmt.Sprintf("%s:%d", kind, now.Truncate(time.Hour).Unix())
+		if told, err := store.NoticeExists(o.ctx, o.tx, org, id); err != nil || told {
+			return err // this hour's digest went out; what is new waits for the next one
+		}
+		ids, kinds, err := store.UnnotifiedExceptions(o.ctx, o.tx, org, now.Add(-24*time.Hour))
+		if err != nil || len(ids) == 0 {
 			return err
 		}
-		if floor := now.Add(-24 * time.Hour); since.Before(floor) {
-			since = floor
+		counts := map[string]int{}
+		order := []string{}
+		for _, k := range kinds {
+			if counts[k] == 0 {
+				order = append(order, k)
+			}
+			counts[k]++
 		}
-		counts, err := store.OpenExceptionsBetween(o.ctx, o.tx, org, since, now)
-		if err != nil || len(counts) == 0 {
-			return err
-		}
+		sort.Strings(order)
 		total, parts, by := 0, []string{}, map[string]any{}
-		for _, c := range counts {
-			total += c.Count
-			w := exceptionWords[c.Kind]
+		for _, k := range order {
+			total += counts[k]
+			w := exceptionWords[k]
 			if w == "" {
 				w = "lainnya"
 			}
-			parts = append(parts, fmt.Sprintf("%d %s", c.Count, w))
-			by[c.Kind] = c.Count
+			parts = append(parts, fmt.Sprintf("%d %s", counts[k], w))
+			by[k] = counts[k]
 		}
-		return o.notice(NoticeEvent{
-			ID: fmt.Sprintf("%s:%d", kind, now.Truncate(time.Hour).Unix()), Kind: kind, Severity: "warn",
+		if err := o.notice(NoticeEvent{
+			ID: id, Kind: kind, Severity: "warn",
 			To:    NoticeTo{Owner: true, Roles: []string{"head_office"}},
 			Title: fmt.Sprintf("%d pengecualian baru", total), Text: strings.Join(parts, ", "),
 			Link: "/app/", Data: map[string]any{"count": total, "kinds": by}, At: now.Format(time.RFC3339),
-		}, noticeOpts{})
+		}, noticeOpts{}); err != nil {
+			return err
+		}
+		// told only when a row was written: a digest dropped by the rate cap or with nobody to reach stays pending
+		if sent, err := store.NoticeExists(o.ctx, o.tx, org, id); err != nil || !sent {
+			return err
+		}
+		return store.MarkExceptionsNotified(o.ctx, o.tx, org, ids)
 	})
 }
 
@@ -823,16 +835,12 @@ func (e *Engine) ExceptionDigestDue(ctx context.Context, org string, now time.Ti
 	now = now.UTC().Truncate(time.Second)
 	due := false
 	err := e.run(ctx, Actor{Org: org, ID: "system", System: true}, func(o *op) error {
-		since, err := store.LastNoticeAt(o.ctx, o.tx, org, "kernel.exceptions.new")
-		if err != nil {
-			return err
-		}
-		if floor := now.Add(-24 * time.Hour); since.Before(floor) {
-			since = floor
-		}
-		counts, err := store.OpenExceptionsBetween(o.ctx, o.tx, org, since, now)
-		due = err == nil && len(counts) > 0
+		ids, _, err := store.UnnotifiedExceptions(o.ctx, o.tx, org, now.Add(-24*time.Hour))
+		due = err == nil && len(ids) > 0
 		return err
 	})
+	if err != nil {
+		e.Log("exception digest due check %s: %v", org, err)
+	}
 	return err == nil && due
 }

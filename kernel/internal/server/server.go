@@ -286,7 +286,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	// contract 0066 as built: a proposed change set tells the owner and its approvers (never its author)
 	s.Changes.OnProposed = func(ctx context.Context, cs *changeset.ChangeSet, a changeset.Actor) {
 		e.NoticeChangesetProposed(ctx, cs.Org, engine.ChangesetNotice{ID: cs.ID, Title: cs.Title, Risk: cs.Risk, Source: cs.Source,
-			Author: a.ID, Approvers: s.Changes.ApprovableBy(cs)})
+			Author: noticeAuthor(cs, a), Approvers: s.Changes.ApprovableBy(cs)})
 	}
 	site := ""
 	if cfg.SiteDir != "" {
@@ -806,4 +806,13 @@ func FindDir(candidates ...string) string {
 		}
 	}
 	return ""
+}
+
+// noticeAuthor is who a proposed change set must not tell: the person who proposed it. A change set Raka proposed
+// (source "ai") has the assistant as its author, though the session carries the owner's email, so nobody is skipped.
+func noticeAuthor(cs *changeset.ChangeSet, a changeset.Actor) string {
+	if cs.Source == "ai" {
+		return ""
+	}
+	return a.ID
 }

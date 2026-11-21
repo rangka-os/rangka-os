@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -88,28 +90,40 @@ type ExceptionKindCount struct {
 	Count int
 }
 
-// OpenExceptionsBetween counts the org's unresolved exceptions raised after since and up to until, by kind (the
-// hourly head-office notice, contract 0066 as built). Kinds come back in name order.
-func OpenExceptionsBetween(ctx context.Context, q pg.Querier, org string, since, until time.Time) ([]ExceptionKindCount, error) {
-	res, err := q.Query(ctx, `select kind, count(*) from rk_exceptions where org_id = $1 and resolved_at is null
-		and created_at > $2 and created_at <= $3 group by kind order by kind`, org, since, until)
+// UnnotifiedExceptions lists the org's unresolved exceptions the head-office digest has not told yet and that were
+// raised after since (ids and kinds, oldest first). A row is judged by its own marker, not by a time window, so one
+// that commits late or comes from a skewed clock is still told by the next digest.
+func UnnotifiedExceptions(ctx context.Context, q pg.Querier, org string, since time.Time) ([]int64, []string, error) {
+	res, err := q.Query(ctx, `select id, kind from rk_exceptions where org_id = $1 and resolved_at is null and notified_at is null
+		and created_at > $2 order by id`, org, since)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	out := []ExceptionKindCount{}
+	ids, kinds := []int64{}, []string{}
 	for _, r := range res.Rows {
-		n, _ := r[1].(int64)
-		out = append(out, ExceptionKindCount{Kind: r[0].(string), Count: int(n)})
+		id, _ := r[0].(int64)
+		ids = append(ids, id)
+		kinds = append(kinds, r[1].(string))
 	}
-	return out, nil
+	return ids, kinds, nil
 }
 
-// LastNoticeAt is the time of the org's newest notice of kind, or the zero time when there is none.
-func LastNoticeAt(ctx context.Context, q pg.Querier, org, kind string) (time.Time, error) {
-	res, err := q.Query(ctx, `select max(at) from rk_notices where org_id = $1 and kind = $2`, org, kind)
-	if err != nil || len(res.Rows) == 0 {
-		return time.Time{}, err
+// MarkExceptionsNotified records that the digest told these exceptions of org.
+func MarkExceptionsNotified(ctx context.Context, q pg.Querier, org string, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
 	}
-	t, _ := res.Rows[0][0].(time.Time)
-	return t, nil
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = strconv.FormatInt(id, 10)
+	}
+	_, err := q.Query(ctx, `update rk_exceptions set notified_at = now() where org_id = $1
+		and id = any(string_to_array($2, ',')::bigint[])`, org, strings.Join(parts, ","))
+	return err
+}
+
+// NoticeExists reports whether the org already has a notice row for the event.
+func NoticeExists(ctx context.Context, q pg.Querier, org, eventID string) (bool, error) {
+	res, err := q.Query(ctx, `select 1 from rk_notices where org_id = $1 and event_id = $2 limit 1`, org, eventID)
+	return err == nil && len(res.Rows) > 0, err
 }

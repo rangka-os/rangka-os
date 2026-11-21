@@ -74,13 +74,23 @@ func UserVar(a Actor) map[string]any {
 }
 
 // DeviceVar is the CEL device global (contract 0030 §4, 0058 §2): {id, code, outlet} of the paired device, all empty
-// when the request did not come from one.
+// when the request did not come from one, and event: false (deviceVarIn sets it).
 func DeviceVar(a Actor) map[string]any {
 	d := a.Device
 	if d == nil {
 		d = &DeviceRef{}
 	}
-	return map[string]any{"id": d.ID, "code": d.Code, "outlet": d.Outlet}
+	return map[string]any{"id": d.ID, "code": d.Code, "outlet": d.Outlet, "event": false}
+}
+
+// deviceVarIn is the device global inside a unit of work: event is true while the unit is a paired device's event
+// write (a screen.write replayed from POST /edge/events, contract 0058 §4), which already happened at the outlet. A
+// browser request from a paired device (a PIN session, the rk_device cookie) carries the device too, but is live:
+// its event is false, so a module tells "paid at the outlet already" (device.event) from "on a device" (device.id).
+func deviceVarIn(ctx context.Context, a Actor) map[string]any {
+	v := DeviceVar(a)
+	v["event"] = a.Device != nil && deviceWriteOf(ctx) != nil
+	return v
 }
 
 // GlobalVar resolves the read-only globals user, device, org and tax for a (contract 0010 §8): org and tax come
@@ -158,7 +168,7 @@ func (s *scope) lookup(name string) (any, bool) {
 	case "user":
 		return UserVar(s.actor), true
 	case "device":
-		return DeviceVar(s.actor), true
+		return deviceVarIn(s.ctx, s.actor), true
 	case "org", "tax":
 		return GlobalVar(s.e.Reg(), s.actor, name)
 	case "parent":

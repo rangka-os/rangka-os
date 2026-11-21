@@ -155,3 +155,42 @@ test("clock() is the device's wall clock as HH:MM, or META.clock", () => {
   const E2 = load({}).create({ models: {}, dashboards: {}, installed: [] }, () => null);
   assert.match(E2.evaluate("clock()", () => undefined), /^\d\d:\d\d$/);
 });
+
+/* The computed fields of rec and of its rows, as the kernel's TestPosSaleParity writes them (pos_parity_test.go). */
+function computedOf(models, m, rec) {
+  const out = {};
+  for (const f of models[m].fields) {
+    if (f.type === "table") { const rows = (rec[f.name] || []).map((r) => computedOf(models, f.of, r)); if (rows.length) out[f.name] = rows; continue; }
+    if (f.compute) out[f.name] = rec[f.name] === undefined ? null : rec[f.name];
+  }
+  return out;
+}
+
+test("prepare(): a cashier sale with promotions and loyalty computes the kernel's numbers (contract 0058 §10)", () => {
+  const fx = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "pos-sale-parity.json"), "utf8"));
+  assert.ok(fx.cases.length >= 20);
+  const byName = {};
+  for (const [m, recs] of Object.entries(fx.records)) byName[m] = Object.fromEntries(recs.map((r) => [r.name, r]));
+  for (const c of fx.cases) {
+    const meta = { models: fx.models, dashboards: {}, today: fx.base.today, installed: c.installed || fx.base.installed,
+      globals: { tax: c.tax || fx.base.tax, user: { email: "kasir@contoh.id", name: "kasir@contoh.id", roles: ["cashier"], outlets: [] } } };
+    const E = load({}).create(meta, (m, n) => (byName[m] || {})[n] || null);
+    const rec = E.prepare("pos_sale", JSON.parse(JSON.stringify(c.sale)));
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(computedOf(fx.models, "pos_sale", rec))), c.want, c.name);
+  }
+});
+
+test("dialect: lists, in, replace, matches, string(), days_between, true/false, quoted text with escapes", () => {
+  const E = load({}).create({ models: {}, dashboards: {}, installed: [] }, () => null);
+  const ev = (src, vars) => E.evaluate(src, (n) => (vars || {})[n]);
+  assert.strictEqual(ev("'a' in ['a', 'b']"), true);
+  assert.strictEqual(ev("'cashier' in user.roles", { user: { roles: ["cashier"] } }), true);
+  assert.strictEqual(ev("x.replace('-', '').replace(' ', '')", { x: "0812-34 56" }), "08123456");
+  assert.strictEqual(ev("x.matches('^[1-9][0-9]{7,14}$')", { x: "6281234" }), false);
+  assert.strictEqual(ev("string(days_between('2024-01-01', '2026-11-19') % 7 + 1)"), "4");
+  assert.strictEqual(ev("true && !false"), true);
+  assert.strictEqual(ev('"it\\\'s"'), "it's");
+  assert.strictEqual(ev("round(2.345, 2)"), 2.35);
+  assert.strictEqual(ev("round(-2.5, 0)"), -3);
+  assert.strictEqual(ev("[1, 2, 3].contains(2)"), true);
+});

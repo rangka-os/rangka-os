@@ -73,6 +73,7 @@
     "ai.js",
     "outbox.js",
     "deviceoutbox.js",
+    "devicedata.js",
     "printer-escpos.js",
     "printer.js",
     "pair.js",

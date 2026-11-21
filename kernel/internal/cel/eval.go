@@ -515,6 +515,16 @@ func parseInstant(s string) (time.Time, error) {
 	return time.Time{}, errf("not a datetime")
 }
 
+// timeOfDayHour reads "HH:MM" or "HH:MM:SS" (an import column of a POS export) and returns its hour.
+func timeOfDayHour(s string) (int, bool) {
+	for _, layout := range []string{"15:04:05", "15:04"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.Hour(), true
+		}
+	}
+	return 0, false
+}
+
 // IsDate reports whether s is an ISO date (YYYY-MM-DD).
 func IsDate(s string) bool {
 	if len(s) != 10 || s[4] != '-' || s[7] != '-' {
@@ -976,6 +986,12 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			t = a.In(loc)
 		case string:
 			if a == "" {
+				return nil, nil
+			}
+			if tod, ok := timeOfDayHour(a); ok { // "12:05" or "12:05:00": a time of day is its own hour, no zone applies
+				if n.Fn == "hour_of" {
+					return int64(tod), nil
+				}
 				return nil, nil
 			}
 			if IsDate(a) {

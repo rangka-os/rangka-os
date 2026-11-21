@@ -41,7 +41,7 @@ chart: row scope, hidden fields and the `period` window apply unchanged. A widge
 ### 4. CEL functions
 - `hour_of(t)`: hour 0 to 23 of a datetime in the site timezone (UTC when none is set); `weekday_of(t)`: 1 (Monday) to
   7 (Sunday). Both return null for null or `""`. An ISO date has no time of day: `hour_of` is null and `weekday_of` is
-  that date's weekday. A malformed value is an error.
+  that date's weekday. A bare time of day (`12:05` or `12:05:00`, as in a POS export column) is its own hour (no zone shift) and has no weekday. A malformed value is an error.
 - Example: `2026-11-11T23:30:00Z` in Asia/Jakarta is 06:30 on the 12th: `hour_of` 6, `weekday_of` 4.
 - Computed fields may use them (`compute: hour_of(sold_at)`), which is how a model gets an int `hour` and `weekday` to
   group a heatmap by.

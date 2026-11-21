@@ -24,6 +24,9 @@ func TestHourWeekdayOf(t *testing.T) {
 		{"weekday_of('2026-11-20')", jkt, int64(5)}, // a date keeps its own weekday
 		{"hour_of('2026-11-20')", jkt, nil},         // a date has no hour
 		{"hour_of('')", jkt, nil},
+		{"hour_of('12:05:00')", jkt, int64(12)}, // a time of day is its own hour, no zone shift
+		{"hour_of('07:30')", nil, int64(7)},
+		{"weekday_of('12:05:00')", jkt, nil},
 		{"weekday_of(null)", jkt, nil},
 	} {
 		got, err := Eval(c.expr, &Env{Loc: c.loc})

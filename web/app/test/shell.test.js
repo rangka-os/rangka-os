@@ -493,3 +493,15 @@ test("tabLinks: Setujui only for a person who may approve", () => {
   assert.deepStrictEqual(plain(A.tabLinks(META, tabs, r, "#/d/sales_overview", true)).map((t) => t.label), ["Ringkasan penjualan", "Setujui", "Cari"]);
   assert.deepStrictEqual(plain(A.tabLinks(META, tabs, r, "#/d/sales_overview", false)).map((t) => t.label), ["Ringkasan penjualan", "Cari"]);
 });
+
+test("pwaMenu: web push entries follow what Rangka Cloud answered, also on the installed app", () => {
+  const m = A.pwaMenu;
+  assert.deepStrictEqual(plain(m({ standalone: true, push: null })), []);
+  assert.deepStrictEqual(plain(m({ standalone: true, push: "unsupported" })), []);
+  assert.deepStrictEqual(plain(m({ standalone: true, push: "off" })), ["push"]);
+  assert.deepStrictEqual(plain(m({ standalone: true, push: "on" })), ["push-off"]);
+  assert.deepStrictEqual(plain(m({ standalone: true, push: "blocked" })), ["push-blocked"]);
+  assert.deepStrictEqual(plain(m({ standalone: false, installable: true, updateReady: true, push: "off" })), ["update", "push", "install"]);
+  const s = A.accountSections({ pwa: ["push"] });
+  assert.deepStrictEqual(s[0].items.map((i) => [i.key, i.label]), [["app:push", "Nyalakan notifikasi"]]);
+});

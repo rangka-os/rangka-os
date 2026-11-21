@@ -9,6 +9,14 @@
  *                                "accepted" | "dismissed" | "unavailable"
  *   applyUpdate()                tells the waiting worker to take over, then reloads once it does
  *   themeColor(color)            sets <meta name="theme-color"> (the status bar of the installed app)
+ *   push.refresh() / enable() / disable()
+ *                                web push for a hosted business (contract 0074 §6). The page is framed by Rangka
+ *                                Cloud, which owns the browser permission, the VAPID key and the subscription, so
+ *                                the page only relays the ask to its parent with postMessage:
+ *                                  to the parent    {type: "rangka:push", op: "state" | "enable" | "disable", id}
+ *                                  from the parent  {type: "rangka:push-state", id, state}
+ *                                state is "on" | "off" | "blocked" | "unsupported". A parent that does not answer
+ *                                within 1.5 s (self-hosted, not framed) leaves push "unsupported": no menu entry.
  *
  * The worker is not registered inside a frame (Rangka Cloud embeds the app; the outer page owns that origin's
  * install), without navigator.serviceWorker (plain HTTP on a LAN address, old browsers), or when the page asks
@@ -41,7 +49,22 @@
     try { return !!(matchMedia && matchMedia("(display-mode: standalone)").matches); } catch (e) { return false; }
   }
 
-  RA.pwaHelpers = { canRegister: canRegister, isIOS: isIOS, isStandalone: isStandalone };
+  var PUSH_STATES = ["on", "off", "blocked", "unsupported"];
+
+  /** The parent's origin to post to: the first ancestor origin, else the referrer's. "" when there is none (no relay). */
+  function relayOrigin(ancestors, referrer) {
+    var o = ancestors && ancestors[0] ? String(ancestors[0]) : "";
+    if (!o && referrer) { try { o = new URL(referrer).origin; } catch (e) { o = ""; } }
+    return /^https?:\/\/[^/]+$/.test(o) ? o : "";
+  }
+
+  /** The state a parent's answer carries when it answers this ask from this origin, else null. */
+  function pushAnswer(data, id, from, origin) {
+    if (!data || data.type !== "rangka:push-state" || data.id !== id || !origin || from !== origin) return null;
+    return PUSH_STATES.indexOf(data.state) >= 0 ? data.state : null;
+  }
+
+  RA.pwaHelpers = { canRegister: canRegister, isIOS: isIOS, isStandalone: isStandalone, relayOrigin: relayOrigin, pushAnswer: pushAnswer };
 
   if (!global.document) return; // loaded by a unit test
 
@@ -52,6 +75,8 @@
   var waiting = null;  // the new worker waiting to take over
   var listeners = { update: null, change: null };
   var reloading = false;
+  var pushState = null;
+  var pushSeq = 0;
 
   function framed() { try { return global.self !== global.top; } catch (e) { return true; } }
 
@@ -63,6 +88,7 @@
       installable: !!deferred && !standalone,
       standalone: standalone,
       updateReady: !!waiting,
+      push: pushState, // null until the parent answered; "off" is the only one that offers "Nyalakan notifikasi"
       ios: ios,
       // iOS has no install prompt: the account menu shows how to add it from the Share sheet instead
       iosHint: ios && !standalone && !framed()
@@ -97,6 +123,35 @@
     });
   }
 
+  /** One relay round trip to Rangka Cloud (the parent frame); resolves to a push state, "unsupported" without an answer. */
+  function relay(op) {
+    var origin = framed() ? relayOrigin(global.location.ancestorOrigins, global.document.referrer) : "";
+    if (!origin || !global.parent || global.parent === global) return Promise.resolve("unsupported");
+    var id = "p" + (++pushSeq);
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish(st) {
+        if (done) return;
+        done = true;
+        global.removeEventListener("message", on);
+        clearTimeout(t);
+        resolve(st);
+      }
+      function on(e) {
+        if (e.source !== global.parent) return;
+        var st = pushAnswer(e.data, id, e.origin, origin);
+        if (st) finish(st);
+      }
+      var t = setTimeout(function () { finish("unsupported"); }, op === "enable" ? 60000 : 1500); // enable waits for the permission prompt
+      global.addEventListener("message", on);
+      try { global.parent.postMessage({ type: "rangka:push", op: op, id: id }, origin); } catch (e) { finish("unsupported"); }
+    });
+  }
+
+  function pushOp(op) {
+    return relay(op).then(function (st) { pushState = st; changed(); return st; });
+  }
+
   var started = false;
   function start(opts) {
     opts = opts || {};
@@ -105,6 +160,7 @@
     // the app can mount again (sign out, sign in): listeners move to the new mount, the worker registers once
     if (started) { changed(); return; }
     started = true;
+    pushOp("state"); // fills state().push once the parent answers; silent without a parent
 
     global.addEventListener("beforeinstallprompt", function (e) {
       e.preventDefault(); // our own "Pasang aplikasi" in the account menu asks instead
@@ -151,5 +207,11 @@
     }
   }
 
-  RA.pwa = { start: start, state: state, install: install, applyUpdate: applyUpdate, themeColor: themeColor };
+  var push = {
+    refresh: function () { return pushOp("state"); },
+    enable: function () { return pushOp("enable"); },
+    disable: function () { return pushOp("disable"); }
+  };
+
+  RA.pwa = { start: start, state: state, install: install, applyUpdate: applyUpdate, themeColor: themeColor, push: push };
 })(window);

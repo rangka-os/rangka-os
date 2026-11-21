@@ -156,7 +156,7 @@ func modelSchema(e *engine.Engine, a engine.Actor, reg *meta.Registry, m *meta.M
 		if input && ro {
 			continue
 		}
-		p := fieldSchema(reg, f)
+		p := fieldSchema(reg, f, func(cm *meta.Model, cf *meta.Field) bool { return e.FieldHidden(a, cm, cf) })
 		if ro && !input {
 			p["readOnly"] = true
 		}
@@ -171,7 +171,8 @@ func modelSchema(e *engine.Engine, a engine.Actor, reg *meta.Registry, m *meta.M
 	return obj(props, required)
 }
 
-func fieldSchema(reg *meta.Registry, f *meta.Field) map[string]any {
+// hide, when set, tells which child fields of a table are hidden from the caller (contract 0027).
+func fieldSchema(reg *meta.Registry, f *meta.Field, hide func(*meta.Model, *meta.Field) bool) map[string]any {
 	switch f.Type {
 	case "int", "rating":
 		return typ("integer")
@@ -201,8 +202,12 @@ func fieldSchema(reg *meta.Registry, f *meta.Field) map[string]any {
 		if f.Of != "" && reg.Model(f.Of) != nil {
 			items := obj(map[string]any{}, nil)
 			props := items["properties"].(map[string]any)
-			for _, cf := range reg.Model(f.Of).Fields {
-				props[cf.Name] = fieldSchema(reg, cf)
+			child := reg.Model(f.Of)
+			for _, cf := range child.Fields {
+				if hide != nil && hide(child, cf) {
+					continue
+				}
+				props[cf.Name] = fieldSchema(reg, cf, hide)
 			}
 			return arr(items)
 		}

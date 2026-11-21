@@ -345,7 +345,7 @@ func (s *Server) listMembers(w http.ResponseWriter, r *http.Request, c *caller) 
 	}
 	res, err := s.DB.Query(r.Context(), `select u.id, u.email, u.full_name, m.role, coalesce(m.record, ''),
 		greatest(m.last_active_at, (select max(created_at) from rk_sessions x where x.user_id = u.id and not x.system), (select max(last_used_at) from rk_tokens t where t.user_id = u.id))
-		from rk_members m join rk_users u on u.id = m.user_id where m.org_id = $1 order by u.email`, r.PathValue("id"))
+		from rk_members m join rk_users u on u.id = m.user_id where m.org_id = $1 and not u.service order by u.email`, r.PathValue("id"))
 	if err != nil {
 		fail(w, err)
 		return

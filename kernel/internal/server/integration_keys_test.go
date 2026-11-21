@@ -161,6 +161,24 @@ func TestIntegrationKeyMinting(t *testing.T) {
 	(&env{t: t, ts: e.ts, jar: newJar()}).must(401, "POST", "/auth/login", map[string]any{"email": r, "password": ""})
 }
 
+func TestIntegrationKeyAccountHiddenFromTeam(t *testing.T) {
+	e := keyEnv(t, nil)
+	email := mintKeyRaw(t, e)
+	if r := e.do("GET", "/api/v1/team", nil); strings.Contains(string(r.Body), email) {
+		t.Fatalf("team lists the key account: %s", r.Body)
+	}
+	if r := e.do("POST", "/api/v1/team", map[string]any{"email": email, "role": "sales_rep"}); r.Status != 422 {
+		t.Fatalf("team add of a key account: %d %s", r.Status, r.Body)
+	}
+	if n := countRows(e, "select 1 from rk_signin_links l join rk_users u on u.id = l.user_id where u.service"); n != 0 {
+		t.Fatalf("a sign-in link exists for a key account: %d", n)
+	}
+	ok := map[string]any{"name": "k2", "role": "sales_rep", "scopes": []any{"api:read:customer"}, "expires_in_days": 200000}
+	if r := e.do("POST", "/api/v1/integration-keys", ok); r.Status != 422 {
+		t.Fatalf("huge expiry: %d %s", r.Status, r.Body)
+	}
+}
+
 func mintKeyRaw(t *testing.T, e *env) string {
 	t.Helper()
 	mintKey(t, e, "sales_rep", "api:read:customer")

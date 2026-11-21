@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -50,7 +51,7 @@ func (s *Server) getTeam(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	res, err := s.DB.Query(r.Context(), `select u.id, u.email, u.full_name, m.role, m.outlets, coalesce(m.record, ''), u.signed_in_at is not null
-		from rk_members m join rk_users u on u.id = m.user_id where m.org_id = $1 order by (m.role = 'owner') desc, u.email`, c.actor.Org)
+		from rk_members m join rk_users u on u.id = m.user_id where m.org_id = $1 and not u.service order by (m.role = 'owner') desc, u.email`, c.actor.Org)
 	if err != nil {
 		fail(w, err)
 		return
@@ -96,6 +97,10 @@ func (s *Server) postTeam(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	org, ctx := c.actor.Org, r.Context()
+	if s.isServiceAccount(ctx, "email", email) { // contract 0075 §2: a key's account never signs in
+		writeError(w, http.StatusUnprocessableEntity, "bad_request", "Alamat e-mail ini dipakai kunci integrasi dan tidak bisa ditambahkan sebagai anggota tim.")
+		return
+	}
 	in := memberInput{Email: email, Name: body.FullName, Role: body.Role, Outlets: body.Outlets, Record: body.Record,
 		actor: c.p.User.Email, via: "team", note: "member set in Tim"}
 	var userID int64
@@ -160,6 +165,10 @@ func (s *Server) patchTeam(w http.ResponseWriter, r *http.Request, c *caller) {
 	if !ok {
 		return
 	}
+	if s.isServiceAccount(r.Context(), "id", id) { // integration keys are managed on their own routes
+		writeError(w, http.StatusNotFound, "not_found", msgTeamNotMember)
+		return
+	}
 	var body struct {
 		Role    *string   `json:"role"`
 		Outlets *[]string `json:"outlets"`
@@ -213,6 +222,10 @@ func (s *Server) deleteTeam(w http.ResponseWriter, r *http.Request, c *caller) {
 	if !ok {
 		return
 	}
+	if s.isServiceAccount(r.Context(), "id", id) { // integration keys are managed on their own routes
+		writeError(w, http.StatusNotFound, "not_found", msgTeamNotMember)
+		return
+	}
 	org, ctx := c.actor.Org, r.Context()
 	var removed bool
 	err := s.memberTx(ctx, func(tx *pg.Tx) (err error) {
@@ -258,4 +271,14 @@ func (s *Server) useSigninLink(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, s.Auth.SessionCookie(tok, int(s.Auth.SessionTTL.Seconds())))
 	writeJSON(w, http.StatusOK, map[string]any{"user": u})
+}
+
+// isServiceAccount reports whether the account (by "email" or "id") is the service member of an integration key.
+func (s *Server) isServiceAccount(ctx context.Context, by string, v any) bool {
+	col := "id"
+	if by == "email" {
+		col = "lower(email)" // the generated address may carry capitals; team input is lower-cased
+	}
+	res, err := s.DB.Query(ctx, "select 1 from rk_users where service and "+col+" = $1", v)
+	return err == nil && len(res.Rows) > 0
 }

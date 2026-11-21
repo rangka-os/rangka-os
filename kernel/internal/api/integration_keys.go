@@ -128,7 +128,7 @@ func (s *Server) createIntegrationKey(w http.ResponseWriter, r *http.Request, c 
 		return
 	}
 	body.Name = strings.TrimSpace(body.Name)
-	if body.Name == "" || body.ExpiresInDays < 0 {
+	if body.Name == "" || body.ExpiresInDays < 0 || body.ExpiresInDays > 3650 {
 		writeError(w, http.StatusUnprocessableEntity, "bad_request", "Nama kunci wajib diisi.")
 		return
 	}

@@ -40,7 +40,7 @@ in `docs/contracts/` ([how contracts change](https://github.com/rangka-os/rangka
 | [0032](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0032-free-module-composition.md) | Free module composition | proposed |
 | [0033](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0033-ai-drafted-company-pieces-and-connectors.md) | AI-drafted company pieces and connectors | proposed |
 | [0034](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0034-counter-compute-and-summary.md) | Counter: dry compute, summary and availability | proposed |
-| [0035](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0035-raka-skills.md) | Rangka skills: one Agent Skills library for Raka and any other harness | accepted |
+| [0035](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0035-raka-skills.md) | Rangka skills: one Agent Skills library for Zafdoz and any other harness | accepted |
 | [0036](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0036-catalogue-in-the-platform.md) | Catalogue in the platform: modules and connectors | proposed |
 | [0037](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0037-nested-navigation.md) | Nested navigation: sub-levels in menus and nav.side | accepted and implemented |
 | [0038](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0038-responsive-layout.md) | Responsive behaviour in layout.rk | accepted and implemented |

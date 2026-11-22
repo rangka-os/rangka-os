@@ -44,7 +44,7 @@ const tabs = [
 
 const features = [
   { title: 'Familiar, modern interface', text: 'Compact lists, boards and forms with quick filters, pagination and skeleton loading.', shot: 'kanban', pos: '30% 30%', icon: 'M3 4h18v4H3zM3 10h8v10H3zM13 10h8v10h-8z' },
-  { title: 'Search and ask in one place', text: '⌘K finds any record or screen, or hands the question to Raka.', shot: 'command', pos: '50% 20%', icon: 'M10 4a6 6 0 104.47 10l4.77 4.77 1.41-1.41-4.77-4.77A6 6 0 0010 4z' },
+  { title: 'Search and ask in one place', text: '⌘K finds any record or screen, or hands the question to Zafdoz.', shot: 'command', pos: '50% 20%', icon: 'M10 4a6 6 0 104.47 10l4.77 4.77 1.41-1.41-4.77-4.77A6 6 0 0010 4z' },
   { title: 'Every change is a diff', text: 'See the file, the lines and the SQL before anything goes live.', shot: 'console-changeset', pos: '20% 62%', icon: 'M6 3v12a3 3 0 103 3V9h6a3 3 0 10-3-3H9V3z' },
   { title: 'Documents that behave', text: 'Numbering at submit, cancel and amend, PPN and payments, generated from the model.', shot: 'invoice', pos: '40% 25%', icon: 'M6 2h9l5 5v15H6zM14 3v5h5' },
   { title: 'Dashboards from files', text: 'Number cards, charts and lists declared in dashboard.rk and computed on open.', shot: 'dashboard-light', pos: '55% 40%', icon: 'M4 20V10h4v10zm6 0V4h4v16zm6 0v-7h4v7z' },
@@ -52,7 +52,7 @@ const features = [
 ]
 
 const scenarios = [
-  { kicker: 'Example scenario', text: 'A coffee chain with three outlets wants the customer’s PO number on invoices. Raka, the Rangka AI agent, proposes a one-field overlay; the owner approves it from her phone and it is live before lunch.', who: 'Kopi Senja', role: 'Demo company in rangka-apps' },
+  { kicker: 'Example scenario', text: 'A coffee chain with three outlets wants the customer’s PO number on invoices. Zafdoz, the Rangka AI agent, proposes a one-field overlay; the owner approves it from her phone and it is live before lunch.', who: 'Kopi Senja', role: 'Demo company in rangka-apps' },
   { kicker: 'Example scenario', text: 'A distributor moves from spreadsheets to the sales app. Customers, items and prices are imported, PPN is calculated the way their tax consultant expects, and nothing is custom code.', who: 'Distributor template', role: 'Planned in rangka-apps' },
   { kicker: 'Example scenario', text: 'A partner deploys a POS template for a client in an afternoon, then hands the owner Rangka AI to keep adjusting it. The partner reviews high-risk change sets.', who: 'Partner deployment', role: 'Rangka Cloud, later' },
 ]

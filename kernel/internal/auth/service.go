@@ -88,7 +88,7 @@ func (p *Principal) Kind() string {
 
 // AIForbiddenMessage is the message of the ai_forbidden error: an assistant asked for something only a
 // person may do (approve, apply, revert, write records).
-const AIForbiddenMessage = "Raka tidak boleh melakukan ini; minta orang yang berwenang."
+const AIForbiddenMessage = "Zafdoz tidak boleh melakukan ini; minta orang yang berwenang."
 
 // Human reports a person signed in fully with a browser session (or the dev-open demo user). A device alone is not,
 // and neither is a PIN session (contract 0058 §2): it mints no token, manages no device or PIN, approves no change
@@ -283,7 +283,7 @@ const ScopeSecretsHost = "secrets:host"
 const ScopeMembersWrite = "members:write"
 
 // ScopeAssistant marks an API token as the assistant's (contract 0045 §3): it resolves with Via "ai", so the kernel
-// treats its holder as Raka acting for the person who minted it.
+// treats its holder as Zafdoz acting for the person who minted it.
 const ScopeAssistant = "assistant"
 
 // TokenScopes are the scopes an API token may carry.

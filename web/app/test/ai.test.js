@@ -80,22 +80,22 @@ test("pushTurn appends text deltas and activity to the last assistant turn", () 
     escalate: "Hanya pemilik yang bisa mengubah peran."
   });
   const err = RA.pushTurn([{ role: "user", text: "x" }], { type: "error", data: { code: "ai_unavailable", message: "sidecar down" } });
-  assert.strictEqual(err[1].error, "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
+  assert.strictEqual(err[1].error, "Zafdoz sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
 });
 
 test("aiErrorText maps the kernel codes to Bahasa Indonesia", () => {
   assert.strictEqual(RA.aiErrorText("ai_busy"), "Tunggu jawaban sebelumnya selesai.");
   assert.strictEqual(RA.aiErrorText("ai_rate_limited"), "Terlalu banyak pertanyaan. Coba lagi beberapa menit lagi.");
-  assert.strictEqual(RA.aiErrorText("ai_disabled"), "Raka dimatikan untuk perusahaan ini.");
+  assert.strictEqual(RA.aiErrorText("ai_disabled"), "Zafdoz dimatikan untuk perusahaan ini.");
   assert.strictEqual(RA.aiErrorText("bad_request"), "Pertanyaannya tidak bisa diproses. Coba tulis ulang.");
-  assert.strictEqual(RA.aiErrorText("ai_unavailable"), "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
-  assert.strictEqual(RA.aiErrorText("ai_forbidden"), "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
-  assert.strictEqual(RA.aiErrorText(undefined), "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
-  const slow = "Raka butuh waktu terlalu lama. Coba pertanyaan yang lebih singkat.";
+  assert.strictEqual(RA.aiErrorText("ai_unavailable"), "Zafdoz sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
+  assert.strictEqual(RA.aiErrorText("ai_forbidden"), "Zafdoz sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
+  assert.strictEqual(RA.aiErrorText(undefined), "Zafdoz sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
+  const slow = "Zafdoz butuh waktu terlalu lama. Coba pertanyaan yang lebih singkat.";
   assert.strictEqual(RA.aiErrorText("ai_timeout"), slow);
   assert.strictEqual(RA.aiErrorText("timeout"), slow, "the sidecar's own timeout");
-  assert.strictEqual(RA.aiErrorText("agent_failed"), "Raka gagal menyelesaikan permintaan ini. Coba tulis ulang.");
-  assert.strictEqual(RA.aiErrorText("unauthorized"), "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
+  assert.strictEqual(RA.aiErrorText("agent_failed"), "Zafdoz gagal menyelesaikan permintaan ini. Coba tulis ulang.");
+  assert.strictEqual(RA.aiErrorText("unauthorized"), "Zafdoz sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
 });
 
 test("trimHistory keeps the last 20", () => {
@@ -127,7 +127,7 @@ test("chat busy disables send", () => {
   // a stream that stops without done or error still ends the turn, with the unavailable message
   s = RA.aiReduce(RA.aiReduce(s, { type: "send", text: "x" }), { type: "end" });
   assert.strictEqual(s.busy, false);
-  assert.match(s.turns[s.turns.length - 1].error, /^Raka sedang tidak bisa dihubungi/);
+  assert.match(s.turns[s.turns.length - 1].error, /^Zafdoz sedang tidak bisa dihubungi/);
   assert.deepStrictEqual(RA.aiReduce(s, { type: "new" }), { turns: [], busy: false });
 });
 
@@ -140,7 +140,7 @@ test("aiStorageKey is per company and person; consoleAiStorageKey per person", (
   assert.strictEqual(RA.consoleAiStorageKey(null), null);
 });
 
-test("clearAiStorage removes every Raka conversation and nothing else; never throws", () => {
+test("clearAiStorage removes every Zafdoz conversation and nothing else; never throws", () => {
   const data = { "rk.ai.kopi-senja.a@x.id": "[]", "rk.ai.other.b@x.id": "[]", "rk.console.ai.a@x.id": "[]", "rk.console.ai": "[]",
     "rk.app.nav": "1", "rk.aix": "keep" };
   const storage = {

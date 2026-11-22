@@ -90,7 +90,7 @@ export default defineConfig({
           { text: 'Your first app', link: '/guide/first-app' },
           { text: 'Print formats', link: '/guide/print-formats' },
           { text: 'Process canvas', link: '/guide/process-canvas' },
-          { text: 'Raka in the app', link: '/guide/assistant' }
+          { text: 'Zafdoz in the app', link: '/guide/assistant' }
         ] }
       ],
       '/concepts/': [
@@ -134,7 +134,7 @@ export default defineConfig({
         { text: 'Tools', items: [
           { text: 'Rangka Console', link: '/tools/console' },
           { text: 'Rangka AI', link: '/tools/rangka-ai' },
-          { text: 'Raka in the app', link: '/guide/assistant' }
+          { text: 'Zafdoz in the app', link: '/guide/assistant' }
         ] }
       ],
       '/ecosystem/': [

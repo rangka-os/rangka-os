@@ -12,7 +12,7 @@ make test       # all tests against a throwaway Postgres (started and removed by
 make test-unit  # tests that need no database (DB tests skip)
 make run-demo   # temp Postgres → migrate → seed → serve :8080 with --dev-open; Ctrl-C cleans up
                 # (another port: make run-demo ADDR=:8090; other folders: APPS=… SITE=…)
-                # (+ the Raka sidecar, scripted, when ../rangka-ai or $RANGKA_AI_DIR is built)
+                # (+ the Zafdoz sidecar, scripted, when ../rangka-ai or $RANGKA_AI_DIR is built)
 make validate   # rangka validate on testdata/catalogue-v0 (rangka-apps as of v0) + rangka-connectors
 make compare-python   # Go vs rangka_validate.py on the v0 catalogue, the broken copies and the modules/apps fixtures (must be identical)
 ```

@@ -133,7 +133,7 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 	}
 	if a.Assistant { // the platform's hard limits (contract 0045 §2): no risk level makes these proposable
 		if paths := AssistantForbidden(cs.Ops, parsed(live, nil), parsed(live, files)); len(paths) > 0 {
-			return nil, &Error{403, "ai_forbidden_path", "Raka tidak bisa mengusulkan perubahan ini: " + strings.Join(paths, ", ") +
+			return nil, &Error{403, "ai_forbidden_path", "Zafdoz tidak bisa mengusulkan perubahan ini: " + strings.Join(paths, ", ") +
 				". Bagian ini diubah lewat Console oleh admin atau pemilik.", map[string]any{"paths": paths}}
 		}
 	}
@@ -493,9 +493,9 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 	if err != nil || !auto {
 		return cs, err
 	}
-	// A low-risk proposal from Raka is applied once previewed when the company opted in with
+	// A low-risk proposal from Zafdoz is applied once previewed when the company opted in with
 	// config.ai.auto_apply: low_risk. The kernel applies it as the system on the company's own setting:
-	// Raka's token still cannot apply (Apply refuses an assistant actor). Apply takes s.mu itself.
+	// Zafdoz's token still cannot apply (Apply refuses an assistant actor). Apply takes s.mu itself.
 	return s.Apply(ctx, Actor{ID: "system", Org: a.Org, Kind: "system"}, cs.ID)
 }
 
@@ -1012,7 +1012,7 @@ func connectorFlowUse(files map[string]*string) (used map[string][]string, writt
 
 // splitConnectorFlows reports (connector_untested, one error per flow file) a change set that writes a company
 // connector and also adds or changes flows that use it. The apply resets the connector's test, so such a change set
-// could never apply (connectorsTested): it is found at validate, where Raka's self-repair reads it, and is split in
+// could never apply (connectorsTested): it is found at validate, where Zafdoz's self-repair reads it, and is split in
 // two (contract 0062 §7): (1) the connector with its models and dashboards, (2) the flows, which may be approved
 // before the owner's test and apply after it.
 func splitConnectorFlows(files map[string]*string) []meta.Item {

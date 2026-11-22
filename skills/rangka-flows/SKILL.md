@@ -6,7 +6,7 @@ metadata: {rangka: {version: 0.5.0, writes: [flows, custom, models], requires: [
 
 # Rangka flows and automation
 
-Everything here reaches the site through a change set (`rangka-changesets`): Raka proposes, validates and previews,
+Everything here reaches the site through a change set (`rangka-changesets`): Zafdoz proposes, validates and previews,
 a person approves. Snippets use schema 0.5 (`schema/0.5/flow.json`, `model.json`, `overlay.json`); every one in
 [references/worked-flows.md](references/worked-flows.md) passes `rangka validate`.
 
@@ -68,7 +68,7 @@ steps: [...]
   inside `for_each` they are `for_each_pause`.
 - **`set:` values are CEL**: text needs inner quotes (`"'Dibuat otomatis'"`), `'false'` is the boolean false.
   CEL dialect, functions and traps: [references/cel.md](references/cel.md).
-- **`description: {id: ...}` is required from Raka** (contract 0060 §1): one or two owner sentences, conditions
+- **`description: {id: ...}` is required from Zafdoz** (contract 0060 §1): one or two owner sentences, conditions
   included, at most 280 characters. Proses bisnis shows it to everyone who can see the process, so never name a
   document some readers may not open. Also give it to any approval you write a `label` for.
 - **Who it runs as.** An event flow runs inside the writer's save or submit, as the writer: a `find` on a model that
@@ -95,9 +95,9 @@ approvals:
   say so.
 - A foreign-currency document waits too: its rate is typed by the maker.
 - Two policies that match both need approval; there is no order between them.
-- Raka never decides an approval and never approves a change set. MCP `rangka_approvals_list` is read-only; deciding
+- Zafdoz never decides an approval and never approves a change set. MCP `rangka_approvals_list` is read-only; deciding
   needs a person in the app (`403 human_required` for tokens).
-- Approvers are roles, not names. Who holds a role is set in the Console by the owner; Raka cannot change roles
+- Approvers are roles, not names. Who holds a role is set in the Console by the owner; Zafdoz cannot change roles
   (`ai_forbidden_path`).
 
 ## 5. Telling people
@@ -109,7 +109,7 @@ approvals:
 | WhatsApp, push, SMS | `channel: whatsapp`/`push` only log today | real WhatsApp needs a connector `call:` (check `rangka_catalogue`, `connectors_run`) |
 | Customer messages | a person sends (print "Pesan tagihan WA") or a connector action | never a notice: notices go to members only |
 
-- Tell **roles**, not addresses: a literal email in a Raka change set is raised to high (`notice_literal_email`).
+- Tell **roles**, not addresses: a literal email in a Zafdoz change set is raised to high (`notice_literal_email`).
 - Give a stable `id:` (`"'telat14:' + inv.name"`) so a retry or a rerun tells nobody twice; `record:` (link and read
   check: `notice_role_cannot_read` if a role may not open it); `outlet:` when it is about one outlet.
 - Title at most 80 characters, text 300 (`notice_too_long`). No phone, address, NIK or notes in the text
@@ -135,7 +135,7 @@ approvals:
 
 ## 7. Money and stock
 
-- Money and stock never depend on an LLM: flows are deterministic CEL, and Raka never sits inside a run.
+- Money and stock never depend on an LLM: flows are deterministic CEL, and Zafdoz never sits inside a run.
 - A flow may prepare **drafts** (a PO, an invoice) for a person to check and submit; it never submits, approves or
   pays. Creating drafts in invoicing, payments or stock, or writing a money or stock field, makes the change set
   high risk (owner only).

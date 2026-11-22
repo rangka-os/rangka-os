@@ -369,7 +369,7 @@ func TestMembersTokenCannotClearPin(t *testing.T) {
 	e.must(204, "DELETE", "/api/v1/members/"+strconv.FormatInt(id, 10)+"/pin", nil)
 }
 
-// A PIN session of an approver role applies no change set, uses no Raka chat and does not reach MCP (contract
+// A PIN session of an approver role applies no change set, uses no Zafdoz chat and does not reach MCP (contract
 // 0058 §2); the same member signed in fully still applies.
 func TestPinSessionNoApplyChatMCP(t *testing.T) {
 	e := newEnv(t, false, func(apps, site string) { roleKey(t, apps, "sales_manager", "desk: false") }) // an approver in config.rk

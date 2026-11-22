@@ -16,7 +16,7 @@ reviewing changes. It ships in `rangka-os/web/console` and is served by the kern
 | Audit log | Every write and change-set transition, filterable by kind, actor and organisation |
 
 The screens sit in a Frappe-style sidebar grouped by layer, with ⌘K search. When the kernel runs the AI sidecar,
-**Tanya Raka** (⌘J) opens [Raka](/guide/assistant) here too; a change Raka proposes opens on the Change set screen,
+**Tanya Zafdoz** (⌘J) opens [Zafdoz](/guide/assistant) here too; a change Zafdoz proposes opens on the Change set screen,
 where a person approves it.
 
 Run it against a kernel (sign in with your Rangka ID), or with no kernel at all in demo mode:

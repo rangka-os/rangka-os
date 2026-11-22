@@ -201,7 +201,7 @@ func TestPlanAICredits(t *testing.T) {
 		}
 	}
 	status, out, err := chatRaw(e, ask("Halo"))
-	if err != nil || status != 403 || !strings.Contains(out, `"plan_limit"`) || !strings.Contains(out, "Kredit Raka bulan ini sudah habis") {
+	if err != nil || status != 403 || !strings.Contains(out, `"plan_limit"`) || !strings.Contains(out, "Kredit Zafdoz bulan ini sudah habis") {
 		t.Fatalf("third chat over 2 credits = %d %v %s", status, err, out)
 	}
 	rep := e.must(200, "GET", "/api/v1/plan", nil).JSON

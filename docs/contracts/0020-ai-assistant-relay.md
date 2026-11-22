@@ -4,7 +4,7 @@ Status: proposed (5 Nov 2026) · Owner of the change: rangka-os (kernel, web) an
 
 ## Context
 
-Raka, the AI agent in `rangka-ai`, should answer and propose change sets from inside the app and the Console (the ⌘J ask bar and chat drawer). Today `rangka-ai` is a CLI and library that talks to the kernel over MCP. Contract 0000 marked it as paused; this contract resumes it. The browser must never hold an LLM key, and AI must never approve or apply a change set.
+Zafdoz, the AI agent in `rangka-ai`, should answer and propose change sets from inside the app and the Console (the ⌘J ask bar and chat drawer). Today `rangka-ai` is a CLI and library that talks to the kernel over MCP. Contract 0000 marked it as paused; this contract resumes it. The browser must never hold an LLM key, and AI must never approve or apply a change set.
 
 ## Decision
 
@@ -13,7 +13,7 @@ Raka, the AI agent in `rangka-ai`, should answer and propose change sets from in
    - Body: `{"message": "…", "history": [{"role": "user"|"assistant", "text": "…"}], "context": {"route": "#/r/sales_invoice/INV-…", "title": "…", "model": "sales_invoice", "record": "INV-…"}}`. `history` holds at most 20 turns; older ones are dropped by the client. A `message` over 4,000 characters is refused with `400 bad_request` ("Pertanyaan terlalu panjang (maksimal 4.000 karakter).").
    - Response: `text/event-stream`, the sidecar's events passed through unchanged (point 3).
    - `404 not_found` when no sidecar is configured (no `--ai-url`, or no callback URL, point 7), `403 ai_disabled` when `config.ai.enabled` is false.
-   - A sidecar that is configured but not answering (down, refused secret, broken stream) gives `200` with one `error` event `{"code": "ai_unavailable"}`; the person sees "Raka sedang tidak bisa dihubungi". A chat past its time limit ends with `error` `ai_timeout`.
+   - A sidecar that is configured but not answering (down, refused secret, broken stream) gives `200` with one `error` event `{"code": "ai_unavailable"}`; the person sees "Zafdoz sedang tidak bisa dihubungi". A chat past its time limit ends with `error` `ai_timeout`.
 2. **Kernel → sidecar: `POST <ai-url>/v1/chat`.**
    - The kernel sends the browser body plus `{"mcp": {"url": "<kernel>/mcp", "token": "<delegated>"}, "org": "…", "user": {"id", "name", "roles"}}`.
    - The delegated token is short-lived (10 minutes), has scope `rangka.mcp`, acts as the person, and carries the claim `ai: true`.
@@ -29,14 +29,14 @@ Raka, the AI agent in `rangka-ai`, should answer and propose change sets from in
    - `text` `{"delta": "…"}`: reply text, appended in order.
    - `tool` `{"name": "rangka_query", "summary": "Membaca 20 faktur"}`: activity line.
    - `changeset` `{"id", "title", "risk", "status"}`: a change set the sidecar proposed. Its status is `previewed` or `invalid`.
-   - `escalate` `{"reason": "…"}`: something Raka may not do, and who can.
+   - `escalate` `{"reason": "…"}`: something Zafdoz may not do, and who can.
    - `error` `{"code", "message"}`: ends the stream. Codes the kernel writes: `ai_unavailable`, `ai_timeout`, `bad_request` (the sidecar refused the body). Codes the sidecar writes, passed through unchanged: `bad_request`, `unauthorized`, `agent_failed`, `timeout` (the sidecar's own time limit). The browser shows a Bahasa Indonesia message per code and reads any other code as `ai_unavailable`.
    - `done` `{}`: ends the stream.
 4. **Guardrails in the kernel, not only in prompts.**
    - A request authenticated by a token with `ai: true` is refused with `403 ai_forbidden` for every REST call that is not `GET` or `HEAD` under `/api/v1/` (`POST /api/v1/ai/chat` included): approve, reject, apply and revert of change sets, record create, update, delete, lifecycle and actions. It proposes change sets over MCP only, and the MCP approve/apply tools refuse it the same way.
-   - Raka's token never applies, whatever `config.ai.auto_apply` says.
-   - Exception decided by the owner (5 Nov 2026): when the company sets `config.ai.auto_apply: low_risk`, the kernel itself applies a low-risk change set from Raka right after its preview succeeds. It applies it as `system` on the company's own setting, and the history notes `applied automatically (config.ai.auto_apply: low_risk)`. Medium and high risk still wait for a person. The default (`never`) applies nothing automatically. Outside that step only an approver (`config.ai.approvers`) may apply a validated low-risk change set without a separate approval; anyone else gets `409 not_approved`.
-   - Approvers see `source: "ai"` as "Dari Raka" in Ubah and the Console.
+   - Zafdoz's token never applies, whatever `config.ai.auto_apply` says.
+   - Exception decided by the owner (5 Nov 2026): when the company sets `config.ai.auto_apply: low_risk`, the kernel itself applies a low-risk change set from Zafdoz right after its preview succeeds. It applies it as `system` on the company's own setting, and the history notes `applied automatically (config.ai.auto_apply: low_risk)`. Medium and high risk still wait for a person. The default (`never`) applies nothing automatically. Outside that step only an approver (`config.ai.approvers`) may apply a validated low-risk change set without a separate approval; anyone else gets `409 not_approved`.
+   - Approvers see `source: "ai"` as "Dari Zafdoz" in Ubah and the Console.
    - Change sets created this way get `created_by` = the person and `source: "ai"` (schema `changeset.json`).
    - A change set proposed for another organisation than the caller's is refused with `403 org_mismatch`, for every caller, not only the assistant.
 5. **Audit.** One audit entry per chat request: person, org, tool names used, change set ids, duration. Message text is not stored.

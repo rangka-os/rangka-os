@@ -271,7 +271,7 @@ func (s *Server) getTours(w http.ResponseWriter, r *http.Request, c *caller) {
 }
 
 // putTour is PUT /api/v1/onboarding/tours/{tour} {state: "seen" | "skipped" | ""}: the caller's own state of one
-// tour; "" forgets it so the tour can start again. Raka never calls it (the assistant writes nothing here).
+// tour; "" forgets it so the tour can start again. Zafdoz never calls it (the assistant writes nothing here).
 func (s *Server) putTour(w http.ResponseWriter, r *http.Request, c *caller) {
 	tour := r.PathValue("tour")
 	if !tourName.MatchString(tour) {

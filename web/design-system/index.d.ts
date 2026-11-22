@@ -25,10 +25,10 @@ export interface PosKeypadProps { initial?: number; offline?: boolean; queued?: 
 export declare function PosKeypad(props: PosKeypadProps): React.ReactElement;
 export type RakaState = 'netral' | 'senang' | 'tidur' | 'gagal' | 'mikir' | 'ngetik' | 'cari' | 'baca' | 'kerja' | 'nyusun' | 'muter' | 'sinkron';
 export type RakaReaction = 'lompat' | 'angguk' | 'geleng' | 'kaget' | 'ide' | 'dadah' | 'kedip' | 'lihat' | 'pusing';
-/** Raka, the AI agent: ink head, square eyes, titik status light. `state` loops: the working states (mikir, ngetik, cari, baca, kerja = old baca, nyusun, muter, sinkron) light the titik teal, gagal turns it red. `react` plays a reaction once on top of the state (change `reactKey` to replay). Alive by default (one shared loop: follows the pointer, blinks, a click plays lompat); `playful` (default from 48 px) adds drag, five clicks = pusing; `idle` (default = playful) fidgets while netral. Reduced motion draws one still pose and plays no reaction. `interactive: false` keeps it still. `title: ""` hides it from assistive tech. */
+/** Zafdoz, the AI agent: ink head, square eyes, titik status light. `state` loops: the working states (mikir, ngetik, cari, baca, kerja = old baca, nyusun, muter, sinkron) light the titik teal, gagal turns it red. `react` plays a reaction once on top of the state (change `reactKey` to replay). Alive by default (one shared loop: follows the pointer, blinks, a click plays lompat); `playful` (default from 48 px) adds drag, five clicks = pusing; `idle` (default = playful) fidgets while netral. Reduced motion draws one still pose and plays no reaction. `interactive: false` keeps it still. `title: ""` hides it from assistive tech. */
 export interface RakaProps { size?: number; title?: string; withName?: boolean; company?: string; state?: RakaState; react?: RakaReaction; reactKey?: string | number; interactive?: boolean; playful?: boolean; idle?: boolean; onClick?: () => void }
 export declare function Raka(props: RakaProps): React.ReactElement;
-/** Plays a reaction on every live Raka, or only on those inside `scope`; returns how many played (0 under reduced motion). */
+/** Plays a reaction on every live Zafdoz, or only on those inside `scope`; returns how many played (0 under reduced motion). */
 export declare function rakaReact(name: RakaReaction, scope?: Element): number;
 /** The working state for a step label: "Membaca berkasmu" → baca, "Menyusun usulan" → nyusun; muter when nothing matches. */
 export declare function rakaMood(label: string): RakaState;
@@ -49,7 +49,7 @@ export interface DrawerProps { title: string; subtitle?: string; icon?: IconName
 export declare function Drawer(props: DrawerProps): React.ReactElement | null;
 export declare function DrawerSection(props: { title?: string; children?: Node }): React.ReactElement;
 export interface CommandItem { label: string; icon?: IconName; sub?: string; kbd?: string; onSelect?: (query: string) => void }
-/** ask: false drops the built-in "Tanya Raka" item and the > / @ hints; onQuery gets every keystroke (for a server search).
+/** ask: false drops the built-in "Tanya Zafdoz" item and the > / @ hints; onQuery gets every keystroke (for a server search).
  *  A group with filter: false is shown as given (its items already match, e.g. server results); others filter by label + sub. */
 export interface CommandMenuProps { groups: { label: string; items: CommandItem[]; filter?: boolean }[]; query?: string; placeholder?: string; open?: boolean; ask?: boolean; onQuery?: (q: string) => void; onClose?: () => void }
 export declare function CommandMenu(props: CommandMenuProps): React.ReactElement | null;
@@ -217,13 +217,13 @@ export declare function AskBar(props: { open: boolean; context: { label: string 
 export type ChangesetRisk = 'low' | 'medium' | 'high' | 'unknown';
 export interface ChatChangeset { id: string; title: string; risk: ChangesetRisk; status: string }
 export interface ChatTurn { role: 'user' | 'assistant'; text: string; activity?: string[]; changesets?: ChatChangeset[]; escalate?: string; error?: string }
-/** Chat with Raka, non-modal (no scrim), full screen at 600px and below. `mode`: "drawer" (440px on the right, default), "float" (above RakaLauncher), "dock" (beside the page, `width` 360 to 640 with a keyboard and pointer resize grip, "Perbesar" calls onExpand) or "full" (covers the window, conversation at most 720px wide, head shows the conversation title, "Kecilkan" and Esc call onCollapse). The log is aria-live="polite" and scrolls to the newest turn.
+/** Chat with Zafdoz, non-modal (no scrim), full screen at 600px and below. `mode`: "drawer" (440px on the right, default), "float" (above RakaLauncher), "dock" (beside the page, `width` 360 to 640 with a keyboard and pointer resize grip, "Perbesar" calls onExpand) or "full" (covers the window, conversation at most 720px wide, head shows the conversation title, "Kecilkan" and Esc call onCollapse). The log is aria-live="polite" and scrolls to the newest turn.
  *  The default change set card shows title, risk pill, "Lihat pratinjau" (onPreview) and "Buka di Ubah" (onOpenUbah); renderChangeset replaces it. */
 export declare function ChatDrawer(props: { open: boolean; turns: ChatTurn[]; busy?: boolean; onSend: (text: string) => void; onNew?: () => void; onClose: () => void;
-/** OS / Raka · Diam | Hover | Tersembunyi | Terbuka: the floating Raka button, 24px from the bottom right. Hover or focus
- *  widens it to "Tanya Raka ⌘J" with the waiting count; its small button tucks it against the right edge. Mount it only
- *  where Raka is on (meta.features.ai === true). */
-/** Chat / Format / * (Figma "Raka Chat" › Isi jawaban): Raka's markdown as React elements, never HTML. Headings, bold,
+/** OS / Zafdoz · Diam | Hover | Tersembunyi | Terbuka: the floating Zafdoz button, 24px from the bottom right. Hover or focus
+ *  widens it to "Tanya Zafdoz ⌘J" with the waiting count; its small button tucks it against the right edge. Mount it only
+ *  where Zafdoz is on (meta.features.ai === true). */
+/** Chat / Format / * (Figma "Zafdoz Chat" › Isi jawaban): Zafdoz's markdown as React elements, never HTML. Headings, bold,
  * italic, `code`, safe links (http(s), mailto, "/path", "#anchor"), lists, quotes, GFM tables (numbers right-aligned),
  * key-values (a list of "**Label:** value"), ``` code blocks with language/file and Salin, callouts
  * (> [!NOTE] | [!TIP] | [!WARNING] | [!CAUTION]). `collapse` folds an answer longer than that many lines. */
@@ -261,13 +261,13 @@ export declare function OfferCompare(props: { offer: Offer; closedLabel?: string
   footer?: Node; className?: string }): React.ReactElement;
 /** The block list RichText draws (for tests and tools). */
 export declare function markdownBlocks(text: string): Array<{ t: "h" | "p" | "list" | "kv" | "table" | "code" | "quote" | "callout" | "hr"; [k: string]: unknown }>;
-/** The link a Raka answer may open, or "" (javascript:, data:, //host and the like stay text). */
+/** The link a Zafdoz answer may open, or "" (javascript:, data:, //host and the like stay text). */
 export declare function safeHref(url: string): string;
 export declare function RakaLauncher(props: { open: boolean; pending?: number; busy?: boolean; failed?: boolean; state?: RakaState; react?: RakaReaction; reactKey?: string | number; tucked?: boolean; onToggle: () => void; onTuck?: (tucked: boolean) => void }): React.ReactElement;
   renderChangeset?: (cs: ChatChangeset) => Node; onPreview?: (id: string) => void; onOpenUbah?: (id: string) => void;
   /** same as mode="float" */ floating?: boolean; mode?: 'drawer' | 'float' | 'dock' | 'full'; width?: number; onResize?: (width: number) => void; onExpand?: () => void; onCollapse?: () => void; /** no longer shown */ subtitle?: string; /** the page title as a context chip */ context?: string | null }): React.ReactElement | null;
 /** Dock width: NaN or a non-number gives 400; clamped to 360..640, and with a viewport width at most viewport - 640 (never below 360). */
 export declare function clampDockWidth(w: unknown, viewport?: number): number;
-/** The first user message, whitespace collapsed, at most 60 characters cut on a word with "…"; "Raka" when there is none. */
+/** The first user message, whitespace collapsed, at most 60 characters cut on a word with "…"; "Zafdoz" when there is none. */
 export declare function conversationTitle(turns: ChatTurn[]): string;
 declare global { interface Window { Rangka: Record<string, any> } }

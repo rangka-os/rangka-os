@@ -182,7 +182,7 @@ func (s *Server) getJob(w http.ResponseWriter, r *http.Request, c *caller) {
 // named in config.rk connector_auth replays; the assistant and OIDC helpers never do (a replay can resend a payment).
 func (s *Server) replayJob(w http.ResponseWriter, r *http.Request, c *caller) {
 	if c.p.Via == "ai" || c.p.Via == "oidc" {
-		writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa mengulang tugas yang gagal; minta pemilik usaha.")
+		writeError(w, 403, "ai_forbidden", "Zafdoz dan helper tidak bisa mengulang tugas yang gagal; minta pemilik usaha.")
 		return
 	}
 	if !s.mayManageSecrets(c) {

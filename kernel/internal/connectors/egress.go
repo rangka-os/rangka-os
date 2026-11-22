@@ -17,7 +17,7 @@ var ErrEgressRefused = errors.New("egress_refused")
 
 // Egress is the platform's connector egress policy, set by whoever runs the kernel (RANGKA_CONNECTOR_EGRESS), never by
 // a company's files: on a hosted kernel the company controls system.rk and its connectors, so a connector of its own
-// could otherwise reach the platform's internal services (the Raka sidecar on loopback or in the VPC, the cloud's
+// could otherwise reach the platform's internal services (the Zafdoz sidecar on loopback or in the VPC, the cloud's
 // metadata address) from the kernel's network (audit business-raka F1).
 //
 //   - "" or "any": no limit (self-hosting, demos whose mocks listen on loopback).

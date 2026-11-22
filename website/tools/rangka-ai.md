@@ -44,5 +44,5 @@ npx tsx src/cli.ts chat --kernel http://localhost:8080 --token rk_… --provider
 
 Providers: Anthropic and any OpenAI-compatible API; a scripted provider runs every test offline.
 
-`rangka-ai serve` is the HTTP sidecar the kernel relays to, so Raka answers inside the app and the Console:
-see [Raka in the app](/guide/assistant).
+`rangka-ai serve` is the HTTP sidecar the kernel relays to, so Zafdoz answers inside the app and the Console:
+see [Zafdoz in the app](/guide/assistant).

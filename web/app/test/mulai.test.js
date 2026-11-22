@@ -91,7 +91,7 @@ test("kenalan: a welcome, then at most five lit places; Mulai di sini only when 
 });
 
 // The welcome tour per person (kenalanSteps with meta): the owner's tour stays as it was; staff get their own work.
-const OWNER_TITLES = ["Selamat datang di Toko", "Mulai di sini", "Persetujuan", "Menu usaha", "Tanya Raka", "Bantuan ada di sini"];
+const OWNER_TITLES = ["Selamat datang di Toko", "Mulai di sini", "Persetujuan", "Menu usaha", "Tanya Zafdoz", "Bantuan ada di sini"];
 const can = (c) => ({ read: true, create: !!c });
 const person = (roles, extra) => Object.assign({ user: { roles }, roles: {}, models: {}, screens: {}, flows: {} }, extra || {});
 const titles = (steps) => plain(steps.map((s) => s.title));
@@ -169,12 +169,12 @@ const SALES = person(["field_sales"], { models: {
 const SALES_NAV = [{ label: "Penjualan", items: [{ id: "r/customer_order", label: "Pesanan pelanggan" }, { id: "r/payment", label: "Pembayaran" }] },
   { label: "Pengiriman", items: [{ id: "r/order_fulfilment", label: "Pemenuhan pesanan" }] }, { label: "Data induk", items: [{ id: "r/customer", label: "Pelanggan" }] }];
 
-test("kenalan staff: salesman sees where they record orders; Raka only when it is on", () => {
+test("kenalan staff: salesman sees where they record orders; Zafdoz only when it is on", () => {
   const off = A.kenalanSteps({ company: "CV", meta: SALES, groups: SALES_NAV, raka: false });
   assert.deepStrictEqual(titles(off), ["Selamat datang di CV", "Penjualan", "Pengiriman", "Bantuan ada di sini"]);
   assert.match(off[1].body, /mencatat pesanan pelanggan\./);
   const on = A.kenalanSteps({ company: "CV", meta: SALES, groups: SALES_NAV, raka: true });
-  assert.deepStrictEqual(titles(on), ["Selamat datang di CV", "Penjualan", "Pengiriman", "Tanya Raka", "Bantuan ada di sini"]);
+  assert.deepStrictEqual(titles(on), ["Selamat datang di CV", "Penjualan", "Pengiriman", "Tanya Zafdoz", "Bantuan ada di sini"]);
   assert.doesNotMatch(bodies(on), /usahamu|keputusanmu/);
 });
 
@@ -226,7 +226,7 @@ test("kenalan staff: five lit places at most; work places drop first, Persetujua
   const meta = Object.assign({}, RITEL, { models: Object.assign({}, RITEL.models,
     { outlet_sales: Object.assign({}, RITEL.models.outlet_sales, { approvals: [{ name: "void", approvers: ["outlet_staff"] }] }) }) });
   const both = A.kenalanSteps({ company: "Toko", meta, groups: RITEL_NAV, raka: true, approvals: true });
-  assert.deepStrictEqual(titles(both), ["Selamat datang di Toko", "Penjualan toko", "Stok", "Persetujuan", "Tanya Raka", "Bantuan ada di sini"]);
+  assert.deepStrictEqual(titles(both), ["Selamat datang di Toko", "Penjualan toko", "Stok", "Persetujuan", "Tanya Zafdoz", "Bantuan ada di sini"]);
   assert.match(both[0].body, /tempat kerjamu: Penjualan toko dan Stok\./);
   const one = A.kenalanSteps({ company: "Toko", meta, groups: RITEL_NAV, raka: false, approvals: true });
   assert.deepStrictEqual(titles(one), ["Selamat datang di Toko", "Penjualan toko", "Stok", "Pembelian", "Persetujuan", "Bantuan ada di sini"]);
@@ -317,7 +317,7 @@ test("kenalan owner: Menu usaha lights the first group of records, not the Dasbo
   const menu = steps.find((x) => x.title === "Menu usaha");
   assert.ok(menu && typeof menu.target === "function" && menu.optional);
   // same titles and copy as before: only the target moved
-  assert.deepStrictEqual(titles(steps), ["Selamat datang di Toko", "Mulai di sini", "Persetujuan", "Menu usaha", "Tanya Raka", "Bantuan ada di sini"]);
+  assert.deepStrictEqual(titles(steps), ["Selamat datang di Toko", "Mulai di sini", "Persetujuan", "Menu usaha", "Tanya Zafdoz", "Bantuan ada di sini"]);
 });
 
 test("canApprove: an approve: step of a scheduled or connector flow counts too (audit F1)", () => {

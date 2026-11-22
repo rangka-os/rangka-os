@@ -15,7 +15,7 @@ rangka-apps run.
 
 Never design from memory. Before drafting anything:
 
-| Need | MCP (how Raka runs) | In a checkout |
+| Need | MCP (how Zafdoz runs) | In a checkout |
 | --- | --- | --- |
 | Which apps and modules are installed or available | `rangka_catalogue` | `rangka catalogue --json --apps <apps> --site <site>` |
 | Every installed model with its fields, overlays included | `rangka_meta` | open `modules/<m>/models/*.rk`, `site/custom/*.rk`, `site/models/*.rk` |
@@ -120,7 +120,7 @@ Common keys: `required`, `default` / `compute` (never both), `read_only`, `hidde
   that moves stock. The kernel rates every add or change of such a field **high** (owner only).
 - Payments, invoices, stock moves and journals stay in the core modules (`payments`, `invoicing`, `stock`,
   `accounting`). A company model may hold money fields (a deduction, a fee), but money moving between parties is
-  posted by the modules. Money and stock never depend on an LLM: totals are `compute`, never typed by you or by Raka.
+  posted by the modules. Money and stock never depend on an LLM: totals are `compute`, never typed by you or by Zafdoz.
 - A field a client fills once and nobody rewrites (clock-in time, photo, position): `set_once: true`.
 - Approval thresholds go in `approvals` on the model or an overlay (`on: submit`, `when`, `approvers`).
 
@@ -209,7 +209,7 @@ Worked examples (rental deposit, course exam, outsourcing contract), all validat
 - Never write SQL, table names (`r_...`) or migrations; never promise an index or a speed-up the schema cannot express.
 - Never create a second master list, a per-period model, or a model that duplicates a catalogue module.
 - Never propose an edit to `apps/` or `modules/` files, a delete, or a change to an existing model's `permissions`.
-- Never let a total, tax, balance or stock quantity be typed by Raka: it is a `compute` or a module posting.
+- Never let a total, tax, balance or stock quantity be typed by Zafdoz: it is a `compute` or a module posting.
 - Never model personal data the process does not need.
 
 ## Sources

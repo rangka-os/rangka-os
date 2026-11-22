@@ -522,7 +522,7 @@
     api.process = function (name) { return json("GET", "/api/v1/processes/" + enc(name)); };
     api.processes = function () { return json("GET", "/api/v1/processes").then(function (r) { return (r && r.data) || []; }); };
 
-    /* ----- Raka (contract 0020) */
+    /* ----- Zafdoz (contract 0020) */
     /** POST /api/v1/ai/chat {message, history, context} and read the text/event-stream answer: onEvent({type, data}) for
      *  every event in order (text, tool, changeset, escalate, error, done); resolves when the stream ends. A refusal before
      *  streaming (404 not_found, 403 ai_disabled | ai_forbidden, 429 ai_busy | ai_rate_limited, 400 bad_request) rejects

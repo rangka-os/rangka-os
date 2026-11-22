@@ -26,7 +26,7 @@ offer rules), rangka-cloud (catalogue entries, provisioning, settlement; private
     `biteship` specs, each with credentials the owner enters.
   - Paired devices, PIN and offline selling are 0058. Nothing there needs Rangka Cloud.
 - **The gap.** There is no way for a credential to come from the platform instead of the owner, no marker that tells
-  the kernel, the web app and Raka that a connector is served by the host, and no rule for where money a ◆ payment
+  the kernel, the web app and Zafdoz that a connector is served by the host, and no rule for where money a ◆ payment
   service collects is recorded.
 
 ## Decision
@@ -55,7 +55,7 @@ offer rules), rangka-cloud (catalogue entries, provisioning, settlement; private
     the host only.
 - All of 0017 §5–§7 applies unchanged: `hosts:` declared, https only, secrets only in headers and signatures, the
   scrubber, webhook verification over the raw body. The connector's `hosts:` is the host's public service address.
-- Overlays and the company layer cannot change it (0017 §5), and Raka cannot propose edits to it (0033 §5): it is a
+- Overlays and the company layer cannot change it (0017 §5), and Zafdoz cannot propose edits to it (0033 §5): it is a
   catalogue connector.
 
 **Which host connectors a kernel serves.**
@@ -94,13 +94,13 @@ its write actions.
 
 ### 3. Catalogue entry and who serves it
 
-**Entry shape.** The host keeps one entry per service. The open side fixes the shape so Raka, the web app and the
+**Entry shape.** The host keeps one entry per service. The open side fixes the shape so Zafdoz, the web app and the
 Cloud console read the same thing; the values live in the host.
 
 ```yaml
 id: payment_gateway          # snake_case, unique
 title: {id: …, en: …}
-summary: {id: …, en: …}      # one sentence Raka may show as written
+summary: {id: …, en: …}      # one sentence Zafdoz may show as written
 provided_by: rangka-cloud
 status: planned              # planned | beta | available
 kind: payments               # payments | devices | messaging | shipping
@@ -123,18 +123,18 @@ docs: <url>                  # the service's page in the host's docs
   the web app can mark a host connector ◆ "Disediakan Rangka Cloud". This is the 0036 catalogue marker. Fees are
   never in the kernel.
 
-**What Raka may offer.**
+**What Zafdoz may offer.**
 - Only `beta` and `available` entries. A `beta` service is called beta.
-- `planned` is "belum tersedia": Raka puts it on the map as a ◆ item and never proposes switching it on.
-- Fees and terms are quoted only from the entry and its docs, as written. When they say nothing, Raka says the
-  information is not available yet. Raka never estimates a fee and never compares with a provider's public price.
-- Raka never asks for identity documents, bank account numbers or KYC details in chat. It points to the host's
+- `planned` is "belum tersedia": Zafdoz puts it on the map as a ◆ item and never proposes switching it on.
+- Fees and terms are quoted only from the entry and its docs, as written. When they say nothing, Zafdoz says the
+  information is not available yet. Zafdoz never estimates a fee and never compares with a provider's public price.
+- Zafdoz never asks for identity documents, bank account numbers or KYC details in chat. It points to the host's
   onboarding screens (D3). KYC data never enters the kernel either.
 
 ### 4. Switching on and off
 
 **On.**
-1. Raka offers the service. It may call the reserved `cloud_propose_service_on {id}` (amends 0041 §4), which shows a
+1. Zafdoz offers the service. It may call the reserved `cloud_propose_service_on {id}` (amends 0041 §4), which shows a
    card (0041 §5). Or the owner presses "Aktifkan" in the host's console.
 2. The owner confirms in the host with their own session. The host runs its own steps (plan check; for payments,
    collecting the owner's data and documents in its onboarding screens, submitting them to DOKU for verification and
@@ -146,12 +146,12 @@ docs: <url>                  # the service's page in the host's docs
 4. The owner approves and applies it. Risk is **high** (money-touching connector, 0036 §5; `system.rk` once ports
    exist), so owner only.
 
-- Raka proposes only through step 1. It never writes `config.connectors` or `ports:` for a host connector itself, so
+- Zafdoz proposes only through step 1. It never writes `config.connectors` or `ports:` for a host connector itself, so
   0033 §5's escalation of `system.rk` stays as it is.
 - On a kernel without the host, step 3 is impossible: `connector_host_unavailable`.
 
 **Off** (D6).
-1. The owner asks (console, or Raka's reserved `cloud_propose_service_off {id}` card) and confirms in the host.
+1. The owner asks (console, or Zafdoz's reserved `cloud_propose_service_off {id}` card) and confirms in the host.
 2. **Stop.** The host refuses new payment requests from the tenant at once: `create_payment` answers
    `service_stopped` (no retry). Requests already issued complete until their QRIS or VA expiry, and their events
    reach the kernel as usual.
@@ -236,7 +236,7 @@ works for another business. Dedupe: the event (0002) and `entry_key`.
 
 **Refunds** (D8).
 - A person submits a refund document in the kernel. Only the owner and the `supervisor` role may submit it (the
-  module's permissions). `ai: true` tokens are refused record writes (0020), so Raka never refunds. Its flow calls
+  module's permissions). `ai: true` tokens are refused record writes (0020), so Zafdoz never refunds. Its flow calls
   `refund` with `refund_key` = the document name.
 - The refund is allowed up to 30 days after the payment, and may be partial. A rule on the refund document refuses a
   payment older than 30 days, and the host refuses it again.
@@ -248,11 +248,11 @@ works for another business. Dedupe: the event (0002) and `entry_key`.
 - The bank account is collected in the host's onboarding screens and verified by DOKU (D3). It changes only in the
   host's console, by the owner, after re-authentication. The host notifies the owner through the contact on file, then
   submits the change to DOKU. Rangka adds no payout hold of its own (D5); DOKU's own verification rules apply.
-- Never through a change set, a kernel API, a flow or Raka. 0041 §4's list of things with no tool gains: payout
+- Never through a change set, a kernel API, a flow or Zafdoz. 0041 §4's list of things with no tool gains: payout
   account, payout schedule, refunds, KYC.
 - The kernel never stores the account number.
 
-**Nothing depends on an LLM.** Raka may read the ledger and explain it (0041 masks apply). It cannot create, refund,
+**Nothing depends on an LLM.** Zafdoz may read the ledger and explain it (0041 masks apply). It cannot create, refund,
 reconcile or change a payout.
 
 ### 6. Devices (kasir)
@@ -321,7 +321,7 @@ account screen, wind-down. Not described here.
    `ready`.
 2. Host payment connector and mock (rangka-connectors). Ledger and flows (rangka-apps). End to end against the mock:
    capture, fee, refund, payout, a dropped webhook recovered by the statement poll, a forged mismatch reported.
-3. Catalogue tools on the gateway and Raka's offer rules (§3). The payment entry stays `planned` until Rangka is a
+3. Catalogue tools on the gateway and Zafdoz's offer rules (§3). The payment entry stays `planned` until Rangka is a
    DOKU partner (D9), Open 1 (registration) and Open 2 are confirmed, and the DOKU agreement sets the fee amounts and
    settlement days.
 4. Switch-on and switch-off proposals (§4) in the host.
@@ -387,7 +387,7 @@ before Rangka Cloud relies on it):
     money, and Rangka invoices are never offset against settlements unless the owner explicitly opts in.
 - **D7. WhatsApp: one number per business**, registered under Rangka's WhatsApp Business setup.
 - **D8. Refund policy.** Refunds are allowed up to 30 days after the payment, and partial refunds are allowed. Only the
-  owner and the supervisor role may refund. Raka never refunds (§5).
+  owner and the supervisor role may refund. Zafdoz never refunds (§5).
 - **D9. DOKU Partner API, not Sub Account V2** (recommended to Dede, consistent with D1–D3). Source: DOKU developer
   docs, Partner API (https://developers.doku.com/partnership/partner-api.md), retrieved 17 Nov 2026.
   - **Prerequisite:** Rangka becomes a DOKU partner. A partner is a DOKU merchant upgraded through DOKU sales.

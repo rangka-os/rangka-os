@@ -6,7 +6,7 @@ Status: proposed (19 Nov 2026) · Proposed by: Dede · Owner of the change: rang
 
 ## Context
 
-- Raka works as two people at once: an engineer who builds the system and a business consultant who decides what to
+- Zafdoz works as two people at once: an engineer who builds the system and a business consultant who decides what to
   build.
 - The skills it has today teach the platform:
   - `rangka-concepts`: what Rangka is made of;
@@ -15,21 +15,21 @@ Status: proposed (19 Nov 2026) · Proposed by: Dede · Owner of the change: rang
   - `rangka-connectors`: how to draft a connector;
   - `rangka-themes`: how to change the look;
   - `rangka-consult`: how to run the interview.
-- No skill teaches Raka to design well. It is not told:
+- No skill teaches Zafdoz to design well. It is not told:
   - how to shape data;
   - which automation tool to pick;
   - how to bring in an owner's spreadsheet;
   - which numbers an owner should watch;
   - how to check its own draft.
-- No skill teaches Raka how a given business runs, either. It falls back on the model's general knowledge, which is
+- No skill teaches Zafdoz how a given business runs, either. It falls back on the model's general knowledge, which is
   generic and not tied to the catalogue.
 - Generic open-source skills for these topics exist (DBA, data modelling, workflow design, ETL, KPI design, code
   review). They are written for coding agents that write SQL or application code.
-  - Raka writes `.rk` through change sets.
+  - Zafdoz writes `.rk` through change sets.
   - The kernel owns storage, migrations and indexes.
-  - Loaded as they are, those skills cost tokens and point Raka at things it must not do.
+  - Loaded as they are, those skills cost tokens and point Zafdoz at things it must not do.
 - 0035 §6 defined per-skill evals, but none were written and nothing runs them. So there is no way to tell whether a
-  skill makes Raka's output better.
+  skill makes Zafdoz's output better.
 
 ## Decision
 
@@ -83,7 +83,7 @@ Advice with no `.rk` equivalent is left out, or the skill says what Rangka does 
   - live in configurable settings;
   - carry the year they were checked;
   - are marked "verify with a tax consultant".
-- Raka never computes tax on its own. Money stays deterministic.
+- Zafdoz never computes tax on its own. Money stays deterministic.
 
 ### 4. Eval format
 
@@ -103,7 +103,7 @@ Evals use made-up businesses only. This format replaces the loose description in
 
 ### 5. Running evals (rangka-ai)
 
-- `python -m raka.evals` runs one Raka turn per eval at the right stage. It applies the `expect` checks, has a
+- `python -m raka.evals` runs one Zafdoz turn per eval at the right stage. It applies the `expect` checks, has a
   separate judge model grade the rubric, and reports a pass rate per eval and per skill.
 - PR CI checks only the format (`--format-only`).
 - A nightly workflow runs the real evals when a provider secret exists.

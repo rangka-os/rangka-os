@@ -139,11 +139,11 @@
         h(R.DocumentHeader, { number: "INV-2026-00038", title: "Kedai Senja Dago", status: "draft" }));
     },
     PosKeypad: function () { return h("div", { className: "gx-demo gx-wide" }, h(R.PosKeypad, { initial: 85000 }), h(R.PosKeypad, { offline: true, queued: 3, payLabel: "Bayar tunai", payIcon: "card" })); },
-    Raka: function () {
-      // One big Raka you can drive: every state loops, every reaction plays once on top
+    Zafdoz: function () {
+      // One big Zafdoz you can drive: every state loops, every reaction plays once on top
       var st = React.useState("netral"), k = React.useState({ name: null, n: 0 });
       return h("div", { style: { display: "grid", gap: 16 } },
-        h("div", { className: "gx-row" }, h(R.Raka, { size: 96, state: st[0], react: k[0].name, reactKey: k[0].n, title: "Raka" }),
+        h("div", { className: "gx-row" }, h(R.Raka, { size: 96, state: st[0], react: k[0].name, reactKey: k[0].n, title: "Zafdoz" }),
           h(R.Raka, { size: 40, state: st[0], react: k[0].name, reactKey: k[0].n }), h(R.Raka, { size: 22, state: st[0], react: k[0].name, reactKey: k[0].n }),
           h(R.Raka, { size: 32, withName: true, company: "Kopi Senja" })),
         h("div", { className: "gx-row", "data-raka-states": "" }, R.RAKA_STATES.map(function (s) {
@@ -223,7 +223,7 @@
         options: [{ value: "kopi", label: "Kopi" }, { value: "susu", label: "Susu dan nabati" }, { value: "pemanis", label: "Pemanis" }, { value: "kemasan", label: "Kemasan" }] })));
     },
     ChatComposer: function () {
-      return h("div", { className: "gx-wide" }, h(R.ChatComposer, { value: "Raka, tolong buat rekap penjualan minggu ini untuk ", attachments: [{ name: "struk-27-okt.jpg", size: "240 KB", kind: "image" }, { name: "rekap-oktober.xlsx", size: "18 KB" }], mentions: ["Raka", "Rina Kartika"] }));
+      return h("div", { className: "gx-wide" }, h(R.ChatComposer, { value: "Zafdoz, tolong buat rekap penjualan minggu ini untuk ", attachments: [{ name: "struk-27-okt.jpg", size: "240 KB", kind: "image" }, { name: "rekap-oktober.xlsx", size: "18 KB" }], mentions: ["Zafdoz", "Rina Kartika"] }));
     },
     Avatar: function () {
       return h("div", { className: "gx-row" }, h(R.Avatar, { name: "Dede Kurniawan", size: 32, presence: "online" }), h(R.Avatar, { name: "Rina Kartika", size: 28 }), h(R.Avatar, { name: "Budi Santoso", size: 24, presence: "busy" }),
@@ -375,7 +375,7 @@
           changesets: [{ id: "cs-0815", title: "Nomor PO wajib untuk pelanggan grosir", risk: "low", status: "previewed" }] }] }));
     },
     RichText: function () {
-      // Chat / Format / *: Raka's markdown (Figma "Raka Chat" › Isi jawaban); the second column folds a long answer
+      // Chat / Format / *: Zafdoz's markdown (Figma "Zafdoz Chat" › Isi jawaban); the second column folds a long answer
       var md = [
         "## Ringkasan piutang",
         "Ada **7 faktur** lewat jatuh tempo lebih dari 7 hari, total **Rp 18.250.000**. Datanya dari `sales_invoice`. Rinciannya di [laporan piutang](#piutang).",
@@ -407,11 +407,11 @@
         "",
         "> Catatan pemilik: tagih dengan sopan, Hotel Savoy langganan lama."].join("\n");
       var long = ["Hotel Savoy Homann (31 hari, Rp 4.200.000) biasanya membayar lewat transfer di akhir bulan. Pengingat sopan cukup.",
-        "Kantin PT Len punya dua faktur terbuka. Raka menyarankan satu pesan untuk keduanya.",
+        "Kantin PT Len punya dua faktur terbuka. Zafdoz menyarankan satu pesan untuk keduanya.",
         "Warung Bu Imas dan Toko Roti Sinar di bawah Rp 1.500.000. Bisa diingatkan bersama pesanan berikutnya.",
-        "Cafe Braga baru pertama kali telat. Raka menandainya untuk dicek Senin.",
+        "Cafe Braga baru pertama kali telat. Zafdoz menandainya untuk dicek Senin.",
         "> [!NOTE]\n> Pengingat hanya dikirim pukul 08.00 sampai 20.00.",
-        "> [!TIP] Berhasil\n> 6 pengingat terjadwal. Raka cek pembayaran besok.",
+        "> [!TIP] Berhasil\n> 6 pengingat terjadwal. Zafdoz cek pembayaran besok.",
         "> [!CAUTION] Gagal dikirim\n> 2 pesan ditolak WhatsApp karena nomornya tidak aktif."].join("\n\n");
       return h("div", { className: "gx-row", style: { flexWrap: "wrap", alignItems: "flex-start", gap: 24 } },
         h("div", { style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: md })),

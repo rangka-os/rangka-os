@@ -175,7 +175,7 @@ func TestOnboardingRoleAndHide(t *testing.T) {
 	}
 }
 
-// Raka reads the steps over MCP (contract 0053 §6) and never hides them (§3).
+// Zafdoz reads the steps over MCP (contract 0053 §6) and never hides them (§3).
 func TestOnboardingMCPAndAssistant(t *testing.T) {
 	e, _ := canvasEnv(t, nil)
 	res := rpc(e, 21, "tools/call", map[string]any{"name": "rangka_onboarding", "arguments": map[string]any{}})
@@ -272,7 +272,7 @@ func TestOnboardingScanOldestBatchesGrow(t *testing.T) {
 	}
 }
 
-// Tur sorotan (contract 0053 §7): each person keeps their own tour states; "" forgets one; Raka writes none.
+// Tur sorotan (contract 0053 §7): each person keeps their own tour states; "" forgets one; Zafdoz writes none.
 func TestOnboardingToursPerPerson(t *testing.T) {
 	e, _ := canvasEnv(t, nil)
 	rep := canvasRep(t, e)

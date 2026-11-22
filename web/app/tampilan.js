@@ -273,7 +273,7 @@
           summary.ok ? "Semua " + summary.total + " pasangan warna terbaca, terang dan gelap. Halaman ini sudah memakai tema ini sebagai pratinjau." : summary.failing.join(", ")) : null,
         h("div", { className: "ap-tp-row" },
           h(R.Button, { variant: "primary", disabled: busy || !isHex(ed.accent), onClick: saveCustom }, busy ? "Menyimpan…" : "Simpan dan pakai"),
-          h("span", { className: "ap-tp-desc" }, "Warna status (berhasil, peringatan, bahaya) dan warna Raka tidak ikut berubah."))));
+          h("span", { className: "ap-tp-desc" }, "Warna status (berhasil, peringatan, bahaya) dan warna Zafdoz tidak ikut berubah."))));
 
     return h(React.Fragment, null,
       h(R.PageHeader, { title: "Tampilan", subTitle: owner ? "Tema usaha untuk semua orang, dan pilihanmu sendiri" : "Pilihan tampilanmu sendiri" }),

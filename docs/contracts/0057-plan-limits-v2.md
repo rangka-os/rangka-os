@@ -11,7 +11,7 @@ plans of sites and templates) · Builds on: 0028 (plan limits), 0040 §9 (`limit
   an owner account holds subscriptions, a subscription holds businesses, a business holds apps. Mulai, Juragan and Pro
   are one business per subscription; Juragan Grup is up to 3 businesses sharing one usage pool. Each plan limits apps
   per business (Mulai 1, Juragan 3, Pro 5, Grup 15), database and file size, and PDFs. Past a limit, the lower plans
-  are offered the next plan; Grup buys capacity add-ons ("harga pecahan"). Raka credits can be bought on every plan.
+  are offered the next plan; Grup buys capacity add-ons ("harga pecahan"). Zafdoz credits can be bought on every plan.
 - **What the kernel enforces today (0028).** `outlets`, `users` and `ai_credits_month`. `records`, `storage_mb` and
   `api_calls_day` are only reported. `limits.rate` shapes traffic (0040 §9). There is no app count, no split between
   database and files, and no PDF count.
@@ -49,7 +49,7 @@ effective(key) = min( plan_limit(key) + Σ active grants(key), cap(key) )
 ```
 
 - **Grant**: `rangka plan grant <limit> <+n> [--until YYYY-MM-DD] [--ref <text>] [--by] [--note]` adds capacity (a Grup
-  add-on: `db_mb +1024`, `files_mb +10240`, `apps +1`; Raka credits: `ai_credits_month +100 --until 2027-02-14`). It
+  add-on: `db_mb +1024`, `files_mb +10240`, `apps +1`; Zafdoz credits: `ai_credits_month +100 --until 2027-02-14`). It
   counts until the start of `--until` (UTC), or until `rangka plan revoke <grant id>`. A grant on a limit the plan
   does not set changes nothing (that limit stays unlimited).
 - **Cap**: `rangka plan cap <limit> <value> [--reason <text>]` sets a ceiling below the plan, `rangka plan uncap

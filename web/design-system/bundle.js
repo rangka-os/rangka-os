@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"},{"name":"RichText"},{"name":"Diagram"},{"name":"DiagramViewer"},{"name":"OfferCompare"}]} */
+/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Zafdoz"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"},{"name":"RichText"},{"name":"Diagram"},{"name":"DiagramViewer"},{"name":"OfferCompare"}]} */
 (function () {
   var React = window.React, h = React.createElement;
   function cx() { return Array.prototype.filter.call(arguments, Boolean).join(" "); }
@@ -219,9 +219,9 @@
       h("button", { type: "button", className: "rk-pos-pay" }, p.payIcon === null ? null : h(Icon, { name: p.payIcon || "qris" }), p.payLabel || "Bayar QRIS"));
   }
 
-  /* Raka, the Rangka AI agent ("Lampu status", 20 Nov 2026; matches the zafdoz.ai logo): an Ink head (256-unit grid)
+  /* Zafdoz, the Rangka AI agent ("Lampu status", 20 Nov 2026; matches the zafdoz.ai logo): an Ink head (256-unit grid)
      with two square eyes cut out, and the titik, a square status light top right. The body takes currentColor.
-     The titik has one colour per meaning: teal (--raka) while Raka works, red (--bad-solid) when something failed,
+     The titik has one colour per meaning: teal (--raka) while Zafdoz works, red (--bad-solid) when something failed,
      the body colour otherwise.
      state (loops until it changes):
        netral, senang, tidur, gagal, and the working states, which light the titik:
@@ -231,9 +231,9 @@
      react (plays once on top of the state, then returns): lompat (done), angguk (approved), geleng (failed),
        kaget (a message while asleep), ide (a suggestion), dadah (hello), kedip, lihat, pusing.
        Play one with the react prop (change reactKey to replay) or Rangka.rakaReact(name, scope).
-     Alive by default: one shared pointer listener and one animation frame loop draw every Raka (pose per frame:
+     Alive by default: one shared pointer listener and one animation frame loop draw every Zafdoz (pose per frame:
      eyes, head, titik, a pool of particles). A click plays lompat (kedip while working). playful (default from
-     48 px): drag with a spring, five quick clicks play pusing, and Raka fidgets when idle. interactive: false keeps
+     48 px): drag with a spring, five quick clicks play pusing, and Zafdoz fidgets when idle. interactive: false keeps
      one still. prefers-reduced-motion draws the state as one still pose and plays no reaction. */
   var RAKA_HEAD = "M80 72 H176 A52 52 0 0 1 228 124 V148 A52 52 0 0 1 176 200 H80 A52 52 0 0 1 28 148 V124 A52 52 0 0 1 80 72 Z";
   var RAKA_Z = "M-56 -65 H56 V-35 L-13.57 34.6 H56 V64.6 H-56 V34.6 L13.57 -35 H-56 Z";
@@ -393,7 +393,7 @@
     return { x: +(cx - e.w / 2).toFixed(2), y: +(cy - e.h / 2).toFixed(2), width: e.w, height: e.h, rx: +Math.min(6, e.h / 2.6).toFixed(2) };
   }
 
-  /* One pointer listener and one animation frame loop for every live Raka on the page. */
+  /* One pointer listener and one animation frame loop for every live Zafdoz on the page. */
   var rakaLive = { list: [], bound: false, raf: 0 };
   function rakaAt(r, now) {
     var st = r.state();
@@ -524,7 +524,7 @@
     }
   }
   function rakaPlay(r, name) { if (RAKA_ACT[name] && RAKA_REACTIONS.indexOf(name) >= 0) { r.shot = { name: name, t0: rakaNow() }; r.nextFidget = rakaNow() + 9000; } }
-  /** Plays a reaction on every live Raka, or only on those inside scope (an element). Returns how many played. */
+  /** Plays a reaction on every live Zafdoz, or only on those inside scope (an element). Returns how many played. */
   function rakaReact(name, scope) {
     var n = 0;
     if (rakaReduced()) return 0;
@@ -552,7 +552,7 @@
     var s = rakaState(p.state);
     var svgRef = React.useRef(null), headRef = React.useRef(null), stRef = React.useRef(s), rRef = React.useRef(null);
     stRef.current = s;
-    var live = p.interactive !== false; // every Raka is alive; interactive: false keeps one still (a tucked launcher)
+    var live = p.interactive !== false; // every Zafdoz is alive; interactive: false keeps one still (a tucked launcher)
     var playful = p.playful != null ? !!p.playful : size >= 48, idle = p.idle != null ? !!p.idle : playful;
     React.useEffect(function () {
       if (!live || typeof window === "undefined" || !window.requestAnimationFrame || rakaReduced()) return;
@@ -591,7 +591,7 @@
     var pool = [];
     for (var i = 0; i < 12; i++) pool.push(h("rect", { key: "r" + i, "data-rk": "fr", className: "rk-mascot-fx", width: 1, height: 1, rx: .14, display: "none" }));
     for (var j = 0; j < 3; j++) pool.push(h("path", { key: "z" + j, "data-rk": "fz", d: RAKA_Z, fill: "currentColor", display: "none" }));
-    var label = p.title === "" ? undefined : (p.title || "Raka") + (RAKA_SAY[s] ? ", " + RAKA_SAY[s] : "");
+    var label = p.title === "" ? undefined : (p.title || "Zafdoz") + (RAKA_SAY[s] ? ", " + RAKA_SAY[s] : "");
     var svg = h("svg", { ref: svgRef, className: cx("rk-mascot", live && "live", playful && live && "playful"), viewBox: "20 4 224 224", width: size, height: size, "data-state": s,
       role: label ? "img" : undefined, "aria-label": label, "aria-hidden": label ? undefined : "true", onClick: live ? poke : undefined, onPointerDown: live ? down : undefined },
       h("defs", null, h("mask", { id: id, maskUnits: "userSpaceOnUse", x: -64, y: -64, width: 384, height: 384 },
@@ -827,7 +827,7 @@
       items.forEach(function (it) { flat.push(it); });
       return { label: g.label, items: items };
     });
-    var askItem = q && p.ask !== false ? { label: "Tanya Raka: “" + q + "”", icon: "spark", ai: true, sub: "AI" } : null;
+    var askItem = q && p.ask !== false ? { label: "Tanya Zafdoz: “" + q + "”", icon: "spark", ai: true, sub: "AI" } : null;
     if (askItem) flat.push(askItem);
     function key(e) {
       if (e.key === "ArrowDown") { e.preventDefault(); setIdx(Math.min(flat.length - 1, idx + 1)); }
@@ -915,7 +915,7 @@
         return h(React.Fragment, { key: i }, h("a", { href: "#", onClick: function (e) { e.preventDefault(); } }, c), h("span", { className: "sep", "aria-hidden": "true" }, "/"));
       }), h("b", null, p.title)),
       h("span", { className: "rk-sp" }),
-      h("button", { type: "button", className: "rk-ask", onClick: p.onSearch }, h(Icon, { name: "search" }), h("span", { className: "ph" }, p.searchPlaceholder || "Cari atau tanya Raka"), h(Kbd, null, "⌘K")),
+      h("button", { type: "button", className: "rk-ask", onClick: p.onSearch }, h(Icon, { name: "search" }), h("span", { className: "ph" }, p.searchPlaceholder || "Cari atau tanya Zafdoz"), h(Kbd, null, "⌘K")),
       h(IconButton, { icon: "bell", label: "Notifikasi", dot: p.unread }),
       p.actions || null);
   }
@@ -1402,7 +1402,7 @@
         h("svg", { className: "rk-auth-joint", viewBox: "0 0 256 256", "aria-hidden": "true" }, h("path", { fill: "currentColor", fillRule: "evenodd", d: SENDI })),
         h("div", { className: "rk-auth-pitch" },
           h("h2", null, b.title || "Jadi juragan, bukan admin."),
-          b.text === null ? null : h("p", null, b.text || "Raka menyusun alur bisnismu dan ikut menjalankannya. Uang tetap kamu yang setujui."))),
+          b.text === null ? null : h("p", null, b.text || "Zafdoz menyusun alur bisnismu dan ikut menjalankannya. Uang tetap kamu yang setujui."))),
       h("main", { className: "rk-auth-side" },
         h("div", { className: "rk-auth-form" },
           p.chip ? h("span", { className: "rk-auth-chip" }, p.chip) : null,
@@ -1486,7 +1486,7 @@
       })),
       p.createLabel !== false ? h(Button, { variant: "primary", icon: "add", className: "rk-topnav-create", onClick: p.onCreate }, h("span", { className: "lbl" }, p.createLabel || "Buat")) : null,
       h("div", { className: "rk-topnav-end" },
-        h("button", { type: "button", className: "rk-ask", onClick: p.onSearch }, h(Icon, { name: "search" }), h("span", { className: "ph" }, p.searchPlaceholder || "Cari atau tanya Raka"), h(Kbd, null, "⌘K")),
+        h("button", { type: "button", className: "rk-ask", onClick: p.onSearch }, h(Icon, { name: "search" }), h("span", { className: "ph" }, p.searchPlaceholder || "Cari atau tanya Zafdoz"), h(Kbd, null, "⌘K")),
         h(IconButton, { icon: "bell", label: "Notifikasi", className: "rk-topnav-bell", dot: p.unread, onClick: p.onNotifications }),
         h(IconButton, { icon: "help", label: "Bantuan", onClick: p.onHelp }),
         p.actions || null,
@@ -1755,7 +1755,7 @@
     }));
   }
 
-  /* ---- Raka in the app: the ⌘J ask bar and the chat drawer. Raka proposes change sets; a person approves them in Ubah. */
+  /* ---- Zafdoz in the app: the ⌘J ask bar and the chat drawer. Zafdoz proposes change sets; a person approves them in Ubah. */
   /* Enter and Esc belong to the IME while it composes (Japanese, Chinese, Korean input; keyCode 229 on older Safari). */
   function composing(e) { return !!((e.nativeEvent && e.nativeEvent.isComposing) || e.keyCode === 229); }
   /* The shortcut as the person types it: ⌘J on a Mac, Ctrl J elsewhere (the same platform test as the app's handler). */
@@ -1784,12 +1784,12 @@
     }, [inFull]);
     if (!p.open) return null;
     var canSend = !p.busy && !!(p.value || "").trim();
-    return h("div", { className: "rk-askbar", role: "dialog", "aria-label": "Tanya Raka",
+    return h("div", { className: "rk-askbar", role: "dialog", "aria-label": "Tanya Zafdoz",
       onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Escape" && p.onClose) { e.preventDefault(); p.onClose(); } } },
       p.context ? h("div", { className: "rk-askbar-ctx" }, h("span", { className: "rk-askbar-chip" }, h(Icon, { name: "dashboard" }),
         h("span", { className: "l" }, "Halaman ini · " + p.context.label),
         h("button", { type: "button", "aria-label": "Hapus konteks " + p.context.label, title: "Hapus konteks", onClick: p.onRemoveContext }, h(Icon, { name: "close" })))) : null,
-      h("textarea", { ref: ref, className: "rk-askbar-input", rows: 1, value: p.value || "", placeholder: "Tanya Raka…", "aria-label": "Tanya Raka",
+      h("textarea", { ref: ref, className: "rk-askbar-input", rows: 1, value: p.value || "", placeholder: "Tanya Zafdoz…", "aria-label": "Tanya Zafdoz",
         onChange: function (e) { if (p.onChange) p.onChange(e.target.value); },
         onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (canSend && p.onSend) p.onSend(); } } }),
       h("div", { className: "rk-askbar-foot" },
@@ -1797,9 +1797,9 @@
         h("span", { className: "rk-sp" }),
         h(Button, { variant: "primary", disabled: !canSend, loading: p.busy, onClick: function () { if (canSend && p.onSend) p.onSend(); } }, "Kirim", h(Kbd, null, "↵"))));
   }
-  /* ---- Raka chat, rangka.pen "Raka Chat · Komponen bersama" (the same set as the Juragan studio). */
+  /* ---- Zafdoz chat, rangka.pen "Zafdoz Chat · Komponen bersama" (the same set as the Juragan studio). */
   var RISK = { low: ["ok", "Risiko rendah"], medium: ["warn", "Risiko sedang"], high: ["bad", "Risiko tinggi"] };
-  /* Chat / Kartu usulan: icon, title, id, risk; a check strip; the actions. Raka never applies a change by itself. */
+  /* Chat / Kartu usulan: icon, title, id, risk; a check strip; the actions. Zafdoz never applies a change by itself. */
   function ChangesetCard(p) {
     var cs = p.cs, r = RISK[cs.risk] || ["default", "Risiko belum diketahui"];
     var applied = cs.status === "applied"; // config.ai.auto_apply: low_risk applied it; nothing left to preview or approve
@@ -1821,7 +1821,7 @@
     var s = Math.max(0, Math.round((ms || 0) / 1000));
     return s < 60 ? s + " dtk" : Math.floor(s / 60) + " mnt" + (s % 60 ? " " + (s % 60) + " dtk" : "");
   }
-  /* Chat / Ringkasan langkah + Chat / Langkah: the tools Raka used. Running: a teal spinner, the current step and the
+  /* Chat / Ringkasan langkah + Chat / Langkah: the tools Zafdoz used. Running: a teal spinner, the current step and the
      timer, steps open; after: "Memeriksa 3 hal", folded. */
   function ChatSteps(p) {
     var acts = p.activity || [];
@@ -1850,7 +1850,7 @@
       })));
   }
   /* Chat / Aksi pesan · Salin */
-  /* ---- Chat / Format / * (Figma "Raka Chat" › Isi jawaban): Raka's markdown drawn as React elements, never as HTML.
+  /* ---- Chat / Format / * (Figma "Zafdoz Chat" › Isi jawaban): Zafdoz's markdown drawn as React elements, never as HTML.
      RichText (headings, bold, italic, inline code, links, lists, quotes, rules), Table (GFM pipes; numbers right),
      KeyValue (a list whose every item is "**Label:** value"), CodeBlock (``` fences, language and file in the head,
      Salin, line numbers), Callout (> [!NOTE] / [!TIP] / [!WARNING] / [!CAUTION], Indonesian names too) and
@@ -1860,7 +1860,7 @@
   var MD_CALLOUT_TITLE = { info: "Catatan", ok: "Berhasil", warn: "Perlu dicek", bad: "Gagal" };
   var MD_LIST = /^(\s*)([-*+•]|\d{1,3}[.)])\s+(.*)$/;
   var MD_TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
-  /** The address a Raka link may open: http(s), mailto, or a path or anchor of this app; "" for anything else. */
+  /** The address a Zafdoz link may open: http(s), mailto, or a path or anchor of this app; "" for anything else. */
   function mdSafeHref(u) {
     u = String(u == null ? "" : u).trim();
     if (/^(https?:\/\/[^\s]+|mailto:[^\s]+)$/i.test(u)) return u;
@@ -2274,10 +2274,10 @@
     return out.join("\n");
   }
 
-  /* ---- OfferCompare: the option row of Raka's offer card (contract 0049 §4, Figma Agent chat › Chat/OfferCompare).
+  /* ---- OfferCompare: the option row of Zafdoz's offer card (contract 0049 §4, Figma Agent chat › Chat/OfferCompare).
      Side by side from 720 px of card width (container query), a scroll-snap carousel below that. */
   var OFFER_PATH = { custom: "Sesuai alurmu", modules: "Modul + konektor", bundle: "Paket" };
-  var OFFER_LISTS = [["records", "Yang dicatat"], ["screens", "Layar kerja"], ["raka_does", "Yang Raka bantu"], ["needs_approval", "Butuh persetujuanmu"], ["adds", "Ikut terpasang"]];
+  var OFFER_LISTS = [["records", "Yang dicatat"], ["screens", "Layar kerja"], ["raka_does", "Yang Zafdoz bantu"], ["needs_approval", "Butuh persetujuanmu"], ["adds", "Ikut terpasang"]];
   function offerText(x) { return x && typeof x === "object" ? String(x.text || "") : String(x == null ? "" : x); }
   function offerJoin(xs) {
     var t = xs.map(offerText).filter(Boolean);
@@ -2344,7 +2344,7 @@
     opts.forEach(function (o) { if (o.id === viewing) vo = o; });
     return h("div", { ref: root, className: cx("rk-offer", single && "is-single", closed && "is-closed", p.className), "data-card": "offer", "data-offer": offer.id, "data-count": opts.length },
       h("div", { className: "rk-offer-head" },
-        h(Icon, { name: "spark" }), h("span", { className: "rk-offer-name" }, "Tawaran Raka"), h("span", { className: "rk-offer-sub" }, "belum dibangun"),
+        h(Icon, { name: "spark" }), h("span", { className: "rk-offer-name" }, "Tawaran Zafdoz"), h("span", { className: "rk-offer-sub" }, "belum dibangun"),
         h("span", { className: "rk-offer-end" },
           closed ? h(Lozenge, null, p.closedLabel) : null)),
       h("div", { className: "rk-offer-row", role: "group", "aria-label": "Pilihan tawaran" }, sections),
@@ -2453,7 +2453,7 @@
     var mood = rakaTurnState(t, running);
     return h("div", { className: "rk-chat-raka", "data-last": q.last ? "" : undefined }, h("span", { className: "rk-chat-av" }, h(Raka, { size: 22, title: "", state: mood })),
       h("div", { className: "body" },
-        h("div", { className: "rk-chat-who" }, h("b", null, "Raka")),
+        h("div", { className: "rk-chat-who" }, h("b", null, "Zafdoz")),
         h(ChatSteps, { activity: t.activity, running: running && !t.text, start: q.start }),
         t.text ? h(RichText, { className: "rk-chat-text", text: t.text, streaming: running, collapse: 24 }) : null,
         (t.changesets || []).map(function (cs) {
@@ -2474,12 +2474,12 @@
   function conversationTitle(turns) {
     var first = (turns || []).filter(function (t) { return t.role === "user"; })[0];
     var s = first ? String(first.text || "").replace(/\s+/g, " ").trim() : "";
-    if (!s) return "Raka";
+    if (!s) return "Zafdoz";
     if (s.length <= 60) return s;
     var cut = s.slice(0, 60), sp = cut.lastIndexOf(" ");
     return (sp > 0 ? cut.slice(0, sp).trim() : cut) + "…";
   }
-  /* The Raka panel: Chat / Kepala, the log and Chat / Composer. mode "dock" sits beside the page (resizable, 360 to 640),
+  /* The Zafdoz panel: Chat / Kepala, the log and Chat / Composer. mode "dock" sits beside the page (resizable, 360 to 640),
      "full" covers the window, "float" hovers above the launcher below 1280px, "drawer" fills a phone screen. */
   function ChatDrawer(p) {
     var st = useState(""), text = st[0], setText = st[1], log = useRef(null), ta = useRef(null);
@@ -2543,13 +2543,13 @@
       if (!(e.buttons & 1) || typeof window === "undefined") return;
       resize(clampDockWidth(window.innerWidth - e.clientX, window.innerWidth));
     }
-    var grip = dock ? h("div", { className: "rk-chat-grip", role: "separator", "aria-orientation": "vertical", "aria-label": "Ubah lebar panel Raka",
+    var grip = dock ? h("div", { className: "rk-chat-grip", role: "separator", "aria-orientation": "vertical", "aria-label": "Ubah lebar panel Zafdoz",
       "aria-valuenow": width, "aria-valuemin": 360, "aria-valuemax": 640, tabIndex: 0,
       onKeyDown: onGripKey, onPointerDown: onGripDown, onPointerMove: onGripMove }) : null;
     var body = [
       h("div", { key: "head", className: "rk-chat-head" },
         h("span", { className: "rk-chat-av rk-chat-av-lg" }, h(Raka, Object.assign({ size: 28, title: "", state: p.busy && last && last.role !== "user" ? rakaTurnState(last, true) : p.busy ? "mikir" : last && last.role !== "user" ? rakaTurnState(last, false) : "netral" }, finish))),
-        h("span", { className: "rk-chat-title" }, h("b", null, full ? conversationTitle(turns) : "Raka")),
+        h("span", { className: "rk-chat-title" }, h("b", null, full ? conversationTitle(turns) : "Zafdoz")),
         h(IconButton, { icon: "edit", label: "Percakapan baru", onClick: p.onNew }),
         dock && p.onExpand ? h(IconButton, { icon: "open", label: "Perbesar", onClick: p.onExpand }) : null,
         full && p.onCollapse ? h(IconButton, { icon: "collapse", label: "Kecilkan", onClick: p.onCollapse }) : null,
@@ -2559,49 +2559,49 @@
           var isLast = i === turns.length - 1;
           return h(ChatTurnView, { key: i, turn: t, p: p, last: isLast, running: isLast && p.busy, start: started.current });
         }) : h("div", { className: "rk-chat-empty" }, h(Raka, { size: 40, title: "", interactive: true }),
-          h("b", null, "Tanya Raka"),
-          h("span", null, "Tanya apa saja tentang data bisnismu. Raka bisa menyusun usulan perubahan; kamu yang menyetujuinya.")),
+          h("b", null, "Tanya Zafdoz"),
+          h("span", null, "Tanya apa saja tentang data bisnismu. Zafdoz bisa menyusun usulan perubahan; kamu yang menyetujuinya.")),
         waiting ? h("div", { className: "rk-chat-raka" }, h("span", { className: "rk-chat-av" }, h(Raka, { size: 22, title: "", state: "mikir" })),
-          h("div", { className: "body" }, h("div", { className: "rk-chat-who" }, h("b", null, "Raka")),
+          h("div", { className: "body" }, h("div", { className: "rk-chat-who" }, h("b", null, "Zafdoz")),
             h("div", { className: "rk-chat-steps", "data-running": "true" }, h("span", { className: "rk-chat-sum", role: "status" },
-              h("span", { className: "i", "aria-hidden": "true" }, h("span", { className: "rk-chat-spin" })), h("span", { className: "l" }, "Raka sedang berpikir…"))))) : null),
+              h("span", { className: "i", "aria-hidden": "true" }, h("span", { className: "rk-chat-spin" })), h("span", { className: "l" }, "Zafdoz sedang berpikir…"))))) : null),
       h("div", { key: "foot", className: "rk-chat-foot" },
         h("div", { className: "rk-chat-comp", onClick: function (e) { if (e.target === e.currentTarget && ta.current) ta.current.focus(); } },
-          h("textarea", { ref: ta, rows: 1, value: text, placeholder: p.busy ? "Raka sedang bekerja. Kamu tetap bisa mengetik." : "Tanya atau minta Raka…", "aria-label": "Pesan untuk Raka",
+          h("textarea", { ref: ta, rows: 1, value: text, placeholder: p.busy ? "Zafdoz sedang bekerja. Kamu tetap bisa mengetik." : "Tanya atau minta Zafdoz…", "aria-label": "Pesan untuk Zafdoz",
             onChange: function (e) { setText(e.target.value); },
             onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } } }),
           h("div", { className: "rk-chat-comp-row" },
-            p.context ? h("span", { className: "rk-chat-ctx", title: "Raka melihat halaman ini" }, h(Icon, { name: "spark" }), h("span", null, p.context)) : null,
+            p.context ? h("span", { className: "rk-chat-ctx", title: "Zafdoz melihat halaman ini" }, h(Icon, { name: "spark" }), h("span", null, p.context)) : null,
             h("span", { className: "rk-sp" }),
             h("button", { type: "button", className: cx("rk-send", p.busy && "busy"), disabled: !canSend, "aria-busy": p.busy ? "true" : undefined,
-              "aria-label": p.busy ? "Raka sedang bekerja" : "Kirim", title: p.busy ? "Raka sedang bekerja" : "Kirim", onClick: send },
+              "aria-label": p.busy ? "Zafdoz sedang bekerja" : "Kirim", title: p.busy ? "Zafdoz sedang bekerja" : "Kirim", onClick: send },
               p.busy ? h("span", { className: "rk-chat-spin" }) : h(Icon, { name: "send" })))))
     ];
-    return h("aside", { className: cx("rk-chat", mode === "float" && "rk-chat-float", dock && "rk-chat-dock", full && "rk-chat-full"), "aria-label": "Percakapan dengan Raka",
+    return h("aside", { className: cx("rk-chat", mode === "float" && "rk-chat-float", dock && "rk-chat-dock", full && "rk-chat-full"), "aria-label": "Percakapan dengan Zafdoz",
       onKeyDown: function (e) {
         if (composing(e) || e.key !== "Escape") return;
         if (full && p.onCollapse) p.onCollapse(); else if (p.onClose) p.onClose();
       } },
       grip, h("div", { className: "rk-chat-card" }, body));
   }
-  /* OS / Raka · Diam | Hover | Tersembunyi | Tersembunyi hover | Terbuka: the floating Raka button, bottom right. Hover or
-     focus widens it to "Tanya Raka ⌘J" with what waits (p.pending: change sets waiting for the person); its small
-     button tucks it against the right edge (p.tucked), where it shows half of Raka. Open, it turns ink with a chevron. */
+  /* OS / Zafdoz · Diam | Hover | Tersembunyi | Tersembunyi hover | Terbuka: the floating Zafdoz button, bottom right. Hover or
+     focus widens it to "Tanya Zafdoz ⌘J" with what waits (p.pending: change sets waiting for the person); its small
+     button tucks it against the right edge (p.tucked), where it shows half of Zafdoz. Open, it turns ink with a chevron. */
   function RakaLauncher(p) {
     var open = !!p.open, tucked = !!p.tucked && !open, n = p.pending || 0;
     var finish = useRakaFinish(p.busy, p.failed);
     var sub = n ? n + " usulan menunggu kamu" : tucked ? "Tampilkan lagi" : "Tanya soal data bisnismu";
     return h("div", { className: "rk-fab", "data-state": open ? "open" : tucked ? "tucked" : "rest" },
       h("button", { type: "button", className: "rk-fab-btn", "aria-expanded": open ? "true" : "false", "aria-haspopup": "dialog",
-        "aria-label": open ? "Tutup Raka" : "Tanya Raka" + (n ? ", " + sub : ""), title: open ? "Tutup Raka (" + ASK_KEY + ")" : undefined, onClick: p.onToggle },
+        "aria-label": open ? "Tutup Zafdoz" : "Tanya Zafdoz" + (n ? ", " + sub : ""), title: open ? "Tutup Zafdoz (" + ASK_KEY + ")" : undefined, onClick: p.onToggle },
         open ? h(Icon, { name: "down" }) : h(React.Fragment, null,
           h("span", { className: "rk-fab-tx", "aria-hidden": "true" },
-            h("span", { className: "t" }, h("b", null, "Tanya Raka"), tucked ? null : h(Kbd, null, ASK_KEY)),
+            h("span", { className: "t" }, h("b", null, "Tanya Zafdoz"), tucked ? null : h(Kbd, null, ASK_KEY)),
             h("small", { className: n ? "on" : undefined }, sub)),
           h("span", { className: "rk-fab-m", "aria-hidden": "true" }, h(Raka, { size: 52, title: "", state: p.state || (p.busy ? "muter" : "netral"), interactive: !tucked, playful: false, idle: !tucked,
             react: p.react || finish.react, reactKey: p.react ? p.reactKey : finish.reactKey })),
           n ? h("span", { className: "rk-fab-n", "aria-hidden": "true" }, tucked ? null : n > 9 ? "9+" : n) : null)),
-      !open && !tucked && p.onTuck ? h("button", { type: "button", className: "rk-fab-hide", "aria-label": "Sembunyikan Raka ke tepi", title: "Sembunyikan ke tepi",
+      !open && !tucked && p.onTuck ? h("button", { type: "button", className: "rk-fab-hide", "aria-label": "Sembunyikan Zafdoz ke tepi", title: "Sembunyikan ke tepi",
         onClick: function () { p.onTuck(true); } }, h(Icon, { name: "right" })) : null);
   }
 

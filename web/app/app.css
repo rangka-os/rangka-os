@@ -389,15 +389,15 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 }
 .ap-ubah-card { border-color: var(--line-strong); border-radius: 12px; }
 
-/* ---- Raka: the ⌘J ask bar and the chat drawer as the pen's Studio chat (I5s1gq): a white composer card with a soft
-   drop shadow, the context as an outlined chip, an Ink send key; your messages in a warm bubble, Raka's as plain text ---- */
+/* ---- Zafdoz: the ⌘J ask bar and the chat drawer as the pen's Studio chat (I5s1gq): a white composer card with a soft
+   drop shadow, the context as an outlined chip, an Ink send key; your messages in a warm bubble, Zafdoz's as plain text ---- */
 .rk-askbar { padding: 9px; gap: 6px; border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 6px 18px rgba(28, 25, 23, .07), 0 1px 2px rgba(28, 25, 23, .04); }
 .rk-askbar-input { font: 13.5px/20px var(--font-sans); padding: 4px; min-height: 36px; }
 .rk-askbar-chip { height: 26px; padding: 0 2px 0 6px; border-radius: var(--r-btn); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); font: 500 12px/18px var(--font-sans); }
 .rk-askbar-chip .rk-icon { color: var(--raka); }
 .rk-askbar-chat { height: 26px; font-size: 12px; color: var(--muted); border-radius: var(--r-btn); }
 .rk-askbar .rk-btn-primary { height: 26px; }
-/* the chat panel itself (rangka.pen "Raka Chat · Komponen bersama") lives in design-system/bundle.css */
+/* the chat panel itself (rangka.pen "Zafdoz Chat · Komponen bersama") lives in design-system/bundle.css */
 .rk-chat-comp .rk-send:disabled:not(.busy) { background: var(--neutral-hover); color: var(--faint); cursor: not-allowed; }
 :root[data-theme="dark"] .rk-askbar, :root[data-theme="dark"] .rk-chat-comp, :root[data-theme="dark"] .rk-fab-btn { box-shadow: none; }
 .ap-shell:has(.ap-tabbar) .rk-fab { bottom: calc(80px + env(safe-area-inset-bottom)); }
@@ -445,12 +445,12 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
   .ap-ubah-mode button { min-height: var(--touch); line-height: var(--touch); }
 }
 
-/* riset desain K-A4/A4: the sidebar keeps its footer (Tanya Raka) in view; only the nav list scrolls */
+/* riset desain K-A4/A4: the sidebar keeps its footer (Tanya Zafdoz) in view; only the nav list scrolls */
 @media (min-width: 768px) {
   .ap-shell > .rk-side { position: sticky; top: 48px; height: calc(100vh - 48px); height: calc(100dvh - 48px); display: flex; flex-direction: column; }
   .ap-shell:not(.ap-top) > .rk-side { top: 0; height: 100vh; height: 100dvh; }
   .ap-shell > .rk-side > nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-  /* Raka docked: the page is a card with an 8px gutter, so the sticky sidebar sits inside it */
+  /* Zafdoz docked: the page is a card with an 8px gutter, so the sticky sidebar sits inside it */
   html[data-raka="dock"] .ap-shell:not(.ap-top) > .rk-side { top: 8px; height: calc(100vh - 18px); height: calc(100dvh - 18px); }
   html[data-raka="dock"] .ap-shell.ap-top > .rk-side { top: 56px; height: calc(100vh - 66px); height: calc(100dvh - 66px); }
 }
@@ -1077,7 +1077,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 
 /* ---------------------------------------------------------------- Mulai di sini, arah A1 "Jalan cerita" (mulai.js)
  * Riset desain 24 D1-D9: system sans, sentence case, 1px line and 8px corners without shadow
- * (shadows only on what floats: the tour card), Raka's offer in discovery, status with words, 44px taps on a phone.
+ * (shadows only on what floats: the tour card), Zafdoz's offer in discovery, status with words, 44px taps on a phone.
  * Roles keep one tint everywhere (field-*, mulai.js roleTone); gold (warn) is only for the chapter's reward. */
 .ap-mu { max-width: 1120px; }
 .ap-mu-eye { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }

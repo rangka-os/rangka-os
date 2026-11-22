@@ -1,5 +1,5 @@
 /* Mulai di sini, arah A1 "Jalan cerita" (riset desain 24, contract 0053 §5, §7): the steps of the business as one path.
- * Done steps say who and when, the current step is a card with Raka's offer and "Isi sendiri", each step names the
+ * Done steps say who and when, the current step is a card with Zafdoz's offer and "Isi sendiri", each step names the
  * role that usually does it (with Undang when nobody has that role yet), and the chapter ends with its reward: what
  * the business can do once every step is done.
  *
@@ -312,10 +312,10 @@
       s.hint ? h("p", { className: "ap-mu-p" }, L(s.hint)) : null,
       (s.answers || []).length ? h("p", { className: "ap-mu-ans" }, "Menjawab keluhanmu: ", (s.answers || []).map(L).join("; ")) : null,
       aiOn ? h("div", { className: "ap-mu-raka", "data-tour": "mulai-raka" },
-          h("div", { className: "ap-mu-raka-h" }, h(R.Raka, { size: 20 }), h("b", null, "Tawaran Raka")),
+          h("div", { className: "ap-mu-raka-h" }, h(R.Raka, { size: 20 }), h("b", null, "Tawaran Zafdoz")),
           h("p", null, "Ceritakan datanya atau kirim fotonya, aku siapkan draf untuk " + lower(L(s.label)) + ". Kamu tinggal periksa lalu simpan."),
           h("div", { className: "ap-mu-acts" },
-            h(R.Button, { variant: "primary", icon: "spark", onClick: function () { askDraft(ctx, s); } }, "Minta draf Raka"),
+            h(R.Button, { variant: "primary", icon: "spark", onClick: function () { askDraft(ctx, s); } }, "Minta draf Zafdoz"),
             h(R.Button, { onClick: function () { work(ctx, s); }, "data-tour": "mulai-kerjakan" }, "Isi sendiri")))
         : h("div", { className: "ap-mu-acts" },
           h(R.Button, { variant: "primary", icon: "right", onClick: function () { work(ctx, s); }, "data-tour": "mulai-kerjakan" }, "Kerjakan"),
@@ -717,9 +717,9 @@
   function kenalanKind(meta) { return ownerOrUnknown(meta) ? "owner" : "staff"; }
 
   /** The welcome tour (at most five lit places after the welcome, riset 26 K-TS2). drawer(open) opens the phone drawer.
-   *  o: {company, mulai, drawer, meta, groups (the sidebar as drawn), raka (Tanya Raka is on), approvals (the
+   *  o: {company, mulai, drawer, meta, groups (the sidebar as drawn), raka (Tanya Zafdoz is on), approvals (the
    *  approvals feature is on)}. The owner keeps the tour of the whole business; staff get their own work
-   *  (kenalanPlaces), Persetujuan only when approvals are on and they approve something, Tanya Raka only when it is on,
+   *  (kenalanPlaces), Persetujuan only when approvals are on and they approve something, Tanya Zafdoz only when it is on,
    *  and where to find the tour again (always the last). Over five, work places drop first (down to two). */
   function kenalanSteps(o) {
     var side = function () { return o.drawer ? o.drawer(true) : null; };
@@ -731,7 +731,7 @@
       o.mulai ? { target: nav("mulai"), before: side, title: "Mulai di sini", body: "Urutan langkah menyiapkan usahamu. Yang sudah beres tercatat di sini: siapa yang mengerjakan dan kapan." } : null,
       { target: nav("approvals"), before: side, optional: true, title: "Persetujuan", body: "Pesanan atau pengeluaran yang perlu keputusanmu menunggu di sini, lengkap dengan angkanya. Angka di sebelahnya jumlah yang menunggu." },
       { target: businessNav(o.groups), before: side, optional: true, title: "Menu usaha", body: "Semua catatan usahamu dikelompokkan di sini, misalnya barang, pemasok, dan penjualan. Tiap menu punya tombol Tambah di kanan atas." },
-      { target: ".ap-ask", before: side, optional: true, title: "Tanya Raka", body: "Raka bisa menyiapkan draf, menjelaskan angka, atau mencarikan catatan. Raka menyiapkan, kamu yang menyimpan." },
+      { target: ".ap-ask", before: side, optional: true, title: "Tanya Zafdoz", body: "Zafdoz bisa menyiapkan draf, menjelaskan angka, atau mencarikan catatan. Zafdoz menyiapkan, kamu yang menyimpan." },
       // the top bar's account menu where it shows (contract 0065), else the sidebar's switcher (phone drawer)
       { target: function () { return shown([".ap-dtop .rk-av-btn", ".rk-side-switch"]); }, before: side, title: "Bantuan ada di sini",
         body: "Buka menu ini lalu pilih Ulangi tur kalau ingin melihat panduan ini lagi.", wait: 800 }
@@ -740,7 +740,7 @@
   }
   function staffSteps(o, side, close) {
     var meta = o.meta, appr = o.approvals ? approvesModels(meta) : [];
-    // K-TS2: five lit places at most; Bantuan always, then Persetujuan and Raka, and the work places take what is left
+    // K-TS2: five lit places at most; Bantuan always, then Persetujuan and Zafdoz, and the work places take what is left
     var places = kenalanPlaces(meta, o.groups).slice(0, MAX_LIT - 1 - (appr.length ? 1 : 0) - (o.raka ? 1 : 0));
     var names = places.map(function (x) { return x.label; });
     var steps = [{ target: null, title: "Selamat datang di " + (o.company || "tempat kerjamu"),
@@ -756,8 +756,8 @@
         body: what + " yang menunggu keputusanmu ada di sini, lengkap dengan alasannya. Angka di sebelahnya jumlah yang menunggu." });
     }
     if (o.raka) {
-      steps.push({ target: ".ap-ask", before: side, optional: true, title: "Tanya Raka",
-        body: "Raka bisa menjelaskan cara mengisi, mencarikan catatan, atau menyiapkan draf. Raka menyiapkan, kamu yang menyimpan." });
+      steps.push({ target: ".ap-ask", before: side, optional: true, title: "Tanya Zafdoz",
+        body: "Zafdoz bisa menjelaskan cara mengisi, mencarikan catatan, atau menyiapkan draf. Zafdoz menyiapkan, kamu yang menyimpan." });
     }
     steps.push({ target: function () { return shown([".ap-dtop .rk-av-btn", ".rk-side-switch", ".ap-wme", ".ap-wacct"]); }, before: side, title: "Bantuan ada di sini",
       body: "Buka menu ini lalu pilih Ulangi tur kalau ingin melihat panduan ini lagi.", wait: 800 });
@@ -774,7 +774,7 @@
     return { id: "halaman:mulai", eyebrow: "Mulai di sini", steps: [
       { target: "[data-tour=mulai-bar]", title: "Satu bar per langkah", body: "Hijau berarti sudah beres, hitam langkah sekarang, abu belum. Bar hanya bergerak kalau catatannya benar-benar tersimpan." },
       cur && cur.prereq ? { target: "[data-tour=mulai-sekarang]", title: "Mulai dari sini", body: "Langkah pertama masih menunggu data lain. " + L(cur.hint) + " Tekan Kerjakan untuk membuka formulirnya." } : null,
-      cur && !cur.prereq ? { target: "[data-tour=mulai-sekarang]", title: "Langkah sekarang", body: "Kerjakan sendiri, atau minta Raka menyiapkan draf kalau Raka aktif. Setelah tersimpan, langkah ini tercentang dengan nama dan harinya." } : null,
+      cur && !cur.prereq ? { target: "[data-tour=mulai-sekarang]", title: "Langkah sekarang", body: "Kerjakan sendiri, atau minta Zafdoz menyiapkan draf kalau Zafdoz aktif. Setelah tersimpan, langkah ini tercentang dengan nama dan harinya." } : null,
       { target: "[data-tour=mulai-tim]", optional: true, title: "Bagi tugas ke tim", body: "Tiap langkah punya pemilik sesuai peran. Undang staf supaya mereka mengerjakan bagiannya dari HP mereka sendiri." },
       { target: "[data-tour=mulai-hadiah]", optional: true, title: "Hadiah saat tahap beres", body: "Begitu semua langkah beres, Beranda menghitung angka usahamu dari catatanmu sendiri." }
     ].filter(Boolean) };

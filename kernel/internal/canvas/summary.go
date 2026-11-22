@@ -10,7 +10,7 @@ import (
 )
 
 // Owner sentences (contract 0060 §2): when a flow, automation or action carries no authored description, the
-// kernel writes one from its structure, so the web, Raka and MCP read the same words. Labels come from the site
+// kernel writes one from its structure, so the web, Zafdoz and MCP read the same words. Labels come from the site
 // (model, role, connector labels); a model the caller cannot read is never named ("dokumen terkait").
 
 var eventVerb = map[string]string{"submitted": "diajukan", "created": "baru tercatat", "cancelled": "dibatalkan",

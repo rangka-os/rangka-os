@@ -1,4 +1,4 @@
-/* Rangka end-user app: Raka, the assistant (contract 0020). Loads after api.js; the Console loads it too.
+/* Rangka end-user app: Zafdoz, the assistant (contract 0020). Loads after api.js; the Console loads it too.
  *
  * RA.AssistantRoot renders the ⌘J ask bar (R.AskBar) and the chat drawer (R.ChatDrawer) and talks to the kernel over
  * api.aiChat (POST /api/v1/ai/chat, a text/event-stream answer). It is self-contained; the host passes:
@@ -11,8 +11,8 @@
  *   onPreview, onOpenUbah   (id) → void, optional: replace those defaults
  *   blocked      () → boolean, optional: ⌘J does nothing while it is true (the expired-session dialog)
  *   control      a ref, optional: gets {ask(query), open()} so ⌘K and the sidebar can open the ask bar or the drawer
- *   launcher     false to leave out the floating Raka button (R.RakaLauncher, rangka.pen "OS / Raka · *"); with it
- *                the panel floats above the button below 1280px. The button is hidden while Raka is docked or Full. Shown only where AssistantRoot is mounted, which
+ *   launcher     false to leave out the floating Zafdoz button (R.RakaLauncher, rangka.pen "OS / Zafdoz · *"); with it
+ *                the panel floats above the button below 1280px. The button is hidden while Zafdoz is docked or Full. Shown only where AssistantRoot is mounted, which
  *                the hosts do only when meta.features.ai === true (Rangka Cloud), never on a plain self-hosted kernel.
  *   tuckFor      optional CSS selector: while an element matches (a screen with its own button at the bottom right),
  *                the launcher sits tucked against the right edge
@@ -20,7 +20,7 @@
  * focuses the drawer's composer. The ask bar is not rendered while the drawer is open. Mount it only when
  * meta.features.ai === true.
  *
- * Panel mode (contract 0064 §1), picked by rakaMode: from 1280px (breakpoint "desktop") Raka docks beside the page
+ * Panel mode (contract 0064 §1), picked by rakaMode: from 1280px (breakpoint "desktop") Zafdoz docks beside the page
  * ("dock", default width 400, 360–640, dragged by the panel's edge and kept in localStorage "rk.raka.dock.w") or covers
  * the window ("full", the Perbesar button; Esc goes back to the dock). Below 1280px it is today's panel: "float" above
  * the launcher, else the fixed "drawer". While docked or Full, <html data-raka="dock|full"> and --raka-dock-w are set so
@@ -40,23 +40,23 @@
 
   /* ================================================================ pure helpers */
 
-  var UNAVAILABLE = "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.";
-  var TOO_LONG = "Raka butuh waktu terlalu lama. Coba pertanyaan yang lebih singkat.";
+  var UNAVAILABLE = "Zafdoz sedang tidak bisa dihubungi. Coba lagi sebentar lagi.";
+  var TOO_LONG = "Zafdoz butuh waktu terlalu lama. Coba pertanyaan yang lebih singkat.";
   var MSG = {
     // the kernel's codes
     ai_unavailable: UNAVAILABLE,
     ai_timeout: TOO_LONG,
     ai_busy: "Tunggu jawaban sebelumnya selesai.",
     ai_rate_limited: "Terlalu banyak pertanyaan. Coba lagi beberapa menit lagi.",
-    ai_disabled: "Raka dimatikan untuk perusahaan ini.",
+    ai_disabled: "Zafdoz dimatikan untuk perusahaan ini.",
     bad_request: "Pertanyaannya tidak bisa diproses. Coba tulis ulang.",
     // the sidecar's own codes, passed through by the kernel
     timeout: TOO_LONG,
-    agent_failed: "Raka gagal menyelesaikan permintaan ini. Coba tulis ulang.",
+    agent_failed: "Zafdoz gagal menyelesaikan permintaan ini. Coba tulis ulang.",
     unauthorized: UNAVAILABLE
   };
   /** The Bahasa Indonesia message for an error code from the kernel or the sidecar (an error event or a refusal before
-   *  streaming); any other code reads as "Raka is unavailable". */
+   *  streaming); any other code reads as "Zafdoz is unavailable". */
   function aiErrorText(code) { return MSG[code] || MSG.ai_unavailable; }
 
   function L(v) {
@@ -65,7 +65,7 @@
     return String(v);
   }
 
-  /** The app page as Raka's context: {route (the hash without its query), title, model?, record?}; null for an unknown
+  /** The app page as Zafdoz's context: {route (the hash without its query), title, model?, record?}; null for an unknown
    *  route. On a document page the title carries the record's name, then its display title (recordTitle) when that differs. */
   function aiContext(hash, meta, recordTitle) {
     meta = meta || {};
@@ -174,14 +174,14 @@
     return o.launcher ? "float" : "drawer";
   }
   RA.rakaMode = rakaMode;
-  /** The element to give focus back to when Raka closes: the one focused before the ask bar or the panel opened.
+  /** The element to give focus back to when Zafdoz closes: the one focused before the ask bar or the panel opened.
    *  While either is already open the kept element stays; the ask bar handing over to the panel must not replace it. */
   function rememberOpener(kept, active, askOpen, drawerOpen) { return askOpen || drawerOpen ? kept : active; }
   RA.rememberOpener = rememberOpener;
   RA.DOCK_WIDTH_KEY = DOCK_WIDTH_KEY;
 
   /* ================================================================ diagrams
-   * Raka's answers may hold ```mermaid fences; RichText draws them with the vendored Mermaid. The URL is resolved from
+   * Zafdoz's answers may hold ```mermaid fences; RichText draws them with the vendored Mermaid. The URL is resolved from
    * this script's own address so the Console (which loads ../app/ai.js) finds app/vendor/ too. Not precached by sw.js:
    * offline, the Diagram fallback shows. The bundle loads before ai.js; the guard keeps older bundles working. */
   (function () {
@@ -229,7 +229,7 @@
     var ws = useState(readDockWidth), width = ws[0], setWidth = ws[1];
     var bp = R.useBreakpoint();
     var mode = rakaMode({ open: drawerOpen, full: full, bp: bp, launcher: !!R.RakaLauncher && p.launcher !== false });
-    var opener = useRef(null); // the element that had focus before Raka opened
+    var opener = useRef(null); // the element that had focus before Zafdoz opened
     var vs = useState(""), value = vs[0], setValue = vs[1];
     var cs = useState(null), askCtx = cs[0], setAskCtx = cs[1];
     var seq = useRef(0), abort = useRef(null), live = useRef({});
@@ -237,7 +237,7 @@
     var tk = useState(readTuck()), tucked = tk[0], setTucked = tk[1];
     var at = useState(false), autoTuck = at[0], setAutoTuck = at[1];
     function setTuck(v) { setTucked(!!v); writeTuck(!!v); }
-    // OS / Raka · Tersembunyi is used on its own on a screen that has its own button at the bottom right
+    // OS / Zafdoz · Tersembunyi is used on its own on a screen that has its own button at the bottom right
     useEffect(function () {
       if (!p.tuckFor || !global.MutationObserver) return;
       var raf = 0;
@@ -366,7 +366,7 @@
       else if (p.navigate) p.navigate(withQuery(hereHash(), "ubah=1"));
     }
 
-    // the launcher's count: Raka's change sets in this conversation that still wait for a person
+    // the launcher's count: Zafdoz's change sets in this conversation that still wait for a person
     var pending = 0;
     s.turns.forEach(function (t) { (t.changesets || []).forEach(function (c) { if (WAITING[c.status]) pending++; }); });
     var here = drawerOpen && p.getContext ? p.getContext() : null;

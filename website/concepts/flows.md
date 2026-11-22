@@ -71,7 +71,7 @@ notices:
 Without `notice:` a step to a role tells that role with kind `app.<module>.<flow>` (`site.<flow>` for a company
 flow). Keep the text to what every recipient may read in the app: numbers, amounts, names; never a customer's phone,
 address or bank account (`notice_personal_field`). The validator also reports `unknown_notice`, `duplicate_notice`,
-`notice_role_cannot_read` and `notice_too_long`; a change set from Raka whose flow tells someone by email address is
+`notice_role_cannot_read` and `notice_too_long`; a change set from Zafdoz whose flow tells someone by email address is
 raised to high (`notice_literal_email`).
 
 ## Record-event flows

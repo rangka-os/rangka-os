@@ -136,7 +136,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `queue.js` | The `queue` work screen (kitchen, today's jobs): columns of cards, steps, undo, polling (contract 0030 §2) |
 | `screens.js` | Work screens (`#/w/<screen>`, contract 0030): the route view and the type renderers (`entry`) |
 | `import.js` | Import wizard: upload, preview or row errors, commit |
-| `ai.js` | Raka (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |
+| `ai.js` | Zafdoz (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |
 | `team.js` | Pengaturan → Tim (contract 0056 §4): the owner's team list, Undang (with the one-time sign-in link: Salin, Kirim lewat WhatsApp), Ubah, Hapus; read only with "Atur tim di Rangka Cloud." when `managed_by` is `host`. Also the sign-in link page (`#/masuk/tautan`), which the shell opens before asking who is signed in |
 | `tampilan.js` | Pengaturan → Tampilan (contract 0067): everyone's own mode and theme (`PUT /me/appearance`); for the owner the theme gallery (try on the page, Terapkan as a change set) and "Buat tema sendiri" (one colour, logo colours, button, neutral, font; gated by the plan's `custom_theme`). The shell paints the effective theme as inline custom properties on `<html>` (`RA.paintTheme`) |
 | `map.js` | Maps (contract 0072, rangka-os#248): `RA.loadLeaflet()` (vendored Leaflet + markercluster on first use), `RA.MapView` (tiles from `/meta` `maps`, token pins, clusters, circle, "Posisi saya", `onMove(bbox)`, `onPick`) and `RA.MapThumb` (static tile preview, used by read-only `geo` fields) |
@@ -160,7 +160,7 @@ absent meta key turns it off and its buttons disappear.
 | Buttons per action | `meta.models[m].can[action]` when present |
 | Ubah | `meta.changesets.propose`; "Setujui & terapkan" needs `approve` (and `approve_high` for high risk) |
 | Tim | `meta.user.roles` includes `owner` (the kernel answers `/api/v1/team` to the owner's browser session alone) |
-| Raka (⌘J, sidebar "Tanya Raka", ⌘K) | `meta.features.ai` is `true`: the kernel runs with `--ai-url`, the sidecar answered `GET /healthz` within 30 s and `config.ai.enabled` is not `false` (contract 0020). Answers stream from `POST /api/v1/ai/chat`; a change set card opens `?preview=<id>` or Ubah. Raka never approves or applies. History stays in the tab under `rk.ai.<org>.<email>` and is removed on sign-out |
+| Zafdoz (⌘J, sidebar "Tanya Zafdoz", ⌘K) | `meta.features.ai` is `true`: the kernel runs with `--ai-url`, the sidecar answered `GET /healthz` within 30 s and `config.ai.enabled` is not `false` (contract 0020). Answers stream from `POST /api/v1/ai/chat`; a change set card opens `?preview=<id>` or Ubah. Zafdoz never approves or applies. History stays in the tab under `rk.ai.<org>.<email>` and is removed on sign-out |
 
 ## Run
 
@@ -170,7 +170,7 @@ open http://localhost:8080/app/
 ```
 
 When `rangka-ai` is built next to `rangka-os` (`npm run build` there; or point `RANGKA_AI_DIR` at a checkout),
-`run-demo` also starts its scripted sidecar (`serve --demo`, no LLM key) and Raka answers on ⌘J.
+`run-demo` also starts its scripted sidecar (`serve --demo`, no LLM key) and Zafdoz answers on ⌘J.
 
 Sign in with `ceo@saga.co.id` / `rangka-demo`. Add more people with
 `RANGKA_USER_PASSWORD=… rangka user add <email> --org kopi-senja --role sales_rep` (`--db` defaults to `$DATABASE_URL`).
@@ -199,4 +199,4 @@ Go, Playwright or the PostgreSQL binaries the suite prints SKIP and exits 0, but
 `RANGKA_AI_DIR=<built rangka-ai> python3 web/app/test_app.py -k test_ai_live` runs the assistant end to end: the
 harness starts the real sidecar (`serve --demo`) with a random secret and the kernel with `--ai-url`; the scenario asks
 "berapa faktur jatuh tempo bulan ini?" and "tambah field Nomor PO di faktur" and opens the previewed change set. Without
-`RANGKA_AI_DIR` it returns at once; the other Raka scenarios mock `POST /api/v1/ai/chat`.
+`RANGKA_AI_DIR` it returns at once; the other Zafdoz scenarios mock `POST /api/v1/ai/chat`.

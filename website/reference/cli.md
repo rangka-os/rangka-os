@@ -176,6 +176,7 @@ made by `npm create @rangka-os` needs no flags:
 | `DATABASE_URL` | `--db` |
 | `RANGKA_APPS`, `RANGKA_SITE`, `RANGKA_MODULES`, `RANGKA_CONNECTORS`, `RANGKA_FIXTURES` | `--apps`, `--site`, `--modules`, `--connectors`, `--fixtures` (validate too) |
 | `RANGKA_ORG` | `--org` (seed, serve, user) |
+| `RANGKA_ORG_NAME` | `--org-name` (serve): the organisation's display name, set on every start (Rangka Cloud passes the business title). Unset: a new organisation is named after its id (`mogu-s61i` → "Mogu S61i") and an existing name stays |
 | `RANGKA_DEPLOY_TARGET` | `--deploy-target` (shown in `/system/status`) |
 | `RANGKA_FILES_DIR` | `--files-dir` (serve, migrate, backup), `--files` (restore) |
 | `RANGKA_ENV` | `production` turns on the backup before migrations |

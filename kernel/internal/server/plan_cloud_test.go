@@ -15,7 +15,7 @@ import (
 // cloudPlans are the package plans rangka-cloud writes into a business's features.rk (provision.writePackagePlans:
 // one flow-style cloud_<tier> plan per package, a label and limits only, rate when the router shapes too). They
 // carry no apps: the apps follow config.rk's plan, which Cloud leaves alone.
-const cloudPlans = `  - {name: cloud_juragan, label: {id: "Juragan"}, limits: {users: 4, outlets: 3, ai_credits_month: 50, rate: {rps: 2, burst: 2, max_wait_ms: 600, max_waiting: 10}}}
+const cloudPlans = `  - {name: cloud_juragan, label: {id: "Zafdoz Lite"}, limits: {users: 4, outlets: 3, ai_credits_month: 50, rate: {rps: 2, burst: 2, max_wait_ms: 600, max_waiting: 10}}}
   - {name: cloud_pro, label: {id: "Pro"}, limits: {users: 10, outlets: 6, ai_credits_month: 500, rate: {rps: 50, burst: 100, max_wait_ms: 3000, max_waiting: 50}}}
 `
 
@@ -72,7 +72,7 @@ func TestCloudPackagePlan(t *testing.T) {
 	// outlets (0028): 2 in the fixtures, the third fills the package, the fourth is refused
 	e.must(201, "POST", "/api/v1/r/outlet", map[string]any{"outlet_name": "Kopi Senja · Depok"})
 	r := e.must(403, "POST", "/api/v1/r/outlet", map[string]any{"outlet_name": "Kopi Senja · Bogor"})
-	if errCode(r) != "plan_limit" || !strings.Contains(errMsg(r), "Paket Juragan berlaku untuk 3 outlet") {
+	if errCode(r) != "plan_limit" || !strings.Contains(errMsg(r), "Paket Zafdoz Lite berlaku untuk 3 outlet") {
 		t.Fatalf("fourth outlet on cloud_juragan: %s", r.Body)
 	}
 	// people (0028): 4 on the package; the owner is one of them

@@ -113,7 +113,7 @@ func TestCustomThemePlanFlag(t *testing.T) {
 	own := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Warna merek", "ops": []any{map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
 		"patch": []any{map[string]any{"op": "replace", "path": "/color/brand", "value": "#7a4520"}}}}}).JSON
 	v := e.must(200, "POST", "/api/v1/changesets/"+own["id"].(string)+"/validate", nil)
-	if v.JSON["status"] == "validated" || !strings.Contains(string(v.Body), "plan_limit") || !strings.Contains(string(v.Body), "Juragan Pro") {
+	if v.JSON["status"] == "validated" || !strings.Contains(string(v.Body), "plan_limit") || !strings.Contains(string(v.Body), "Zafdoz Pro") {
 		t.Fatalf("own colours on a plan without custom_theme: %s", v.Body)
 	}
 	bundled := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Tema Laut", "ops": []any{map[string]any{"op": "patch", "path": "config.rk",

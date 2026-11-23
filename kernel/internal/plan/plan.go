@@ -672,7 +672,7 @@ func upgradeHint(reg *meta.Registry, c *Current, key string) string {
 	if AddOnLimits[key] {
 		return " Tambah kapasitas di Konsol."
 	}
-	return " Hubungi tim Juragan untuk menambah."
+	return " Hubungi tim zafdoz.ai untuk menambah."
 }
 
 // poolFull reports whether key is held by a pool cap (contract 0057 §2): the cap, not the plan, is the limit.
@@ -688,7 +688,7 @@ func (c *Current) poolFull(key string) bool {
 	return lim == cp.Value
 }
 
-const poolFullMsg = "Kolam Juragan Grup sudah penuh. Tambah kapasitas atau kurangi pemakaian di bisnis lain."
+const poolFullMsg = "Kolam Zafdoz Grup sudah penuh. Tambah kapasitas atau kurangi pemakaian di bisnis lain."
 
 // LimitError is the refusal of one more of key under c.
 func LimitError(reg *meta.Registry, c *Current, key string) *Error {

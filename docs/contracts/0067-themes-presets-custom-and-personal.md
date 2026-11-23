@@ -128,11 +128,11 @@ the list: validator error `unknown_font`.
 `accent`, `color`, or a font other than `system` (the "Buat tema sendiri" editor, logo colours, per-token edits).
 Only a plan whose resolved flags say `custom_theme: false` refuses it; a site without `features.rk`, without a chosen
 plan, or whose plans never name the flag allows it (self-host and existing sites keep working). Refused at validate:
-`plan_limit` on the theme file, message "Tema buatan sendiri … mulai paket Juragan Pro". Pointing `config.theme` at
+`plan_limit` on the theme file, message "Tema buatan sendiri … mulai paket Zafdoz Pro". Pointing `config.theme` at
 any theme, a theme that only `extends` a bundled one, and `neutral`, `button`, `mode`, `radius`, `density`, `logo`
 are always allowed. Downgrade never deletes: an existing custom theme keeps working and can be switched away from,
 not edited. Personal picks are never gated. Cloud writes `custom_theme: false` on `cloud_mulai` and `cloud_juragan`;
-`cloud_pro` ("Juragan Pro") and Grup leave it on. `GET /api/v1/plan` reports the plan's `flags`.
+`cloud_pro` ("Zafdoz Pro") and Grup leave it on. `GET /api/v1/plan` reports the plan's `flags`.
 
 ### 8. Web app and Console
 
@@ -151,7 +151,7 @@ not edited. Personal picks are never gated. Cloud writes `custom_theme: false` o
   `PUT {theme}` switches, `PUT {custom: {label, accent, button, neutral, font}}` writes `themes/<slug>.rk`; both are
   one change set, approved and applied with the owner's session, kept in the business's Riwayat. A kernel without
   this contract answers 404: the Konsol says the business needs an update. Cloud stores no copy of a theme.
-- Package tiers gain `custom_theme` (true from Juragan Pro, like `custom_domain`); without it the `cloud_<tier>` plan in
+- Package tiers gain `custom_theme` (true from Zafdoz Pro, like `custom_domain`); without it the `cloud_<tier>` plan in
   `features.rk` carries `flags: {custom_theme: false}`.
 - Cloud's own screens keep the Juragan look; the account's light/dark pick (`users.theme`) stays as it is. A person's
   own colour theme lives in each business kernel (§4). Business tiles in Bisnismu taking the business `brand` is left
@@ -167,7 +167,7 @@ errors Zafdoz already repairs from or explains. Zafdoz never approves or applies
 ## Consequences
 
 - The colours an owner picks finally reach the screen; every page and Zafdoz's panel follow one set of tokens.
-- Owners on any plan get six readable themes and a personal pick; Juragan Pro and up can match their own brand
+- Owners on any plan get six readable themes and a personal pick; Zafdoz Pro and up can match their own brand
   without knowing token names, and contrast stays guaranteed by code.
 - New kernel table and endpoints; Go/Python parity for `Derive`.
 - rangka-apps renames two template references (aliases keep old sites loading meanwhile).

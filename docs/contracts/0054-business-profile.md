@@ -147,8 +147,8 @@ Cloud computes the suggestion from the confirmed fields, the package values in `
 offer. It is computed on read and never stored. Unconfirmed guesses are not used.
 
 ```json
-{"plan": "pro", "label": "Juragan Pro", "price_per_month": 249000, "offer": "modules_custom",
- "reasons": [{"field": "staff", "text": "21–100 staf: Juragan Pro memuat sampai 30 pengguna."}], "needs_review": false}
+{"plan": "pro", "label": "Zafdoz Pro", "price_per_month": 249000, "offer": "modules_custom",
+ "reasons": [{"field": "staff", "text": "21–100 staf: Zafdoz Pro memuat sampai 30 pengguna."}], "needs_review": false}
 ```
 
 **Plan.** The packages in order are `mulai` < `juragan` < `pro` < `grup` < `enterprise`. Each answer gives a minimum

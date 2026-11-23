@@ -712,7 +712,7 @@ func (s *Service) planTheme(ctx context.Context, v *Validation, reg *meta.Regist
 		}
 		if theme.Custom(meta.AsMap(d.Data)) {
 			v.Errors = append(v.Errors, meta.Item{Level: "error", Pos: "1:1", Where: d.Path, Code: "plan_limit",
-				Message: "Tema buatan sendiri (warna, warna logo, atau font) tersedia mulai paket Juragan Pro. Pilih salah satu tema bawaan, atau naikkan paket."})
+				Message: "Tema buatan sendiri (warna, warna logo, atau font) tersedia mulai paket Zafdoz Pro. Pilih salah satu tema bawaan, atau naikkan paket."})
 		}
 	}
 	return nil

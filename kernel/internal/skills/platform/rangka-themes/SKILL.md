@@ -36,7 +36,7 @@ font: {sans: plus-jakarta-sans}   # system | inter | plus-jakarta-sans | nunito-
 Then point `config.rk` at it in the same change set. Colours from a logo: the owner uploads the logo in
 Pengaturan › Tampilan (the kernel computes them, `POST /api/v1/themes/from-image`); when they give you a hex, use it.
 
-- Only on plans that allow it: `plan_limit` with "mulai paket Juragan Pro" means the plan has `custom_theme: false`.
+- Only on plans that allow it: `plan_limit` with "mulai paket Zafdoz Pro" means the plan has `custom_theme: false`.
   Offer the bundled themes instead and say why. Never edit `features.rk`.
 - `color:` (one token at a time) is for designers who ask for a specific token; it is checked, not adjusted.
 - **Locked:** status colours (`ok`, `warn`, `bad`, `info`, `discovery` and their variants), `raka*`, `spark`,

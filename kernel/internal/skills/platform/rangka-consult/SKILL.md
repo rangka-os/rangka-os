@@ -262,7 +262,7 @@ missing instead of offering.
 
   | Platform word | Say instead |
   |---|---|
-  | katalog, dari katalog Rangka | yang sudah tersedia di Juragan |
+  | katalog, dari katalog Rangka | yang sudah tersedia di Zafdoz Lite |
   | konektor WhatsApp (or another service) | sambungan ke WhatsApp |
   | kepingan custom, kepingan khusus | bagian yang disusun khusus untukmu |
   | modul | fitur, or what it does ("catatan stok") |

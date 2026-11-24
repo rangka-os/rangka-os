@@ -10,6 +10,15 @@ Everything here reaches the site through a change set (`rangka-changesets`): Zaf
 a person approves. Snippets use schema 0.5 (`schema/0.5/flow.json`, `model.json`, `overlay.json`); every one in
 [references/worked-flows.md](references/worked-flows.md) passes `rangka validate`.
 
+## Before you draft: ask or state
+
+- A money threshold: the amount (the owner's number) and whether it includes PPN (`grand_total`) or not
+  (`net_total`). Say which one you use in the reply.
+- A fine, fee or penalty: the rule (per day, per item, a cap), or show the rule a module already applies and ask
+  whether it fits.
+- An existing approval or flow for the same case: change it, never add a second one.
+- Customers to be messaged: notices reach members only; customer phone numbers never go in a notice.
+
 ## 1. Look before you build
 
 Most things owners ask for already run in a shipped module. Writing a second one makes people hear things twice.

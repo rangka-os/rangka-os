@@ -130,6 +130,9 @@ text is what goes on the map, written as the owner would say it. Every option na
 
 ### 5. The card (studio)
 
+- **Amended by 0075 §5:** after the profile save the card is shown only when the story named no problem (no pain on
+  the map outside `n_pick_…`), and one chat answer after the card is enough before an offer (was two).
+
 - **When.** With rangka-ai, in the interview: right after the profile card is saved complete and the picks were never
   saved, Cloud adds Zafdoz's message with card kind `pains` (returned in the profile `PUT` reply). Zafdoz's text: "Sekarang
   pilih yang paling bikin repot di usahamu. Boleh lebih dari satu." "Ubah" on "Masalahmu" in the peta panel adds the

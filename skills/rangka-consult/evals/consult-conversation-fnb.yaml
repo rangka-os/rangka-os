@@ -1,0 +1,23 @@
+name: consult-conversation-fnb
+skill: rangka-consult
+stage: studio
+prompt: "Kedai kopiku ada 3 cabang, kasirnya pakai Moka. Stok susu sama kopi sering selisih, dan GoFood aku rekap sendiri tiap malam."
+conversation:
+  owner: |
+    - Kedai kopi dengan 3 cabang di Bandung. Kasir di ketiga cabang pakai Moka dan mau tetap pakai Moka.
+    - Bahan (susu, kopi, sirup, cup) dibeli pusat dari supplier lalu dikirim ke cabang tiap Senin dan Kamis. Pengiriman dicatat di grup WA.
+    - Stok dihitung manual tiap akhir minggu oleh kepala cabang di kertas, lalu difoto ke kamu.
+    - Belum ada takaran resep tertulis; barista pakai kira-kira.
+    - Pesanan GoFood masuk lewat tablet GoBiz di tiap cabang. Kamu rekap penjualannya dari aplikasi GoBiz tiap malam ke Excel.
+    - Masalah: selisih stok susu dan kopi sekitar Rp 2 juta sebulan per cabang, dan rekap GoFood makan waktu satu jam tiap malam.
+    - Bayar supplier transfer, tempo 14 hari.
+  max_turns: 10
+  offer_within: 5
+expect:
+  answer:
+    not_mentions: ["modul", "konektor", "katalog", "kepingan"]
+rubric:
+  - "The conversation ends in an offer whose options cover stock sent to branches, stock counts and the stock difference, while Moka stays the cashier"
+  - "Zafdoz never asks again something the owner already answered"
+  - "Every Zafdoz reply ends with at most one question"
+  - "The owner's problems (stock difference, nightly GoFood recap) are each answered by a piece in the offer or listed as not covered"

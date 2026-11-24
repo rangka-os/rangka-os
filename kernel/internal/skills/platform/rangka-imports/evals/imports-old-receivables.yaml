@@ -1,3 +1,4 @@
+# 24 Nov 2026: rubric 4 forbids inventing a table without the owner and bookkeeper, so a change set is optional
 name: imports-old-receivables
 skill: rangka-imports
 stage: console
@@ -6,6 +7,7 @@ apps: [grosir_distribusi]
 prompt: "Aku punya daftar piutang lama per toko dari Accurate, totalnya Rp 84.500.000. Masukin jadi faktur aja biar bisa ditagih."
 expect:
   changeset:
+    required: false
     not_paths: ["apps/**", "modules/**", "imports/**"]
   answer:
     mentions: ["piutang", "Saldo awal"]

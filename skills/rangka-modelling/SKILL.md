@@ -52,6 +52,10 @@ Never create a second one (`x_pelanggan`, `x_barang`, `x_karyawan`); link to the
 
 Check each against `rangka_meta` on the site: a module that is not installed has no model to link to.
 
+Say the reuse to the owner, one line per master record and per thing a module already records: "pelanggan pakai
+daftar pelanggan yang sudah ada", "cabang pakai daftar outlet", "absen sudah dicatat modul kursus, jadi tidak dibuat
+lagi". In the studio too: map each record of a `custom` piece to `customer`, `outlet`, `item` and the rest by name.
+
 In the studio (before a site exists) the same rule shapes a `custom` piece's `design.records` (`rangka-consult`
 section 5): list what must be remembered, then map each record to a core model, an overlay field or a new company
 model with this table.
@@ -197,6 +201,10 @@ One request, one change set (`rangka-changesets`). Create whole files for new mo
 - Give every new company model `permissions` when you create it, copied from a sibling model of the same app: after
   that, changing them is a person's job (`ai_forbidden_path`). Without them every role has full access.
 - A company table has no menu of its own: it shows where the site's layout `nav.side` lists it.
+- A kind with a fixed set of values is a `select` even when the owner names only one: a contract type (PKWT / PKWTT),
+  a payment method, a status. Never store it as free text or only as a number field.
+- Give the owner the real reason for the approval: a submittable document (an exam, a booking) is owner only because
+  submitted values cannot be changed afterwards, not because of permissions.
 - Tell the owner in their words what will be recorded and where, never that it is done: "Aku siapkan tabel Ujian:
   tiap ujian satu angkatan, nilai per peserta, jumlah yang lulus dihitung otomatis. Karena nilai yang sudah diajukan
   tidak bisa diubah, perubahan ini perlu disetujui pemilik."

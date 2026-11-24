@@ -198,6 +198,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			db.Close()
 			return nil, err
 		}
+		if err := SeedDefaultsAll(ctx, db, reg, cfg.Logf); err != nil {
+			db.Close()
+			return nil, err
+		}
 		if err := plan.Sync(ctx, db, reg); err != nil { // contract 0028: rangka user add reads the limits from here
 			db.Close()
 			return nil, fmt.Errorf("plan: %w", err)
@@ -634,6 +638,10 @@ func (s *Server) Reload(ctx context.Context) error {
 		return err
 	}
 	if err := SyncOrgs(ctx, s.DB, reg); err != nil {
+		return err
+	}
+	// contract 0076: a module installed by this change set brings its defaults into empty tables
+	if err := SeedDefaultsAll(ctx, s.DB, reg, s.Cfg.Logf); err != nil {
 		return err
 	}
 	if err := plan.Sync(ctx, s.DB, reg); err != nil {

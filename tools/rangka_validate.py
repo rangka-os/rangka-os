@@ -2940,6 +2940,37 @@ def check_processes(rep, V, allmodels, only, processes):
                     check_expr(sub, p, f"{at}/when", sm["when"], m, fields, allmodels)
                 if sub.items:
                     rep.add("error", p, f"{at}/when", "process_when", sub.items[0][4])
+        starter = raw["starter"] if isinstance(raw.get("starter"), dict) else {}
+        for mn in sorted(starter):
+            check_starter(rep, p, f"starter/{mn}", starter[mn], mn, allmodels[mn][2] if mn in allmodels else None, allmodels)
+
+
+STARTER_TYPES = {"data", "small_text", "text"}
+
+
+def check_starter(rep, p, at, rows, model, m, allmodels):
+    """A process's starter rows of one model (contract 0076 §4), as processStarter in the kernel: the model exists and
+    is master data (not submittable), and each key is a plain text field of it that is not computed, read-only or
+    hidden from a role. m is None when the model is not known."""
+    if m is None:
+        rep.add("error", p, at, "process_starter_model", f'"{model}" is not a model{suggest(model, sorted(allmodels))}')
+        return
+    if m.get("is_submittable") is True:
+        rep.add("error", p, at, "process_starter_document", f'"{model}" is a document; starter holds master data only')
+        return
+    fields = {f["name"]: f for f in m.get("fields", []) if isinstance(f, dict) and isinstance(f.get("name"), str)}
+    for i, r in enumerate(rows if isinstance(rows, list) else []):
+        for k in sorted(r.keys() if isinstance(r, dict) else []):
+            where = f"{at}/{i}/{k}"
+            f = fields.get(k)
+            if f is None:
+                rep.add("error", p, where, "process_starter_field", f'"{k}" is not a field of {model}{suggest(k, sorted(fields))}')
+                continue
+            hidden = f.get("hidden_for")
+            if (f.get("type") not in STARTER_TYPES or f.get("compute") is not None or f.get("read_only") is True
+                    or (isinstance(hidden, list) and len(hidden) > 0)):
+                rep.add("error", p, where, "process_starter_field",
+                        f'field "{k}" of {model} cannot come from the interview: plain text fields only, not computed, read-only or hidden from a role')
 
 
 SCREEN_TYPES = ["counter", "queue", "roll", "route", "handover", "clock", "entry"]

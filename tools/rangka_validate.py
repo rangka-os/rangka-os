@@ -2940,21 +2940,20 @@ def check_processes(rep, V, allmodels, only, processes):
                     check_expr(sub, p, f"{at}/when", sm["when"], m, fields, allmodels)
                 if sub.items:
                     rep.add("error", p, f"{at}/when", "process_when", sub.items[0][4])
-            if "starter" in sm:
-                check_starter(rep, p, f"{at}/starter", sm["starter"], model, allmodels[model][2] if known else None)
+        starter = raw["starter"] if isinstance(raw.get("starter"), dict) else {}
+        for mn in sorted(starter):
+            check_starter(rep, p, f"starter/{mn}", starter[mn], mn, allmodels[mn][2] if mn in allmodels else None, allmodels)
 
 
 STARTER_TYPES = {"data", "small_text", "text"}
 
 
-def check_starter(rep, p, at, rows, model, m):
-    """A stage's starter (contract 0076 §4), as processStarter in the kernel: the stage names a model that is master
-    data (not submittable), and each key is a plain text field of it that is not computed, read-only or hidden from a
-    role. m is None when the stage has no known model (an unknown one is reported by check_processes)."""
-    if model == "":
-        rep.add("error", p, at, "process_starter_model", "starter needs the stage's model")
-        return
+def check_starter(rep, p, at, rows, model, m, allmodels):
+    """A process's starter rows of one model (contract 0076 §4), as processStarter in the kernel: the model exists and
+    is master data (not submittable), and each key is a plain text field of it that is not computed, read-only or
+    hidden from a role. m is None when the model is not known."""
     if m is None:
+        rep.add("error", p, at, "process_starter_model", f'"{model}" is not a model{suggest(model, sorted(allmodels))}')
         return
     if m.get("is_submittable") is True:
         rep.add("error", p, at, "process_starter_document", f'"{model}" is a document; starter holds master data only')

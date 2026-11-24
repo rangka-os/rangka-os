@@ -44,28 +44,26 @@ func (v *validator) process(p *Process, all map[string]vis) {
 		if _, has := sm["when"]; has && known {
 			v.processWhen(d.Path, at+"/when", sm["when"], model.m, all)
 		}
-		if _, has := sm["starter"]; has {
-			var m *Model
-			if known {
-				m = model.m
-			}
-			v.processStarter(d.Path, at+"/starter", asList(sm["starter"]), st.Model, m)
+	}
+	starter := asMap(raw["starter"])
+	for _, mn := range keys(starter) {
+		var m *Model
+		if x, ok := all[mn]; ok {
+			m = x.m
 		}
+		v.processStarter(d.Path, "starter/"+mn, asList(starter[mn]), mn, m, all)
 	}
 }
 
 // starterTypes are the field types a stage's starter may fill (contract 0076 §4): plain text the owner said.
 var starterTypes = map[string]bool{"data": true, "small_text": true, "text": true}
 
-// processStarter checks a stage's starter (contract 0076 §4), as check_starter in rangka_validate.py: the stage names
-// a model that is master data (not submittable), and each key is a plain text field of it that is not computed,
-// read-only or hidden from a role. m is nil when the stage has no known model (an unknown one is reported above).
-func (v *validator) processStarter(path, at string, rows []any, model string, m *Model) {
-	if model == "" {
-		v.rep.extra("error", path, at, "process_starter_model", "starter needs the stage's model")
-		return
-	}
+// processStarter checks a process's starter rows of one model (contract 0076 §4), as check_starter in
+// rangka_validate.py: the model exists and is master data (not submittable), and each key is a plain text field of it
+// that is not computed, read-only or hidden from a role. m is nil when the model is not known.
+func (v *validator) processStarter(path, at string, rows []any, model string, m *Model, all map[string]vis) {
 	if m == nil {
+		v.rep.extra("error", path, at, "process_starter_model", fmt.Sprintf(`"%s" is not a model%s`, model, suggest(model, keys(all))))
 		return
 	}
 	if m.IsSubmittable {

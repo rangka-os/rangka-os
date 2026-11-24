@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/process.json
 name: bad_starter
+starter:
+  custmer: [{customer_name: Toko Maju}]
+  customer: [{customer_nam: Toko Maju, city: Bandung}]
+  sales_invoice: [{grand_total: "50000"}]
 stages:
-  - {name: no_model, starter: [{customer_name: Toko Maju}]}
-  - {name: customer, model: customer, starter: [{customer_nam: Toko Maju, city: Bandung}]}
-  - {name: invoice, model: sales_invoice, starter: [{grand_total: "50000"}]}
+  - {name: customer, model: customer}

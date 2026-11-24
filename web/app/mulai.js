@@ -325,14 +325,20 @@
       opens.length ? h("p", { className: "ap-mu-opens" }, h(Gift, null), "Setelah ini terbuka: " + opens.slice(0, 3).join(", ") + (opens.length > 3 ? ", dan lainnya" : "")) : null);
   }
 
-  /** Contract 0076 §4: what the owner named in the interview for this step, minus what is already saved (the kernel
-   *  leaves those out). Each row opens the step's form prefilled; the owner completes it and saves. */
+  /** Contract 0076 §4: what the owner named in the interview for this step's model, minus what is already saved (the
+   *  kernel leaves those out). Each row opens the step's form prefilled; the owner completes it and saves. */
   function starterTitle(meta, s, row) {
     var tf = (((meta && meta.models) || {})[s.model] || {}).title_field;
     return (tf && row[tf]) || Object.keys(row).map(function (k) { return row[k]; })[0] || "";
   }
+  /** The rows for a step's model: the kernel sends them by model (process `starter`), so a prerequisite step ("Isi
+   *  dulu Alat sewa", which is not a stage of the process) gets the owner's tents and chairs too. */
+  function starterRows(ob, s) {
+    var rows = (((ob && ob.starter) || {})[s.model]) || [];
+    return rows.filter(function (r) { return r && typeof r === "object" && !Array.isArray(r); });
+  }
   function Starter(p) {
-    var ctx = p.ctx, s = p.step, rows = (s.starter || []).filter(function (r) { return r && typeof r === "object"; });
+    var ctx = p.ctx, s = p.step, rows = starterRows(ctx.onboarding && ctx.onboarding.data, s);
     if (!rows.length) return null;
     return h("div", { className: "ap-mu-starter", "data-tour": "mulai-starter" },
       h("span", { className: "ap-mu-faint" }, p.again ? "Tambah juga dari ceritamu:" : "Dari ceritamu:"),
@@ -857,4 +863,5 @@
   RA.mulaiTour = mulaiTour;
   RA.stepTour = stepTour;
   RA.starterTitle = starterTitle;
+  RA.starterRows = starterRows;
 })(typeof window !== "undefined" ? window : globalThis);

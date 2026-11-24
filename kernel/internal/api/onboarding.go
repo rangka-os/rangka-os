@@ -162,7 +162,17 @@ func (s *Server) Onboarding(ctx context.Context, a engine.Actor) (map[string]any
 	steps := []map[string]any{}
 	var current any
 	procName := any(nil)
+	starter := map[string][]map[string]string{}
 	if p := onboardingProcess(reg); p != nil {
+		// contract 0076 §4: what the owner named in the interview, by model, minus what is already a record; the web
+		// app puts each model's rows on the step of that model, prerequisite steps included
+		for _, mn := range sortedKeys(p.Starter) {
+			if m := reg.Model(mn); m != nil && !m.IsChild && canRead(mn) {
+				if rows := s.starterLeft(ctx, a, m, p.Starter[mn]); len(rows) > 0 {
+					starter[mn] = rows
+				}
+			}
+		}
 		var stages []meta.Stage
 		for _, st := range p.Stages {
 			m := reg.Model(st.Model)
@@ -181,10 +191,7 @@ func (s *Server) Onboarding(ctx context.Context, a engine.Actor) (map[string]any
 			if st.Hint != nil {
 				step["hint"] = st.Hint
 			}
-			// contract 0076 §4: what the owner named in the interview, minus what is already a record
-			if rows := s.starterLeft(ctx, a, m, st.Starter); len(rows) > 0 {
-				step["starter"] = rows
-			}
+
 			done, at, err := s.Engine.StageDone(ctx, a.Org, m, st.When)
 			if err != nil {
 				return nil, err
@@ -230,7 +237,8 @@ func (s *Server) Onboarding(ctx context.Context, a engine.Actor) (map[string]any
 			locks[n] = map[string]any{"reason": "needs_data", "needs": needs}
 		}
 	}
-	return map[string]any{"process": procName, "hidden": hidden, "steps": steps, "current": current, "locks": locks}, nil
+	return map[string]any{"process": procName, "hidden": hidden, "steps": steps, "current": current, "locks": locks,
+		"starter": starter}, nil
 }
 
 func (s *Server) getOnboarding(w http.ResponseWriter, r *http.Request, c *caller) {
@@ -325,5 +333,14 @@ func (s *Server) starterLeft(ctx context.Context, a engine.Actor, m *meta.Model,
 			out = append(out, row)
 		}
 	}
+	return out
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
 	return out
 }

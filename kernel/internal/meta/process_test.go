@@ -97,12 +97,12 @@ func TestValidateProcess(t *testing.T) {
 		"process_duplicate_stage": `../modules/core/processes/dup_stage.rk stages/1/name stage "step" is declared twice`,
 		"process_name_mismatch":   `../modules/core/processes/bad_name.rk name process name "other_name" must match the file name "bad_name"`,
 		"process_when":            "../modules/core/processes/bad_when.rk stages/0/when `statu` in `statu == 'paid'` is not a field; did you mean \"status\"?",
-		// contract 0076 §4: a starter needs the stage's model, fields of it, and plain text ones only
-		"process_starter_model": `../modules/core/processes/bad_starter.rk stages/0/starter starter needs the stage's model`,
+		// contract 0076 §4: a starter names models, fields of them, and plain text ones only
+		"process_starter_model": `../modules/core/processes/bad_starter.rk starter/custmer "custmer" is not a model; did you mean "customer"?`,
 	}
 	for _, w := range []string{
-		`../modules/core/processes/bad_starter.rk stages/1/starter/0/customer_nam "customer_nam" is not a field of customer; did you mean "customer_name"?`,
-		`../modules/core/processes/bad_starter.rk stages/2/starter/0/grand_total field "grand_total" of sales_invoice cannot come from the interview: plain text fields only, not computed, read-only or hidden from a role`,
+		`../modules/core/processes/bad_starter.rk starter/customer/0/customer_nam "customer_nam" is not a field of customer; did you mean "customer_name"?`,
+		`../modules/core/processes/bad_starter.rk starter/sales_invoice/0/grand_total field "grand_total" of sales_invoice cannot come from the interview: plain text fields only, not computed, read-only or hidden from a role`,
 	} {
 		found := false
 		for _, it := range rep.All() {
@@ -122,10 +122,9 @@ func TestValidateProcess(t *testing.T) {
 			t.Errorf("%s x%d: %q\nwant %q", code, count[code], got[code], w)
 		}
 	}
-	// bad_schema.rk has empty stages; bad_hint.rk has a hint over 300 characters and six answers (contract 0053 §1);
-	// bad_starter.rk's first stage has no model (the schema requires one, process_starter_model says why too)
-	if count["schema"] != 4 {
-		t.Errorf("schema errors = %d, want 4", count["schema"])
+	// bad_schema.rk has empty stages; bad_hint.rk has a hint over 300 characters and six answers (contract 0053 §1)
+	if count["schema"] != 3 {
+		t.Errorf("schema errors = %d, want 3", count["schema"])
 	}
 	wheres := map[string]bool{}
 	for _, it := range rep.All() {

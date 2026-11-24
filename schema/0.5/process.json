@@ -9,6 +9,11 @@
     "$schema": {"type": "string"},
     "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
     "label": {"type": "object", "additionalProperties": {"type": "string"}},
+    "starter": {"type": "object", "maxProperties": 10, "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"},
+                "additionalProperties": {"type": "array", "maxItems": 20,
+                                         "items": {"type": "object", "minProperties": 1, "maxProperties": 4,
+                                                   "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 120}}},
+                "description": "Master data the owner named in the interview, by model, as plain text fields; Mulai di sini offers each row as a prefilled form on the step of that model, prerequisite steps included, which the owner completes and saves (contract 0076 §4)"},
     "stages": {
       "type": "array",
       "minItems": 1,
@@ -26,11 +31,7 @@
                    "description": "One sentence on what to do in this stage, shown in Mulai di sini (contract 0053 §1)"},
           "answers": {"type": "array", "maxItems": 5,
                       "items": {"type": "object", "additionalProperties": {"type": "string", "maxLength": 300}},
-                      "description": "The owner's problems this stage answers, in their words (contract 0053 §1)"},
-          "starter": {"type": "array", "maxItems": 20,
-                      "items": {"type": "object", "minProperties": 1, "maxProperties": 4,
-                                "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 120}},
-                      "description": "Records of this stage's model the owner named in the interview, as plain text fields; Mulai di sini offers each as a prefilled form the owner completes and saves (contract 0076 §4)"}
+                      "description": "The owner's problems this stage answers, in their words (contract 0053 §1)"}
         }
       }
     }

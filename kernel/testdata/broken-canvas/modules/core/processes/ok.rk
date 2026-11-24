@@ -1,8 +1,9 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/process.json
 name: ok
 label: {id: Dari pelanggan sampai lunas}
+starter:
+  customer: [{customer_name: Toko Maju, city: Bandung}, {customer_name: Warung Bu Sri}]
 stages:
-  - {name: customer, label: {id: Pelanggan}, model: customer, hint: {id: Masukkan pelanggan pertama.},
-     starter: [{customer_name: Toko Maju, city: Bandung}, {customer_name: Warung Bu Sri}]}
+  - {name: customer, label: {id: Pelanggan}, model: customer, hint: {id: Masukkan pelanggan pertama.}}
   - {name: paid, label: {id: Lunas}, model: sales_invoice, when: "status == 'paid'",
      answers: [{id: "Tagihan dicatat di buku, sering lupa ditagih"}]}

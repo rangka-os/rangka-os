@@ -416,3 +416,10 @@ test("starterTitle: a starter row is named by the model's title field, else its 
   assert.strictEqual(A.starterTitle(meta, { model: "outlet" }, { outlet_name: "Pusat" }), "Pusat");
   assert.strictEqual(A.starterTitle(meta, { model: "item" }, {}), "");
 });
+
+test("starterRows: a step gets the rows of its model, prerequisite steps included (contract 0076 §4)", () => {
+  const ob = { starter: { rental_item: [{ title: "Tenda 3x3" }, "x", null], customer: [] } };
+  assert.deepStrictEqual(plain(A.starterRows(ob, { model: "rental_item", prereq: true })), [{ title: "Tenda 3x3" }]);
+  assert.deepStrictEqual(plain(A.starterRows(ob, { model: "rental_booking" })), []);
+  assert.deepStrictEqual(plain(A.starterRows({}, { model: "rental_item" })), []);
+});

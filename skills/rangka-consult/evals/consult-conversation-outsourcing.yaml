@@ -14,6 +14,7 @@ conversation:
   max_turns: 10
   offer_within: 5
 expect:
+  skills: [rangka-review]
   answer:
     not_mentions: ["modul", "konektor", "katalog", "kepingan"]
 rubric:

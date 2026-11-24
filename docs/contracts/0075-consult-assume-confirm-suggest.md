@@ -32,8 +32,12 @@ answers)
 - **Assume, then confirm.** State the likely answer and ask to confirm; group up to three related assumptions in one
   question ("Ada yang beda?"). `answers` starts with the yes.
 - An assumption is not a fact: no `setting` before the owner says yes.
-- **Suggest** one better practice per turn for a problem the owner named, with the reason, then ask. Accepted: a piece
-  (with `solves`). Declined: not suggested again.
+- **Suggest** one better practice per turn for a problem the owner named, with the reason, from the first turn the
+  problem is named. It is a way of working, never an app, module or price, so it is not a pitch. It is said as part of
+  the proposal ("aku sertakan di usulan nanti, bisa kamu coret"), not as added. Accepted or not dropped: a piece (with
+  `solves`). Declined: not suggested again.
+- **One question per reply.** A suggestion carries no question of its own when another question follows; the one
+  confirmation ("Ada yang beda?") covers both.
 - **Don't ask what has a usual answer**; assume it and say so in the summary. Open questions only where the answer
   changes the design and cannot be guessed.
 - **Ask less over time.** Two turns without a change to the map means summarise. Once the flow from first contact to
@@ -56,4 +60,5 @@ answers)
 
 - rangka-ai `tests/test_answer_kind.py`: yes to an assumption or suggestion is an answer and keeps its setting; yes to
   an open question stays `empty`; a summary asked as a confirmation needs two stages.
-- Skill eval `skills/rangka-consult/evals/consult-assume-suggest.yaml`.
+- Skill eval `skills/rangka-consult/evals/consult-assume-suggest.yaml`. The domain evals' "one question" rubric items
+  accept a confirmation of stated assumptions.

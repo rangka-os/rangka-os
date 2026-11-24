@@ -2940,6 +2940,38 @@ def check_processes(rep, V, allmodels, only, processes):
                     check_expr(sub, p, f"{at}/when", sm["when"], m, fields, allmodels)
                 if sub.items:
                     rep.add("error", p, f"{at}/when", "process_when", sub.items[0][4])
+            if "starter" in sm:
+                check_starter(rep, p, f"{at}/starter", sm["starter"], model, allmodels[model][2] if known else None)
+
+
+STARTER_TYPES = {"data", "small_text", "text"}
+
+
+def check_starter(rep, p, at, rows, model, m):
+    """A stage's starter (contract 0076 §4), as processStarter in the kernel: the stage names a model that is master
+    data (not submittable), and each key is a plain text field of it that is not computed, read-only or hidden from a
+    role. m is None when the stage has no known model (an unknown one is reported by check_processes)."""
+    if model == "":
+        rep.add("error", p, at, "process_starter_model", "starter needs the stage's model")
+        return
+    if m is None:
+        return
+    if m.get("is_submittable") is True:
+        rep.add("error", p, at, "process_starter_document", f'"{model}" is a document; starter holds master data only')
+        return
+    fields = {f["name"]: f for f in m.get("fields", []) if isinstance(f, dict) and isinstance(f.get("name"), str)}
+    for i, r in enumerate(rows if isinstance(rows, list) else []):
+        for k in sorted(r.keys() if isinstance(r, dict) else []):
+            where = f"{at}/{i}/{k}"
+            f = fields.get(k)
+            if f is None:
+                rep.add("error", p, where, "process_starter_field", f'"{k}" is not a field of {model}{suggest(k, sorted(fields))}')
+                continue
+            hidden = f.get("hidden_for")
+            if (f.get("type") not in STARTER_TYPES or f.get("compute") is not None or f.get("read_only") is True
+                    or (isinstance(hidden, list) and len(hidden) > 0)):
+                rep.add("error", p, where, "process_starter_field",
+                        f'field "{k}" of {model} cannot come from the interview: plain text fields only, not computed, read-only or hidden from a role')
 
 
 SCREEN_TYPES = ["counter", "queue", "roll", "route", "handover", "clock", "entry"]

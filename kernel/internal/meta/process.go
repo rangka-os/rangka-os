@@ -13,10 +13,11 @@ import (
 type Stage struct {
 	Name, Model, When string
 	Label             Label
-	Models            []string // extra models whose nodes join the stage
-	Hint              Label    // contract 0053 §1: what to do in this stage (nil when absent)
-	Answers           []Label  // contract 0053 §1: the owner's problems this stage answers
-	Index             int      // position in the file's stages list (JSON pointer /stages/<Index>)
+	Models            []string            // extra models whose nodes join the stage
+	Hint              Label               // contract 0053 §1: what to do in this stage (nil when absent)
+	Answers           []Label             // contract 0053 §1: the owner's problems this stage answers
+	Starter           []map[string]string // contract 0076 §4: records of Model the owner named, plain text fields
+	Index             int                 // position in the file's stages list (JSON pointer /stages/<Index>)
 }
 
 // Process is one process definition.
@@ -41,7 +42,8 @@ func parseProcess(app, stem, file string, doc *rk.Doc) *Process {
 			sm = map[string]any{}
 		}
 		p.Stages = append(p.Stages, Stage{Name: str(sm, "name"), Label: label(sm["label"]), Model: str(sm, "model"),
-			When: celText(sm["when"]), Models: strList(sm["models"]), Index: i, Hint: label(sm["hint"]), Answers: labels(sm["answers"])})
+			When: celText(sm["when"]), Models: strList(sm["models"]), Index: i, Hint: label(sm["hint"]), Answers: labels(sm["answers"]),
+			Starter: starterRows(sm["starter"])})
 	}
 	return p
 }
@@ -96,6 +98,23 @@ func labels(v any) []Label {
 	for _, x := range asList(v) {
 		if l := label(x); l != nil {
 			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// starterRows reads a stage's starter (contract 0076 §4): each row's string values, rows without one left out.
+func starterRows(v any) []map[string]string {
+	var out []map[string]string
+	for _, r := range asList(v) {
+		row := map[string]string{}
+		for k, x := range asMap(r) {
+			if s, ok := x.(string); ok && s != "" {
+				row[k] = s
+			}
+		}
+		if len(row) > 0 {
+			out = append(out, row)
 		}
 	}
 	return out

@@ -46,6 +46,20 @@ answers)
 - On `empty` after an open question, turn it into an assumption instead of asking the same thing again (replaces
   0059 §4 `empty`).
 
+### §4 Two beats to the offer (skill `rangka-consult` §6)
+
+- Replaces 0046's three beats (understand → summary and wait for a yes → offer).
+- Reply 1: react, one suggestion, and a summary of the flow so far with assumptions for the gaps, ending in one
+  confirmation ("Ada yang beda?").
+- The next reply carries the offer as soon as the flow runs from first contact to money in: the summary and the
+  problems in the owner's words plus the `offer` field. No turn waits only for a yes to the summary; corrections come
+  through "Ubah sesuatu" or chat, and a new offer follows.
+- A third reply is only for what changes the design and cannot be assumed.
+- Code is unchanged. `dig_first` (0061) still holds an offer until two answers after the "Kesulitan usaha" card, and a
+  yes to the summary's confirmation counts as one (§1).
+- Measured with the conversation evals (`consult-conversation-*.yaml`, a simulated owner): the replies before the
+  offer, against `offer_within: 5`.
+
 ### §3 Studio header (rangka-cloud)
 
 - Every Zafdoz message in the studio is headed "Zafdoz". The "Pertanyaan n" counter and its unused total

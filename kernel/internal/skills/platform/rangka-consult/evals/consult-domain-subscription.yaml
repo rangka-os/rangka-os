@@ -7,7 +7,7 @@ expect:
     not_mentions: ["modul", "konektor", "katalog", "langganan_jasa", "kepingan"]
   escalate: false
 rubric:
-  - "The reply asks one question, about how collectors deposit the money or how payments other than cash come in"
+  - "The reply asks one question (an open question, or a confirmation of up to three stated assumptions; a suggestion phrased without its own question does not count), about how collectors deposit the money or how payments other than cash come in"
   - "The 10-day suspend rule is recorded as a setting the owner stated"
   - "The reply does not claim Rangka will cut the internet automatically; switching off at the router stays manual or open, said in the owner's words"
   - "A stage for monthly billing and one for field collection are on the map with a catalogue piece for subscriptions"

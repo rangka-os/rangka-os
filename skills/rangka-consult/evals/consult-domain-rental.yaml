@@ -7,7 +7,7 @@ expect:
     not_mentions: ["modul", "konektor", "katalog", "sewa_alat", "kepingan"]
   escalate: false
 rubric:
-  - "The reply asks one question only (an open question, or a confirmation of up to three stated assumptions), about the deposit, damage or late-return settlement, or about how double booking is avoided"
+  - "The reply asks one question only (an open question, or a confirmation of up to three stated assumptions; a suggestion phrased without its own question does not count), about the deposit, damage or late-return settlement, or about how double booking is avoided"
   - "Deposit is treated as money held for the customer, not as revenue and not as a free-text note"
   - "The KTP guarantee is not settled for the owner: how it is kept is asked, or stated as an assumption the owner is asked to confirm, never as a decided fact"
   - "A stage for booking, hand-over and return is placed with a catalogue piece for equipment rental"

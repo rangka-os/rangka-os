@@ -8,7 +8,7 @@ expect:
   escalate: false
 rubric:
   - "The reply states at least one assumption about how the business runs (for example how orders are recorded or when the balance is due) and asks the owner to confirm it, instead of asking an open question about something with a usual answer"
-  - "The reply carries at most one question; a confirmation of up to three grouped assumptions counts as one"
-  - "The reply suggests one concrete improvement tied to a problem the owner named (late returns or forgotten balances), with the reason, and asks whether the owner wants it"
+  - "The reply ends with at most one question; a confirmation of up to three grouped assumptions counts as one, and the suggestion carries no question of its own when another question follows"
+  - "The reply suggests one concrete improvement tied to a problem the owner named (late returns or forgotten balances), with the reason, and leaves the owner free to accept or drop it"
   - "No assumption is written as a setting before the owner confirms it"
   - "Nothing is described as already built or installed"

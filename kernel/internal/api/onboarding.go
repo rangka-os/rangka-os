@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/canvas"
@@ -180,6 +181,10 @@ func (s *Server) Onboarding(ctx context.Context, a engine.Actor) (map[string]any
 			if st.Hint != nil {
 				step["hint"] = st.Hint
 			}
+			// contract 0076 §4: what the owner named in the interview, minus what is already a record
+			if rows := s.starterLeft(ctx, a, m, st.Starter); len(rows) > 0 {
+				step["starter"] = rows
+			}
 			done, at, err := s.Engine.StageDone(ctx, a.Org, m, st.When)
 			if err != nil {
 				return nil, err
@@ -295,4 +300,30 @@ func (s *Server) putTour(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tour": tour, "state": *body.State})
+}
+
+// starterLeft is a stage's starter (contract 0076 §4) without the rows whose title is already a record the caller can
+// read (compared trimmed and case-blind), so a saved "Tenda" stops being offered. A model without a title field, or a
+// list that fails, keeps every row: offering a row twice is better than hiding one.
+func (s *Server) starterLeft(ctx context.Context, a engine.Actor, m *meta.Model, rows []map[string]string) []map[string]string {
+	if len(rows) == 0 || m.TitleField == "" {
+		return rows
+	}
+	recs, _, err := s.Engine.List(ctx, a, m.Name, engine.ListOpts{Limit: 500})
+	if err != nil {
+		return rows
+	}
+	have := map[string]bool{}
+	for _, r := range recs {
+		if t, ok := r[m.TitleField].(string); ok {
+			have[strings.ToLower(strings.TrimSpace(t))] = true
+		}
+	}
+	var out []map[string]string
+	for _, row := range rows {
+		if !have[strings.ToLower(strings.TrimSpace(row[m.TitleField]))] {
+			out = append(out, row)
+		}
+	}
+	return out
 }

@@ -1124,6 +1124,9 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-mu-chip .ap-mu-faint { display: inline; }
 .ap-mu-cur-t { margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; color: var(--ink); }
 .ap-mu-ans { margin: 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+/* contract 0076 §4: "Dari ceritamu" — what the owner named, one prefilled form each */
+.ap-mu-starter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.ap-mu-starter > .ap-mu-faint { font-size: 12px; line-height: 16px; margin-right: 2px; }
 .ap-mu-raka { border-radius: var(--r-lg); background: var(--discovery-tint); padding: 12px; display: grid; gap: 8px; }
 .ap-mu-raka-h { display: flex; align-items: center; gap: 8px; color: var(--discovery); font-size: 12px; }
 .ap-mu-raka p { margin: 0; color: var(--ink); }

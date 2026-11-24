@@ -409,3 +409,10 @@ test("whenKind and saveCopy: the last tour step follows the form's primary butto
   assert.match(pre.body, /langkah "Pesanan sewa" terbuka/);
   [simpan, any, sub, pre].forEach((c) => assert.doesNotMatch(c.title + c.body, /—/));
 });
+
+test("starterTitle: a starter row is named by the model's title field, else its first value (contract 0076 §4)", () => {
+  const meta = { models: { item: { title_field: "item_name" } } };
+  assert.strictEqual(A.starterTitle(meta, { model: "item" }, { sku: "TND", item_name: "Tenda 3x3" }), "Tenda 3x3");
+  assert.strictEqual(A.starterTitle(meta, { model: "outlet" }, { outlet_name: "Pusat" }), "Pusat");
+  assert.strictEqual(A.starterTitle(meta, { model: "item" }, {}), "");
+});

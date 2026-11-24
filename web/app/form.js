@@ -225,6 +225,7 @@
   RA.blankValue = blankValue;
   RA.writableBody = writableBody;
   RA.ruleField = ruleField;
+  RA.newValues = newValues; // contract 0076 §4 (pure: exported before the React parts)
   RA.mapServerErrors = mapServerErrors;
   RA.lifecycleSteps = lifecycleSteps;
   RA.docPanelSections = docPanelSections;
@@ -263,11 +264,28 @@
     return x;
   }
 
+  /** Values a new record starts with besides the model's defaults (contract 0076 §4): the prefill a caller passed
+   *  (Mulai di sini's "Dari ceritamu"), else one left for this model by a page-level opener in the last minute. Only
+   *  fields of the model; plain values, never a name. */
+  function newValues(m, mm, prefill) {
+    var src = prefill;
+    var pend = RA.pendingPrefill;
+    if (!src && pend && pend.model === m && Date.now() - pend.at < 60000) { src = pend.values; }
+    if (pend && pend.model === m) RA.pendingPrefill = null;
+    var fields = (mm && mm.fields) || null, out = {};
+    Object.keys(src || {}).forEach(function (k) {
+      if (k === "name") return;
+      if (fields && !fields.some(function (f) { return f.name === k; })) return;
+      out[k] = src[k];
+    });
+    return out;
+  }
+
   function FormView(p) {
     var ctx = useContext(RA.Ctx);
     var route = p.route || {};
     var m = p.model || route.model, name = p.name !== undefined ? p.name : route.isNew ? null : route.name;
-    return h(FormBody, { key: m + "/" + (name || "new"), ctx: ctx, model: m, name: name || null });
+    return h(FormBody, { key: m + "/" + (name || "new"), ctx: ctx, model: m, name: name || null, prefill: p.prefill || null });
   }
 
   function FormBody(p) {
@@ -314,7 +332,7 @@
     useEffect(function () {
       var dead = false;
       setLoadErr(null);
-      if (!routeName) { put(eng.blank(m)); return undefined; }
+      if (!routeName) { put(Object.assign(eng.blank(m), newValues(m, mm, p.prefill))); return undefined; }
       var ho = takeHandoff(m, routeName);
       if (ho) {
         accept(ho.rec);

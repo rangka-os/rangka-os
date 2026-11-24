@@ -223,6 +223,7 @@
     var pend = RA.pendingTour = { id: "langkah:" + step.stage, stage: step, at: Date.now() };
     // read before the form stands
     stageWhen(ctx, step).then(function (w) { if (w !== undefined) pend.when = w; });
+    if (step.prefill) RA.pendingPrefill = { model: step.model, values: step.prefill, at: Date.now() };
     ctx.navigate("#/r/" + step.model + "/new");
   }
   /** Kerjakan (desain v3): the step's form opens in a drawer over the page the owner is on, so the list of steps stays
@@ -284,7 +285,7 @@
           h("span", { className: "ap-kj-x", ref: xRef }, h(R.IconButton, { icon: "close", label: "Tutup", onClick: close })),
           h("h2", { id: "kj-t", className: "ap-kj-title" }, title),
           h(R.Button, { variant: "quiet", className: "ap-kj-full", onClick: function () { shut(); workPage(ctx, step); } }, "Buka halaman penuh")),
-        h("div", { className: "ap-kj-body ap-main", ref: bodyRef, onChangeCapture: function () { dirtyRef.current = true; } }, h(RA.FormView, { model: step.model, name: null }))),
+        h("div", { className: "ap-kj-body ap-main", ref: bodyRef, onChangeCapture: function () { dirtyRef.current = true; } }, h(RA.FormView, { key: JSON.stringify(step.prefill || null), model: step.model, name: null, prefill: step.prefill || null }))),
       asking ? h(R.Dialog, { title: "Isian belum disimpan", onClose: function () { setAsking(false); },
         footer: [h(R.Button, { key: "c", variant: "quiet", onClick: function () { setAsking(false); } }, "Lanjut mengisi"),
           h(R.Button, { key: "o", variant: "primary", onClick: shut }, "Tutup tanpa menyimpan")] },
@@ -311,6 +312,7 @@
       h("h2", { id: "mu-cur-t", className: "ap-mu-cur-t" }, L(s.label)),
       s.hint ? h("p", { className: "ap-mu-p" }, L(s.hint)) : null,
       (s.answers || []).length ? h("p", { className: "ap-mu-ans" }, "Menjawab keluhanmu: ", (s.answers || []).map(L).join("; ")) : null,
+      h(Starter, { ctx: ctx, step: s }),
       aiOn ? h("div", { className: "ap-mu-raka", "data-tour": "mulai-raka" },
           h("div", { className: "ap-mu-raka-h" }, h(R.Raka, { size: 20 }), h("b", null, "Tawaran Zafdoz")),
           h("p", null, "Ceritakan datanya atau kirim fotonya, aku siapkan draf untuk " + lower(L(s.label)) + ". Kamu tinggal periksa lalu simpan."),
@@ -321,6 +323,23 @@
           h(R.Button, { variant: "primary", icon: "right", onClick: function () { work(ctx, s); }, "data-tour": "mulai-kerjakan" }, "Kerjakan"),
           imp && ctx.features && ctx.features.imports ? h(R.Button, { icon: "download", onClick: function () { ctx.navigate("#/import/" + imp); } }, "Impor dari file") : null),
       opens.length ? h("p", { className: "ap-mu-opens" }, h(Gift, null), "Setelah ini terbuka: " + opens.slice(0, 3).join(", ") + (opens.length > 3 ? ", dan lainnya" : "")) : null);
+  }
+
+  /** Contract 0076 §4: what the owner named in the interview for this step, minus what is already saved (the kernel
+   *  leaves those out). Each row opens the step's form prefilled; the owner completes it and saves. */
+  function starterTitle(meta, s, row) {
+    var tf = (((meta && meta.models) || {})[s.model] || {}).title_field;
+    return (tf && row[tf]) || Object.keys(row).map(function (k) { return row[k]; })[0] || "";
+  }
+  function Starter(p) {
+    var ctx = p.ctx, s = p.step, rows = (s.starter || []).filter(function (r) { return r && typeof r === "object"; });
+    if (!rows.length) return null;
+    return h("div", { className: "ap-mu-starter", "data-tour": "mulai-starter" },
+      h("span", { className: "ap-mu-faint" }, p.again ? "Tambah juga dari ceritamu:" : "Dari ceritamu:"),
+      rows.map(function (row, i) {
+        return h(R.Button, { key: i, size: "sm", icon: "plus", onClick: function () { work(ctx, Object.assign({}, s, { prefill: row })); } },
+          starterTitle(ctx.meta, s, row));
+      }));
   }
 
   /* ---------------------------------------------------------------- the path */
@@ -352,7 +371,9 @@
         body = h("div", { className: "ap-mu-row" },
           h("b", { className: "ap-mu-label" }, L(s.label)),
           h("p", { className: "ap-mu-meta" }, by ? h(Who, { name: by.name, tone: roleTone(meta, by.role), size: 18 }) : null,
-            "Beres " + dayWord(s.done_at) + (by ? " oleh " + by.name : "") + "."));
+            "Beres " + dayWord(s.done_at) + (by ? " oleh " + by.name : "") + "."),
+          // the step is done with its first record; the rest the owner named stays one click away (0076 §4)
+          h(Starter, { ctx: ctx, step: s, again: true }));
       } else {
         var whoLine = role === "owner" ? h("p", { className: "ap-mu-meta" }, h(Who, { name: "Kamu", tone: roleTone(meta, "owner"), size: 18 }), "Untuk kamu.")
           : mem.length ? h("p", { className: "ap-mu-meta" }, h(Who, { name: mem[0].full_name || mem[0].email, tone: roleTone(meta, role), size: 18 }),
@@ -493,6 +514,7 @@
             h("h3", { id: "mu-ban-t", className: "ap-bd-t" }, L(s.label)),
             s.hint ? h("p", { className: "ap-bd-p" }, L(s.hint)) : null,
             (s.answers || []).length ? h("p", { className: "ap-bd-sub" }, "Menjawab keluhanmu: " + (s.answers || []).map(L).join("; ")) : null,
+            h(Starter, { ctx: ctx, step: s }),
             h("div", { className: "ap-mu-acts" },
               h(R.Button, { variant: "primary", onClick: function () { work(ctx, s); } }, "Kerjakan"),
               h(R.Button, { onClick: function () { ctx.navigate("#/mulai"); } }, "Lihat semua langkah"))));
@@ -503,7 +525,8 @@
       var invite = !done && role !== "owner" && !mem.length && !asked[role] && (asked[role] = true) ? inviteButton(ctx, role) : null;
       return h("li", { key: s.stage, className: "ap-bd-step " + s.state },
         h("span", { className: "ap-bd-n" + (done ? " done" : ""), "aria-hidden": "true" }, done ? h(R.Icon, { name: "check" }) : locked ? h(R.Icon, { name: "lock" }) : String(x.k + 1)),
-        h("div", { className: "g" }, h("p", { className: "ap-bd-l" }, L(s.label)), h("p", { className: "ap-bd-sub" }, sub)),
+        h("div", { className: "g" }, h("p", { className: "ap-bd-l" }, L(s.label)), h("p", { className: "ap-bd-sub" }, sub),
+          done ? h(Starter, { ctx: ctx, step: s, again: true }) : null),
         invite);
     }
     return h("section", { className: "ap-bd-card ap-mu-banner", "data-tour": "beranda-langkah", "aria-labelledby": "mu-ban-h" },
@@ -833,4 +856,5 @@
   RA.TourOffer = TourOffer;
   RA.mulaiTour = mulaiTour;
   RA.stepTour = stepTour;
+  RA.starterTitle = starterTitle;
 })(typeof window !== "undefined" ? window : globalThis);

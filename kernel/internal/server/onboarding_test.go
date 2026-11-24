@@ -130,6 +130,33 @@ stages:
 	}
 }
 
+// Contract 0076 §4: a stage's starter reaches Mulai di sini, minus the rows already saved as records.
+func TestOnboardingStarterLeavesOutSavedRows(t *testing.T) {
+	e, _ := canvasEnv(t, func(root string) {
+		dir := filepath.Join(root, "site", "processes")
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "mulai.rk"), []byte(`name: mulai
+stages:
+  - {name: pelanggan, model: customer, starter: [{customer_name: Toko Maju}, {customer_name: Warung Bu Sri, city: Depok}]}
+  - {name: peluang, model: deal}
+`), 0o644)
+	})
+	rows := func() []any {
+		v, _ := get(stepOf(e.must(200, "GET", "/api/v1/onboarding", nil).JSON, "pelanggan"), "starter").([]any)
+		return v
+	}
+	if got := rows(); len(got) != 2 || get(got[1], "city") != "Depok" {
+		t.Fatalf("starter %v", got)
+	}
+	e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": " toko maju "})
+	if got := rows(); len(got) != 1 || get(got[0], "customer_name") != "Warung Bu Sri" {
+		t.Fatalf("after saving Toko Maju: %v", got)
+	}
+	if s := get(stepOf(e.must(200, "GET", "/api/v1/onboarding", nil).JSON, "peluang"), "starter"); s != nil {
+		t.Fatalf("a stage without starter has none: %v", s)
+	}
+}
+
 func TestOnboardingConfigProcess(t *testing.T) {
 	e, _ := canvasEnv(t, func(root string) {
 		dir := filepath.Join(root, "site", "processes")

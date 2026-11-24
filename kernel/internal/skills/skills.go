@@ -64,6 +64,9 @@ func (s *Skill) ReadFile(rel string) (string, error) {
 	if clean == "." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
 		return "", fmt.Errorf("bad path %q", rel)
 	}
+	if hidden(clean) {
+		return "", fmt.Errorf("%s has no file %s", s.Name, clean)
+	}
 	b, err := fs.ReadFile(s.fsys, clean)
 	if err != nil {
 		return "", fmt.Errorf("%s has no file %s", s.Name, clean)
@@ -123,6 +126,21 @@ func LoadAll(appsDir, modulesDir string, extra ...Folder) *Library {
 }
 
 // AllFiles returns SKILL.md and every other file of the skill, as paths relative to its folder.
+// hidden reports whether a skill file is for grading, not for the agent: the eval files (contract 0035 §6) hold the
+// rubric the agent is graded on, and on 24 Nov 2026 it read them through rangka_skill_file in 6 of 29 eval runs.
+func hidden(rel string) bool { return rel == "evals" || strings.HasPrefix(rel, "evals/") }
+
+// Served lists the files an agent may read (rangka_skill): Files without the eval files.
+func (s *Skill) Served() []string {
+	out := []string{}
+	for _, f := range s.Files {
+		if !hidden(f) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 func (s *Skill) AllFiles() []string { return append([]string{"SKILL.md"}, s.Files...) }
 
 // CopyTo writes the skill into dir/<name>/, replacing a folder of that name (it is ours: rangka-*).

@@ -61,6 +61,8 @@ Before the model runs, the owner's last message is classified against Zafdoz's m
   - is an invitation to put it together (its question matches the existing `_INVITES` words, e.g. "Mau aku
     susunkan sekarang?"), or holds no question and is a summary ("rangkum"/"ringkas", or `_INVITES` words), and
   - the map has at least two stages.
+- **Amended by 0075 §1:** `empty` also counts as `answer` when Zafdoz's last question asks to confirm an assumption
+  or accept a suggestion ("…, betul?", "Mau aku masukkan…?").
 - A bare "susun/cukup" stays with `unanswered_question` (that check runs first, unchanged).
 - Any other word makes it an `answer`: "lewat WA", "gak tau, mungkin 10", "lupa bilang, 5 orang" and "bingung milih Excel
   atau buku" are answers.

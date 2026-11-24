@@ -1,0 +1,23 @@
+name: consult-conversation-rental
+skill: rangka-consult
+stage: studio
+prompt: "Aku punya usaha sewa tenda dan kursi buat hajatan. Orang pesan lewat WA, bayar DP dulu, sisanya pas barang dikirim. Yang bikin pusing, kadang barang telat balik dan aku lupa nagih sisanya."
+conversation:
+  owner: |
+    - Usaha sewa tenda, kursi, dan meja untuk hajatan di Bekasi. Pemiliknya kamu sendiri, dibantu 1 admin dan 4 kru antar.
+    - Pesanan masuk lewat WA. Admin catat di buku besar: nama, alamat, tanggal acara, barang, harga.
+    - DP 50% lewat transfer saat pesan. Sisa 50% dibayar tunai atau transfer saat barang diantar.
+    - Kru mengantar sehari sebelum acara dan mengambil sehari sesudahnya.
+    - Masalah: barang telat diambil karena penyewa belum siap, sisa bayar kadang lupa ditagih, kursi kadang kurang saat dihitung balik.
+    - Telat balik tidak pernah didenda selama ini. Kursi hilang diganti Rp 50.000 per kursi.
+    - Sekitar 30 pesanan sebulan. Belum pakai aplikasi apa pun selain WA dan buku.
+  max_turns: 10
+  offer_within: 5
+expect:
+  answer:
+    not_mentions: ["modul", "konektor", "katalog", "kepingan"]
+rubric:
+  - "The conversation ends in an offer whose options cover order intake, the deposit and balance, delivery and pick-up"
+  - "Zafdoz never asks again something the owner already answered"
+  - "Every Zafdoz reply ends with at most one question"
+  - "The owner's problems (late pick-up, forgotten balance, missing chairs) are each answered by a piece in the offer or listed as not covered"

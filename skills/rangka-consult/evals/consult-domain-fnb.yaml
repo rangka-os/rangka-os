@@ -10,4 +10,4 @@ rubric:
   - "The existing cashier is kept: no new cashier is placed on the map for the counter, sales come from the cashier the owner already uses"
   - "The reply does not promise that GoFood orders flow in automatically; if mentioned, it says they are recapped daily for now"
   - "Stock differences are recorded as the owner's problem and answered by stock counting with recipes or transfers, not by editing balances"
-  - "The reply asks one question, for example how often stock is counted or whether a central kitchen sends stock to the branches"
+  - "The reply asks one question (an open question, or a confirmation of up to three stated assumptions; a suggestion phrased without its own question does not count), for example how often stock is counted or whether a central kitchen sends stock to the branches"

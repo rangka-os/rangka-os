@@ -417,9 +417,14 @@ test("starterTitle: a starter row is named by the model's title field, else its 
   assert.strictEqual(A.starterTitle(meta, { model: "item" }, {}), "");
 });
 
-test("starterRows: a step gets the rows of its model, prerequisite steps included (contract 0076 §4)", () => {
-  const ob = { starter: { rental_item: [{ title: "Tenda 3x3" }, "x", null], customer: [] } };
-  assert.deepStrictEqual(plain(A.starterRows(ob, { model: "rental_item", prereq: true })), [{ title: "Tenda 3x3" }]);
+test("starterRows: a step gets its model's rows and those of the empty models it needs (contract 0076 §4)", () => {
+  const ob = {
+    starter: { customer: [{ customer_name: "Toko Maju" }, "x", null], item: [{ item_name: "Tenda 3x3" }] },
+    locks: { rental_item: { reason: "needs_data", needs: ["item"] } },
+  };
+  assert.deepStrictEqual(plain(A.starterRows(ob, { model: "customer", prereq: true })), [{ model: "customer", row: { customer_name: "Toko Maju" } }]);
+  // an alat sewa needs a barang first: the owner's tents open the barang form
+  assert.deepStrictEqual(plain(A.starterRows(ob, { model: "rental_item", prereq: true })), [{ model: "item", row: { item_name: "Tenda 3x3" } }]);
   assert.deepStrictEqual(plain(A.starterRows(ob, { model: "rental_booking" })), []);
-  assert.deepStrictEqual(plain(A.starterRows({}, { model: "rental_item" })), []);
+  assert.deepStrictEqual(plain(A.starterRows({}, { model: "item" })), []);
 });

@@ -331,20 +331,27 @@
     var tf = (((meta && meta.models) || {})[s.model] || {}).title_field;
     return (tf && row[tf]) || Object.keys(row).map(function (k) { return row[k]; })[0] || "";
   }
-  /** The rows for a step's model: the kernel sends them by model (process `starter`), so a prerequisite step ("Isi
-   *  dulu Alat sewa", which is not a stage of the process) gets the owner's tents and chairs too. */
+  /** The rows for a step, each with the model its form opens: the kernel sends them by model (process `starter`), so a
+   *  prerequisite step ("Isi dulu Alat sewa", not a stage of the process) gets the owner's rows too, and so do the
+   *  empty models that step itself needs first (`locks`: an alat sewa needs a barang, and the tents are barang). */
   function starterRows(ob, s) {
-    var rows = (((ob && ob.starter) || {})[s.model]) || [];
-    return rows.filter(function (r) { return r && typeof r === "object" && !Array.isArray(r); });
+    var by = (ob && ob.starter) || {}, locks = (ob && ob.locks) || {}, out = [];
+    [s.model].concat(((locks[s.model] || {}).needs) || []).forEach(function (m) {
+      (by[m] || []).forEach(function (r) {
+        if (r && typeof r === "object" && !Array.isArray(r)) out.push({ model: m, row: r });
+      });
+    });
+    return out;
   }
   function Starter(p) {
     var ctx = p.ctx, s = p.step, rows = starterRows(ctx.onboarding && ctx.onboarding.data, s);
     if (!rows.length) return null;
     return h("div", { className: "ap-mu-starter", "data-tour": "mulai-starter" },
       h("span", { className: "ap-mu-faint" }, p.again ? "Tambah juga dari ceritamu:" : "Dari ceritamu:"),
-      rows.map(function (row, i) {
-        return h(R.Button, { key: i, size: "sm", icon: "plus", onClick: function () { work(ctx, Object.assign({}, s, { prefill: row })); } },
-          starterTitle(ctx.meta, s, row));
+      rows.map(function (x, i) {
+        var step = Object.assign({}, s, { model: x.model, prefill: x.row });
+        return h(R.Button, { key: i, size: "sm", icon: "plus", onClick: function () { work(ctx, step); } },
+          starterTitle(ctx.meta, step, x.row));
       }));
   }
 

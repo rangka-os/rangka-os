@@ -66,6 +66,15 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 	if err != nil {
 		return nil, err
 	}
+	// contract 0076: what the fixtures left empty gets the installed modules' defaults (a business seeded without
+	// sample data starts with units, not an empty pick list)
+	def, err := e.SeedDefaults(ctx, o.Org)
+	if err != nil {
+		return nil, err
+	}
+	for m, n := range def.Created {
+		st.Created[m] += n
+	}
 	fullName := ""
 	for _, u := range fx["user"] {
 		if fmt.Sprint(u["name"]) == o.UserRecord {
@@ -134,6 +143,37 @@ func SyncOrgs(ctx context.Context, q pg.Querier, reg *meta.Registry) error {
 		}
 		if err := auth.EnsureOrgCode(ctx, q, id, name, o.Code); err != nil {
 			return fmt.Errorf("sync org %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+// SeedDefaultsAll fills every org's empty tables from the installed modules' defaults (contract 0076). It runs after
+// each migrate (serve start, a reload after a change set, `rangka migrate`, `rangka seed`), so a business built
+// before a module shipped defaults, or one that installs a module later, gets them too. Installation-wide: the org
+// list is read without an org filter, and each org is then seeded as itself. Only reading the org list fails it; an
+// org whose defaults do not seed is logged and skipped.
+func SeedDefaultsAll(ctx context.Context, db *pg.Pool, reg *meta.Registry, logf func(string, ...any)) error {
+	res, err := db.Query(pg.WithOrg(ctx, ""), "select id from rk_orgs order by id")
+	if err != nil {
+		return fmt.Errorf("module defaults: orgs: %w", err)
+	}
+	e := engine.New(db, reg)
+	for _, row := range res.Rows {
+		org := fmt.Sprint(row[0])
+		st, err := e.SeedDefaults(ctx, org)
+		if err != nil {
+			// a broken defaults file must not stop a business from starting or a change set from applying: the
+			// tables stay empty, as before 0076, and the log says why
+			if logf != nil {
+				logf("module defaults for %s: %v", org, err)
+			}
+			continue
+		}
+		if logf != nil {
+			for model, n := range st.Created {
+				logf("module defaults: %s: %d %s", org, n, model)
+			}
 		}
 	}
 	return nil

@@ -644,22 +644,22 @@
      "type": "select"
     },
     {
-     "default": "outlet.service_pct",
+     "compute": "outlet.service_pct",
      "name": "service_pct",
      "type": "float"
     },
     {
-     "default": "outlet.pbjt_pct",
+     "compute": "outlet.pbjt_pct",
      "name": "pbjt_pct",
      "type": "float"
     },
     {
-     "default": "int(outlet.rounding_unit)",
+     "compute": "int(outlet.rounding_unit)",
      "name": "rounding_unit",
      "type": "int"
     },
     {
-     "default": "outlet.rounding_mode",
+     "compute": "outlet.rounding_mode",
      "name": "rounding_mode",
      "type": "data"
     },
@@ -1683,6 +1683,7 @@
     "party_first_share": 39300,
     "party_share": 39300,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -1695,7 +1696,10 @@
     "qris_amount": 0,
     "raw_total": 39333,
     "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 39333,
     "wa_number": ""
    }
@@ -1782,6 +1786,7 @@
     "party_first_share": 48400,
     "party_share": 48400,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -1794,7 +1799,10 @@
     "qris_amount": 0,
     "raw_total": 48400,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 50900,
     "wa_number": ""
    }
@@ -1906,6 +1914,7 @@
     "party_first_share": 269400,
     "party_share": 269400,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -1918,7 +1927,10 @@
     "qris_amount": 0,
     "raw_total": 269367,
     "rounding": 33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 269367,
     "wa_number": ""
    }
@@ -2051,6 +2063,7 @@
     "party_first_share": 141700,
     "party_share": 141700,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2063,7 +2076,10 @@
     "qris_amount": 0,
     "raw_total": 141700,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 141700,
     "wa_number": ""
    }
@@ -2125,6 +2141,7 @@
     "party_first_share": 165000,
     "party_share": 165000,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2137,7 +2154,10 @@
     "qris_amount": 0,
     "raw_total": 165000,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 180000,
     "wa_number": ""
    }
@@ -2199,6 +2219,7 @@
     "party_first_share": 36000,
     "party_share": 36000,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2211,7 +2232,10 @@
     "qris_amount": 0,
     "raw_total": 36000,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 36000,
     "wa_number": ""
    }
@@ -2298,6 +2322,7 @@
     "party_first_share": 19700,
     "party_share": 19700,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2310,7 +2335,10 @@
     "qris_amount": 0,
     "raw_total": 19733,
     "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 21333,
     "wa_number": ""
    }
@@ -2373,6 +2401,7 @@
     "party_first_share": 18000,
     "party_share": 18000,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2385,7 +2414,10 @@
     "qris_amount": 0,
     "raw_total": 18000,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 18000,
     "wa_number": ""
    }
@@ -2447,6 +2479,7 @@
     "party_first_share": 88000,
     "party_share": 88000,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2459,7 +2492,10 @@
     "qris_amount": 0,
     "raw_total": 88000,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 108000,
     "wa_number": ""
    }
@@ -2521,6 +2557,7 @@
     "party_first_share": 18000,
     "party_share": 18000,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2533,7 +2570,10 @@
     "qris_amount": 0,
     "raw_total": 18000,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 18000,
     "wa_number": ""
    }
@@ -2620,6 +2660,7 @@
     "party_first_share": 54000,
     "party_share": 54000,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2632,7 +2673,10 @@
     "qris_amount": 0,
     "raw_total": 54000,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 54000,
     "wa_number": ""
    }
@@ -2695,6 +2739,7 @@
     "party_first_share": 63000,
     "party_share": 63000,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 12600,
     "points_discount": 0,
     "points_earned": 0,
@@ -2707,7 +2752,10 @@
     "qris_amount": 0,
     "raw_total": 63000,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 72000,
     "wa_number": ""
    }
@@ -2770,6 +2818,7 @@
     "party_first_share": 64800,
     "party_share": 64800,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 32400,
     "points_discount": 0,
     "points_earned": 9,
@@ -2782,7 +2831,10 @@
     "qris_amount": 0,
     "raw_total": 64800,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 72000,
     "wa_number": ""
    }
@@ -2884,6 +2936,7 @@
      {}
     ],
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 31730,
     "points_discount": 15000,
     "points_earned": 7,
@@ -2896,7 +2949,10 @@
     "qris_amount": 10000,
     "raw_total": 48460,
     "rounding": 40,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 66800,
     "wa_number": ""
    }
@@ -2959,6 +3015,7 @@
     "party_first_share": 0,
     "party_share": 0,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 8550,
     "points_discount": 0,
     "points_earned": 2,
@@ -2971,7 +3028,10 @@
     "qris_amount": 0,
     "raw_total": 17100,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 18000,
     "wa_number": ""
    }
@@ -3034,6 +3094,7 @@
     "party_first_share": -5800,
     "party_share": -5800,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 17100,
     "points_discount": 40000,
     "points_earned": 0,
@@ -3046,7 +3107,10 @@
     "qris_amount": 0,
     "raw_total": -5800,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 36000,
     "wa_number": ""
    }
@@ -3109,6 +3173,7 @@
     "party_first_share": 3300,
     "party_share": 3300,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3121,7 +3186,10 @@
     "qris_amount": 0,
     "raw_total": 3333,
     "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 3333,
     "wa_number": "6281234567890"
    }
@@ -3183,6 +3251,7 @@
     "party_first_share": 3300,
     "party_share": 3300,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3195,7 +3264,10 @@
     "qris_amount": 0,
     "raw_total": 3333,
     "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 3333,
     "wa_number": "6281234567890"
    }
@@ -3257,6 +3329,7 @@
     "party_first_share": 3300,
     "party_share": 3300,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3269,7 +3342,10 @@
     "qris_amount": 0,
     "raw_total": 3333,
     "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 3333,
     "wa_number": ""
    }
@@ -3370,6 +3446,7 @@
      {}
     ],
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3382,7 +3459,10 @@
     "qris_amount": 0,
     "raw_total": 30800,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 30800,
     "wa_number": ""
    }
@@ -3468,6 +3548,7 @@
     "party_first_share": 7200,
     "party_share": 7200,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3480,7 +3561,10 @@
     "qris_amount": 0,
     "raw_total": 7225,
     "rounding": -25,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 7225,
     "wa_number": ""
    }
@@ -3543,6 +3627,7 @@
     "party_first_share": 115500,
     "party_share": 115500,
     "pbjt": 10500,
+    "pbjt_pct": 10,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3555,7 +3640,10 @@
     "qris_amount": 0,
     "raw_total": 115500,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 5000,
+    "service_pct": 5,
     "subtotal": 100000,
     "wa_number": ""
    }
@@ -3618,6 +3706,7 @@
     "party_first_share": 110000,
     "party_share": 110000,
     "pbjt": 10000,
+    "pbjt_pct": 10,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3630,7 +3719,10 @@
     "qris_amount": 0,
     "raw_total": 110000,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 5,
     "subtotal": 100000,
     "wa_number": ""
    }
@@ -3693,6 +3785,7 @@
     "party_first_share": 115500,
     "party_share": 115500,
     "pbjt": 10500,
+    "pbjt_pct": 10,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3705,7 +3798,10 @@
     "qris_amount": 0,
     "raw_total": 115501,
     "rounding": -1,
+    "rounding_mode": "down",
+    "rounding_unit": 500,
     "service_charge": 5000,
+    "service_pct": 5,
     "subtotal": 100001,
     "wa_number": ""
    }
@@ -3791,6 +3887,7 @@
     "party_first_share": 103000,
     "party_share": 103000,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3803,7 +3900,10 @@
     "qris_amount": 0,
     "raw_total": 103333,
     "rounding": -333,
+    "rounding_mode": "nearest",
+    "rounding_unit": 1000,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 103333,
     "wa_number": ""
    }
@@ -3866,6 +3966,7 @@
     "party_first_share": 33335,
     "party_share": 33333,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3878,7 +3979,10 @@
     "qris_amount": 0,
     "raw_total": 100001,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 0,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 100001,
     "wa_number": ""
    }
@@ -3950,6 +4054,7 @@
     "party_first_share": -11500,
     "party_share": -11500,
     "pbjt": -1050,
+    "pbjt_pct": 10,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3962,7 +4067,10 @@
     "qris_amount": 0,
     "raw_total": -11550,
     "rounding": 50,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
     "service_charge": 0,
+    "service_pct": 5,
     "subtotal": 100000,
     "wa_number": ""
    }
@@ -4034,6 +4142,7 @@
     "party_first_share": -10500,
     "party_share": -10500,
     "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -4046,7 +4155,10 @@
     "qris_amount": 0,
     "raw_total": -10500,
     "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 0,
     "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 100000,
     "wa_number": ""
    }

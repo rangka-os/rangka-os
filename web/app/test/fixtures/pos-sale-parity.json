@@ -140,6 +140,10 @@
      "type": "data"
     },
     {
+     "name": "variant_title",
+     "type": "data"
+    },
+    {
      "name": "kind",
      "type": "select"
     },
@@ -738,7 +742,7 @@
      "type": "currency"
     },
     {
-     "compute": "!app_installed('loyalty') || member == '' || member.earn_spend \u003c= 0 || grand_total \u003c= 0 ? 0 : int(grand_total * member.earn_multiplier_pct / (member.earn_spend * 100))",
+     "compute": "!app_installed('loyalty') || member == '' || member.earn_spend \u003c= 0 || grand_total - service_charge - pbjt - rounding \u003c= 0 ? 0 : int((grand_total - service_charge - pbjt - rounding) * member.earn_multiplier_pct / (member.earn_spend * 100))",
      "name": "points_earned",
      "type": "int"
     },
@@ -901,6 +905,11 @@
      "name": "category",
      "to": "item_category",
      "type": "link"
+    },
+    {
+     "compute": "item.variant_group",
+     "name": "variant_group",
+     "type": "data"
     },
     {
      "default": "item.item_name",
@@ -1640,7 +1649,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 3333,
@@ -1659,7 +1669,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -1737,7 +1748,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 3,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 5000,
@@ -1756,7 +1768,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1.5,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -1839,7 +1852,8 @@
       "promotion": "",
       "rate": 79992,
       "stock_qty": 24,
-      "uom": "Dus"
+      "uom": "Dus",
+      "variant_group": ""
      },
      {
       "amount": 60000,
@@ -1858,7 +1872,8 @@
       "promotion": "PRM-OUT1",
       "rate": 36000,
       "stock_qty": 12,
-      "uom": "Pak"
+      "uom": "Pak",
+      "variant_group": ""
      },
      {
       "amount": 129375,
@@ -1877,7 +1892,8 @@
       "promotion": "",
       "rate": 43125,
       "stock_qty": 7.5,
-      "uom": "Sak"
+      "uom": "Sak",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 12000,
@@ -1961,7 +1977,8 @@
       "promotion": "PRM-PCT",
       "rate": 8000,
       "stock_qty": 3,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 5000,
@@ -1980,7 +1997,8 @@
       "promotion": "PRM-OFF",
       "rate": 15000,
       "stock_qty": 2,
-      "uom": "Porsi"
+      "uom": "Porsi",
+      "variant_group": ""
      },
      {
       "amount": 90000,
@@ -1999,7 +2017,8 @@
       "promotion": "PRM-B2G1",
       "rate": 18000,
       "stock_qty": 7,
-      "uom": "Pcs"
+      "uom": "Pcs",
+      "variant_group": ""
      },
      {
       "amount": 27500,
@@ -2018,7 +2037,8 @@
       "promotion": "PRM-OUT1",
       "rate": 6500,
       "stock_qty": 5,
-      "uom": "Kotak"
+      "uom": "Kotak",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 70800,
@@ -2091,7 +2111,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 10,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2164,7 +2185,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2242,7 +2264,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 3333,
@@ -2261,7 +2284,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2335,7 +2359,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2408,7 +2433,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 6,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2481,7 +2507,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2559,7 +2586,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 3,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 0,
@@ -2578,7 +2606,8 @@
       "promotion": "",
       "rate": 8000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2652,7 +2681,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 4,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2726,7 +2756,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 4,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2815,7 +2846,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 3,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 12800,
@@ -2834,7 +2866,8 @@
       "promotion": "PRM-PCT",
       "rate": 8000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 3200,
@@ -2912,7 +2945,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2986,7 +3020,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3060,7 +3095,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3133,7 +3169,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3206,7 +3243,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3295,7 +3333,8 @@
       "promotion": "PRM-PCT",
       "rate": 8000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 18000,
@@ -3314,7 +3353,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 3200,
@@ -3394,7 +3434,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 0.5,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      },
      {
       "amount": 5558,
@@ -3413,7 +3454,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 2.5,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3487,7 +3529,8 @@
       "promotion": "",
       "rate": 100000,
       "stock_qty": 1,
-      "uom": "Porsi"
+      "uom": "Porsi",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3561,7 +3604,8 @@
       "promotion": "",
       "rate": 100000,
       "stock_qty": 1,
-      "uom": "Porsi"
+      "uom": "Porsi",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3635,7 +3679,8 @@
       "promotion": "",
       "rate": 100001,
       "stock_qty": 1,
-      "uom": "Porsi"
+      "uom": "Porsi",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3712,7 +3757,8 @@
       "promotion": "",
       "rate": 100000,
       "stock_qty": 1,
-      "uom": "Porsi"
+      "uom": "Porsi",
+      "variant_group": ""
      },
      {
       "amount": 3333,
@@ -3731,7 +3777,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3805,7 +3852,8 @@
       "promotion": "",
       "rate": 100001,
       "stock_qty": 1,
-      "uom": "Porsi"
+      "uom": "Porsi",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -3832,6 +3880,174 @@
     "rounding": 0,
     "service_charge": 0,
     "subtotal": 100001,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "negative half at Rp 100 nearest: -115.5 steps to -115 on both sides (audit F7)",
+   "installed": [],
+   "tax": {
+    "dpp_den": 12,
+    "dpp_num": 11,
+    "pkp": false,
+    "ppn_fee_only": false,
+    "ppn_rate": 12
+   },
+   "sale": {
+    "date": "2026-11-21",
+    "discount_amount": 110500,
+    "items": [
+     {
+      "item": "PAKET",
+      "qty": 1
+     }
+    ],
+    "order_type": "takeaway",
+    "outlet": "OUT-02",
+    "shift": "SESI-RST-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": -11500,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": -11500,
+    "cash_received": -11500,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 110500,
+    "gift_value": 0,
+    "grand_total": -11500,
+    "gross_total": 100000,
+    "items": [
+     {
+      "amount": 100000,
+      "category": "MAKANAN",
+      "gross": 100000,
+      "packing_item": "PAKET",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 100000,
+      "stock_qty": 1,
+      "uom": "Porsi",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 110500,
+    "margin": -11500,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": -10500,
+    "party_first_share": -11500,
+    "party_share": -11500,
+    "pbjt": -1050,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": -52,
+    "ppn_in_sales": 0,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": -11550,
+    "rounding": 50,
+    "service_charge": 0,
+    "subtotal": 100000,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "negative half PPh final: round(-52.5) is -52 on both sides (audit F7)",
+   "installed": [],
+   "tax": {
+    "dpp_den": 12,
+    "dpp_num": 11,
+    "pkp": false,
+    "ppn_fee_only": false,
+    "ppn_rate": 12
+   },
+   "sale": {
+    "date": "2026-11-21",
+    "discount_amount": 110500,
+    "items": [
+     {
+      "item": "PAKET",
+      "qty": 1
+     }
+    ],
+    "order_type": "takeaway",
+    "outlet": "OUT-05",
+    "shift": "SESI-RZ-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": -10500,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": -10500,
+    "cash_received": -10500,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 110500,
+    "gift_value": 0,
+    "grand_total": -10500,
+    "gross_total": 100000,
+    "items": [
+     {
+      "amount": 100000,
+      "category": "MAKANAN",
+      "gross": 100000,
+      "packing_item": "PAKET",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 100000,
+      "stock_qty": 1,
+      "uom": "Porsi",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 110500,
+    "margin": -10500,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": -10500,
+    "party_first_share": -10500,
+    "party_share": -10500,
+    "pbjt": 0,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": -52,
+    "ppn_in_sales": 0,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": -10500,
+    "rounding": 0,
+    "service_charge": 0,
+    "subtotal": 100000,
     "wa_number": ""
    }
   }

@@ -153,8 +153,13 @@ func SyncOrgs(ctx context.Context, q pg.Querier, reg *meta.Registry) error {
 // before a module shipped defaults, or one that installs a module later, gets them too. Installation-wide: the org
 // list is read without an org filter, and each org is then seeded as itself. Only reading the org list fails it; an
 // org whose defaults do not seed is logged and skipped.
+//
+// An org without members has not been seeded yet (`rangka migrate` syncs config.rk's orgs before `rangka seed` runs):
+// it waits for its seed, which loads its fixtures first and then the defaults. Seeding the defaults first would take
+// the numbers its fixtures use (UOM-001…) and the fixtures would be skipped (kernel CI, demo-fnb, 25 Nov 2026).
 func SeedDefaultsAll(ctx context.Context, db *pg.Pool, reg *meta.Registry, logf func(string, ...any)) error {
-	res, err := db.Query(pg.WithOrg(ctx, ""), "select id from rk_orgs order by id")
+	res, err := db.Query(pg.WithOrg(ctx, ""),
+		"select o.id from rk_orgs o where exists (select 1 from rk_members m where m.org_id = o.id) order by o.id")
 	if err != nil {
 		return fmt.Errorf("module defaults: orgs: %w", err)
 	}

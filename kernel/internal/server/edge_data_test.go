@@ -65,6 +65,10 @@ func TestEdgeConfig(t *testing.T) {
 	if get(cfg, "outlet", "code") != "OUT01" || get(cfg, "outlet", "name") != "Batununggal" || get(cfg, "outlet", "timezone") != "Asia/Jakarta" {
 		t.Fatalf("outlet = %v", cfg["outlet"])
 	}
+	// the outlet fields the sale's defaults read come along, the others stay home (rangka-apps#121 audit F3)
+	if get(cfg, "outlet", "service_pct") != 5.0 || get(cfg, "outlet", "address") != nil {
+		t.Fatalf("outlet charge fields = %v", cfg["outlet"])
+	}
 	if get(cfg, "device", "code") != "K1" || get(cfg, "device", "id") == "" {
 		t.Fatalf("device = %v", cfg["device"])
 	}

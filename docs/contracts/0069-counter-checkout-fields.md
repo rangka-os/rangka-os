@@ -27,7 +27,7 @@ document:
   summary: [gross_total, promo_total, discount_total, grand_total]
   checkout: [customer, {field: promotion, filter: "kind in ['bill_pct', 'bill_off', 'free_gift']"}, promo_code]
 ```
-- `checkout`: at most 6 fields of the document, each a name or `{field, filter}`. Types `link`, `data`, `select`,
+- `checkout`: at most 8 fields of the document, each a name or `{field, filter}`. Types `link`, `data`, `select`,
   `check`, `int`, `float`, `currency`; not computed, not `read_only`, not a table (`unknown_field`,
   `screen_slot_type`, Go and Python). `filter` only on a link (`screen_slot_type` otherwise) and narrows its picker
   (list filter over the linked model, AND the picker's own `active != false`).

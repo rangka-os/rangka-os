@@ -6,5 +6,7 @@ title_field: outlet_name
 fields:
   - {name: outlet_name, type: data, label: {id: Nama outlet}, required: true, in_list: true}
   - {name: code, type: data, label: {id: Kode}, in_list: true, unique: true}
+  - {name: service_pct, type: float, label: {id: Service charge (%)}}
+  - {name: address, type: data, label: {id: Alamat}}
 permissions:
   - {role: kasir, read: true}

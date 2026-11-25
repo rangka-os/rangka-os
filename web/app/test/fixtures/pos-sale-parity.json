@@ -140,6 +140,10 @@
      "type": "data"
     },
     {
+     "name": "variant_title",
+     "type": "data"
+    },
+    {
      "name": "kind",
      "type": "select"
     },
@@ -172,6 +176,14 @@
     },
     {
      "name": "shelf_life_days",
+     "type": "int"
+    },
+    {
+     "name": "tracking",
+     "type": "select"
+    },
+    {
+     "name": "expiry_warning_days",
      "type": "int"
     },
     {
@@ -464,6 +476,10 @@
      "type": "currency"
     },
     {
+     "name": "wa_orders",
+     "type": "check"
+    },
+    {
      "name": "lat",
      "type": "float"
     },
@@ -626,7 +642,7 @@
      "type": "currency"
     },
     {
-     "compute": "promotion == '' || subtotal < promotion.min_spend || !promotion.active || promotion.valid_from > date || promotion.valid_until < date || (promotion.only_outlet != '' && promotion.only_outlet != outlet) || (promotion.code_mode == 'shared' && promo_code.trim().upperAscii() != promotion.code) ? 0 : (promotion.kind == 'bill_pct' ? (promotion.max_discount > 0 ? min(promotion.max_discount, round(subtotal * promotion.pct / 100)) : round(subtotal * promotion.pct / 100)) : (promotion.kind == 'bill_off' ? min(subtotal, promotion.amount_off) : 0))",
+     "compute": "promotion == '' || subtotal \u003c promotion.min_spend || !promotion.active || promotion.valid_from \u003e date || promotion.valid_until \u003c date || (promotion.only_outlet != '' \u0026\u0026 promotion.only_outlet != outlet) || (promotion.code_mode == 'shared' \u0026\u0026 promo_code.trim().upperAscii() != promotion.code) ? 0 : (promotion.kind == 'bill_pct' ? (promotion.max_discount \u003e 0 ? min(promotion.max_discount, round(subtotal * promotion.pct / 100)) : round(subtotal * promotion.pct / 100)) : (promotion.kind == 'bill_off' ? min(subtotal, promotion.amount_off) : 0))",
      "name": "bill_promo_offer",
      "type": "currency"
     },
@@ -636,12 +652,12 @@
      "type": "currency"
     },
     {
-     "compute": "member_discount_offer > bill_promo_offer + gift_value ? member_discount_offer : 0",
+     "compute": "member_discount_offer \u003e bill_promo_offer + gift_value ? member_discount_offer : 0",
      "name": "member_discount",
      "type": "currency"
     },
     {
-     "compute": "member_discount_offer > bill_promo_offer + gift_value ? 0 : bill_promo_offer",
+     "compute": "member_discount_offer \u003e bill_promo_offer + gift_value ? 0 : bill_promo_offer",
      "name": "bill_promo",
      "type": "currency"
     },
@@ -656,7 +672,7 @@
      "type": "currency"
     },
     {
-     "compute": "!app_installed('loyalty') || member == '' || member.earn_spend <= 0 || grand_total <= 0 ? 0 : int(grand_total * member.earn_multiplier_pct / (member.earn_spend * 100))",
+     "compute": "!app_installed('loyalty') || member == '' || member.earn_spend \u003c= 0 || grand_total \u003c= 0 ? 0 : int(grand_total * member.earn_multiplier_pct / (member.earn_spend * 100))",
      "name": "points_earned",
      "type": "int"
     },
@@ -731,7 +747,7 @@
      "type": "currency"
     },
     {
-     "compute": "amount_due == 0 && deposit_used > 0 ? 'deposit' : (qris_amount == 0 ? 'cash' : (qris_amount >= amount_due ? 'qris' : 'split'))",
+     "compute": "amount_due == 0 \u0026\u0026 deposit_used \u003e 0 ? 'deposit' : (qris_amount == 0 ? 'cash' : (qris_amount \u003e= amount_due ? 'qris' : 'split'))",
      "name": "method",
      "options": [
       {
@@ -786,6 +802,11 @@
      "type": "link"
     },
     {
+     "compute": "item.variant_group",
+     "name": "variant_group",
+     "type": "data"
+    },
+    {
      "default": "item.item_name",
      "name": "description",
      "type": "text"
@@ -818,7 +839,7 @@
      "type": "float"
     },
     {
-     "compute": "packing == '' ? item.rate : (packing.rate > 0 ? packing.rate : round(item.rate * packing.factor))",
+     "compute": "packing == '' ? item.rate : (packing.rate \u003e 0 ? packing.rate : round(item.rate * packing.factor))",
      "name": "rate",
      "type": "currency"
     },
@@ -833,7 +854,7 @@
      "type": "float"
     },
     {
-     "compute": "is_gift ? '' : (item.promo_o != '' && item.promo_o_outlet == parent.outlet ? 'o' : (item.promo != '' && (item.promo_outlet == '' || item.promo_outlet == parent.outlet) ? 'a' : ''))",
+     "compute": "is_gift ? '' : (item.promo_o != '' \u0026\u0026 item.promo_o_outlet == parent.outlet ? 'o' : (item.promo != '' \u0026\u0026 (item.promo_outlet == '' || item.promo_outlet == parent.outlet) ? 'a' : ''))",
      "name": "promo_slot",
      "type": "data"
     },
@@ -878,7 +899,7 @@
      "type": "date"
     },
     {
-     "compute": "promotion == '' ? 0 : (promo_kind == 'pct' ? round(gross * promo_pct / 100) : (promo_kind == 'off' ? min(gross, round(stock_qty * promo_off)) : (promo_kind == 'buy_get' && promo_buy + promo_get > 0 ? min(gross, round(int(stock_qty / (promo_buy + promo_get)) * promo_get * item.rate)) : 0)))",
+     "compute": "promotion == '' ? 0 : (promo_kind == 'pct' ? round(gross * promo_pct / 100) : (promo_kind == 'off' ? min(gross, round(stock_qty * promo_off)) : (promo_kind == 'buy_get' \u0026\u0026 promo_buy + promo_get \u003e 0 ? min(gross, round(int(stock_qty / (promo_buy + promo_get)) * promo_get * item.rate)) : 0)))",
      "name": "promo_discount",
      "type": "currency"
     },
@@ -1433,7 +1454,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 3333,
@@ -1452,7 +1474,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -1523,7 +1546,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 3,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 5000,
@@ -1542,7 +1566,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1.5,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -1618,7 +1643,8 @@
       "promotion": "",
       "rate": 79992,
       "stock_qty": 24,
-      "uom": "Dus"
+      "uom": "Dus",
+      "variant_group": ""
      },
      {
       "amount": 60000,
@@ -1637,7 +1663,8 @@
       "promotion": "PRM-OUT1",
       "rate": 36000,
       "stock_qty": 12,
-      "uom": "Pak"
+      "uom": "Pak",
+      "variant_group": ""
      },
      {
       "amount": 129375,
@@ -1656,7 +1683,8 @@
       "promotion": "",
       "rate": 43125,
       "stock_qty": 7.5,
-      "uom": "Sak"
+      "uom": "Sak",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 12000,
@@ -1733,7 +1761,8 @@
       "promotion": "PRM-PCT",
       "rate": 8000,
       "stock_qty": 3,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 5000,
@@ -1752,7 +1781,8 @@
       "promotion": "PRM-OFF",
       "rate": 15000,
       "stock_qty": 2,
-      "uom": "Porsi"
+      "uom": "Porsi",
+      "variant_group": ""
      },
      {
       "amount": 90000,
@@ -1771,7 +1801,8 @@
       "promotion": "PRM-B2G1",
       "rate": 18000,
       "stock_qty": 7,
-      "uom": "Pcs"
+      "uom": "Pcs",
+      "variant_group": ""
      },
      {
       "amount": 27500,
@@ -1790,7 +1821,8 @@
       "promotion": "PRM-OUT1",
       "rate": 6500,
       "stock_qty": 5,
-      "uom": "Kotak"
+      "uom": "Kotak",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 70800,
@@ -1856,7 +1888,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 10,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -1922,7 +1955,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -1993,7 +2027,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 3333,
@@ -2012,7 +2047,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2079,7 +2115,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2145,7 +2182,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 6,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2211,7 +2249,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2282,7 +2321,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 3,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 0,
@@ -2301,7 +2341,8 @@
       "promotion": "",
       "rate": 8000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2368,7 +2409,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 4,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2435,7 +2477,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 4,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2517,7 +2560,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 3,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 12800,
@@ -2536,7 +2580,8 @@
       "promotion": "PRM-PCT",
       "rate": 8000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 3200,
@@ -2607,7 +2652,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2674,7 +2720,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2741,7 +2788,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2807,7 +2855,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2873,7 +2922,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 1,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,
@@ -2955,7 +3005,8 @@
       "promotion": "PRM-PCT",
       "rate": 8000,
       "stock_qty": 2,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      },
      {
       "amount": 18000,
@@ -2974,7 +3025,8 @@
       "promotion": "",
       "rate": 18000,
       "stock_qty": 1,
-      "uom": "Gelas"
+      "uom": "Gelas",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 3200,
@@ -3047,7 +3099,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 0.5,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      },
      {
       "amount": 5558,
@@ -3066,7 +3119,8 @@
       "promotion": "",
       "rate": 3333,
       "stock_qty": 2.5,
-      "uom": "Botol"
+      "uom": "Botol",
+      "variant_group": ""
      }
     ],
     "line_promo_total": 0,

@@ -638,6 +638,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-counter-sum .ap-counter-sum-total { margin-top: 4px; color: var(--ink); font: 700 20px/28px var(--font-sans); }
 .ap-counter-sum[aria-busy="true"] dd { opacity: .55; }
 .ap-counter-sum-err { margin: 4px 0 0; color: var(--bad); font-size: 13px; }
+.ap-counter-hint { margin: 0; color: var(--muted); font-size: 13px; }
 .ap-counter-foot, .ap-counter-pay, .ap-counter-done { display: grid; gap: 10px; }
 .ap-counter-due { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .ap-counter-due b { font: 700 22px/28px var(--font-sans); font-variant-numeric: tabular-nums; }

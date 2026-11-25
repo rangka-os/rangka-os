@@ -1041,7 +1041,9 @@
           h("input", { inputMode: "numeric", "aria-label": "Tunai diterima orang " + (tab + 1), value: pt.cash ? String(pt.cash) : "",
             onChange: function (e) { edit({ cash: RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0 }); } })),
         h("div", { className: "ap-counter-due change" }, h("span", null, st.short > 0 ? "Kurang" : "Kembalian"), h("b", null, rp(st.short > 0 ? st.short : st.change))),
-        h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy || left > 0, onClick: function () { finish(0, 0, sp); } }, left > 0 ? "Belum lunas: kurang " + rp(left) : "Selesai"));
+        // shares from an estimate (no service, PBJT or rounding) would undershoot the kernel's party_share (audit F8)
+        h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy || left > 0 || isEstimate, onClick: function () { finish(0, 0, sp); } },
+          isEstimate ? "Menunggu total pasti" : left > 0 ? "Belum lunas: kurang " + rp(left) : "Selesai"));
     };
     var splitOn = pay && pay.parts, canSplit = !!(c.payments && c.payments.party && c.payments.parties);
     var tender = stuck ? h("div", { className: "ap-counter-pay", role: "alertdialog", "aria-label": "Belum terkirim" },
@@ -1050,8 +1052,9 @@
       h("div", { className: "ap-counter-paytop" },
         h(R.Button, { variant: "quiet", icon: "left", disabled: busy, onClick: function () { setPay(null); } }, "Kembali"),
         h("div", { className: "ap-counter-due big" }, h("span", null, "Yang harus dibayar"), h("b", null, rp(total)))),
-      canSplit ? h("div", { className: "ap-counter-row" }, h(R.Button, { variant: splitOn ? "primary" : undefined, disabled: busy,
+      canSplit ? h("div", { className: "ap-counter-row" }, h(R.Button, { variant: splitOn ? "primary" : undefined, disabled: busy || (!splitOn && isEstimate),
         onClick: function () { setPay(splitOn ? { cash: 0, qris: 0 } : { parts: [{ cash: 0, qris: 0 }, { cash: 0, qris: 0 }], tab: 0, cash: 0, qris: 0 }); } }, "Bayar terpisah")) : null,
+      canSplit && isEstimate ? h("p", { className: "ap-counter-hint", role: "note" }, "Total masih perkiraan. Bayar terpisah bisa dipakai setelah total pasti dihitung.") : null,
       splitOn ? splitView() : null,
       splitOn ? null : (c.payments && (c.payments.methods || ["cash"]).indexOf("cash") >= 0) || !c.payments ? h("div", { className: "ap-counter-cash" },
         quickCash(Math.max(0, total - (pay.qris || 0))).map(function (a, i) {

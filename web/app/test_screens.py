@@ -365,6 +365,35 @@ def test_counter_charges_and_split_bill(browser, ctx):
         c.close()
 
 
+def test_counter_split_waits_for_the_real_total(browser, ctx):
+    # rangka-apps#121 audit F8: when the kernel's preview fails the total is an estimate without service, PBJT or
+    # rounding; "Bayar terpisah" stays off (shares would undershoot party_share) and says why
+    for vp, tag in ((PHONE375, "375"), (TABLET, "1024"), (DESK, "1280")):
+        c, p = page_for(browser, ctx, KASIR, vp, allow=("/api/v1/compute/",))
+        p.route("**/api/v1/compute/**", lambda r: r.fulfill(status=503, content_type="application/json", body='{"error": "unavailable"}'))
+        p.goto("/app/")
+        p.wait_for_url("**/#/w/jual")
+        p.wait_for_selector(".ap-counter-open, .ap-counter-item")
+        if p.locator(".ap-counter-open").count():
+            p.locator(".ap-counter-open input").first.fill("100000")
+            p.get_by_role("button", name="Buka sesi").click()
+            p.wait_for_selector(".ap-counter-item")
+        p.locator(".ap-counter-item", has_text="Paket makan malam").click()
+        if p.locator(".ap-counter-bar").is_visible():  # phone: the order is in a sheet
+            p.locator(".ap-counter-bar").click()
+        p.wait_for_selector("text=Total (perkiraan)")
+        p.get_by_role("button", name=re.compile("^Bayar")).first.click()
+        split = p.get_by_role("button", name="Bayar terpisah")
+        split.wait_for()
+        assert split.is_disabled(), "split stays off while the total is an estimate"
+        assert "Total masih perkiraan" in p.locator(".ap-counter-pay").inner_text()
+        p.wait_for_timeout(500)  # the buttons' colour transitions settle
+        shot(ctx, p, f"r3-kasir-terpisah-perkiraan-{tag}")
+        p.get_by_role("button", name="Kembali").click()
+        c.close()
+    ctx["errors"][:] = [e for e in ctx["errors"] if "/api/v1/compute/" not in e and "503" not in e]
+
+
 def test_counter_lost_answer_then_press_again_is_one_sale(browser, ctx):
     # jual_online has no offline queue: the submit answer is lost after the server wrote, set: sold_at = now() changes,
     # and the cashier presses Kirim ulang: the same job and keys go again, one cart is one sale (audit WS3 R2-1, R3-1)

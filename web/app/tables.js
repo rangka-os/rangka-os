@@ -157,7 +157,8 @@
               "aria-label": "Meja " + x.title + ", " + STATE_LABEL[x.state].toLowerCase() + (x.count > 1 ? ", " + x.count + " tagihan" : "") + (x.total ? ", " + rp(x.total) : ""),
               onClick: function () { p.onPick(x); } },
               h("b", null, x.title),
-              h("span", { className: "ap-tbl-state" }, STATE_LABEL[x.state], x.count > 1 ? h("span", { className: "ap-tbl-count" }, x.count + " tagihan") : null),
+              h("span", { className: "ap-tbl-state" }, STATE_LABEL[x.state]),
+              x.count > 1 ? h("span", { className: "ap-tbl-count" }, x.count + " tagihan") : null,
               x.state === "free" ? (x.seats ? h("small", null, x.seats + " kursi") : null)
                 : h("small", null, rp(x.total) + (x.since ? " · " + ageLabel(x.since) : "")));
           })));

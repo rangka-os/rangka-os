@@ -1443,7 +1443,7 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 .ap-tbl-card b { font: 700 20px/24px var(--font-sans); }
 .ap-tbl-card .ap-tbl-state { font: 600 12px/16px var(--font-sans); color: var(--ink-2); }
 .ap-tbl-card small { font: 400 12px/16px var(--font-sans); color: var(--muted); }
-.ap-tbl-count { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: var(--surface); color: var(--ink-2); font: 600 11px/16px var(--font-sans); }
+.ap-tbl-count { padding: 0 6px; border-radius: 999px; background: var(--surface); color: var(--ink-2); font: 600 11px/16px var(--font-sans); white-space: nowrap; }
 .ap-tbl-card[data-state="busy"] { background: var(--ok-tint); border-color: transparent; }
 .ap-tbl-card[data-state="busy"] .ap-tbl-state { color: var(--ok); }
 .ap-tbl-card[data-state="asked"] { background: var(--warn-tint); border-color: var(--warn-line); }

@@ -27,6 +27,14 @@ test("tableStates: a split table sums its bills; a merged or submitted bill does
   assert.deepStrictEqual(plain(st).map((x) => x.state), ["busy", "free", "free", "free"]);
 });
 
+test("tableStates: a table's bills are oldest first with a count; an amended copy is not an open bill", () => {
+  const st = T.tableStates(spec, tables, [draft("D9", "T2", { created_at: "2026-11-22T10:05:00Z" }), draft("D1", "T2"), draft("D0", "T2", { created_at: "2026-11-22T10:05:00Z" }),
+    draft("D5", "T3", { amended_from: "S-1" })], "grand_total");
+  assert.deepStrictEqual(plain(st[0].drafts).map((d) => d.name), ["D1", "D0", "D9"]);
+  assert.strictEqual(st[0].count, 3);
+  assert.deepStrictEqual([st[2].state, st[2].count], ["free", 0]);
+});
+
 test("matchFilter: the slot filter and each match key against the session", () => {
   assert.strictEqual(T.matchFilter(spec, { outlet: "OUT-03" }), "outlet == 'OUT-03'");
   assert.strictEqual(T.matchFilter(Object.assign({}, spec, { filter: "active != false" }), { outlet: "O'1" }), "(active != false) && outlet == 'O\\'1'");

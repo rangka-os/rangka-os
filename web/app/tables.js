@@ -51,24 +51,30 @@
     return p(d.getHours()) + "." + p(d.getMinutes());
   }
 
-  /** One card per table: {name, title, area, seats, state: free | busy | asked, drafts, total, since}. Drafts that link a
-   *  table not in the list are ignored (another outlet's, an inactive table). */
+  /** One card per table: {name, title, area, seats, state: free | busy | asked, drafts, count, total, since}. Drafts that
+   *  link a table not in the list are ignored (another outlet's, an inactive table), and so is an amended copy of a paid
+   *  bill (amended_from set: a return, never an open bill). A table's drafts are oldest first (created_at, then name),
+   *  so drafts[0] is the same bill on every device; count > 1 after a split. */
   function tableStates(spec, tables, drafts, totalField) {
     var byTable = {};
     (drafts || []).forEach(function (d) {
       var t = d[spec.link];
-      if (!t || d.docstatus !== 0 || d.merged) return;
+      if (!t || d.docstatus !== 0 || d.merged || d.amended_from) return;
       (byTable[t] = byTable[t] || []).push(d);
     });
+    function older(a, b) {
+      var x = String(a.created_at || ""), y = String(b.created_at || "");
+      return x < y ? -1 : x > y ? 1 : String(a.name) < String(b.name) ? -1 : String(a.name) > String(b.name) ? 1 : 0;
+    }
     return (tables || []).map(function (t) {
-      var ds = byTable[t.name] || [];
+      var ds = (byTable[t.name] || []).slice().sort(older);
       var asked = spec.bill ? ds.some(function (d) { return !!d[spec.bill]; }) : false;
       var since = ds.map(function (d) { return d.created_at; }).filter(Boolean).sort()[0] || "";
       return {
         name: t.name, title: String(t[spec.title] || t.name), area: spec.area ? String(t[spec.area] || "") : "",
         seats: spec.seats && t[spec.seats] != null ? Number(t[spec.seats]) : null,
         state: !ds.length ? "free" : asked ? "asked" : "busy",
-        drafts: ds, total: totalField ? ds.reduce(function (s, d) { return s + (Number(d[totalField]) || 0); }, 0) : 0, since: since
+        drafts: ds, count: ds.length, total: totalField ? ds.reduce(function (s, d) { return s + (Number(d[totalField]) || 0); }, 0) : 0, since: since
       };
     }).sort(function (a, b) { return natural(a.area, b.area) || natural(a.title, b.title); });
   }
@@ -107,7 +113,7 @@
       var filter = matchFilter(spec, p.session);
       Promise.all([
         ctx.api.list(spec.model, { filter: filter || undefined, limit: 300 }),
-        ctx.api.list(doc.model, { filter: "docstatus == 0 && " + spec.link + " != ''", limit: 300 })
+        ctx.api.list(doc.model, { filter: "docstatus == 0 && " + spec.link + " != '' && amended_from == ''", limit: 300 })
       ]).then(function (rs) {
         var d = { tables: (rs[0] && rs[0].data) || [], drafts: (rs[1] && rs[1].data) || [], at: Date.now(), offline: false, err: "" };
         lsPut(cacheKey, { tables: d.tables, drafts: d.drafts, at: d.at });
@@ -148,10 +154,10 @@
           h("div", { className: "ap-tbl-grid" }, shown.filter(function (x) { return x.area === a; }).map(function (x) {
             var disabled = data.offline && x.state !== "free"; // another device's bill needs the connection
             return h("button", { key: x.name, type: "button", className: "ap-tbl-card", "data-state": x.state, disabled: disabled,
-              "aria-label": "Meja " + x.title + ", " + STATE_LABEL[x.state].toLowerCase() + (x.total ? ", " + rp(x.total) : ""),
+              "aria-label": "Meja " + x.title + ", " + STATE_LABEL[x.state].toLowerCase() + (x.count > 1 ? ", " + x.count + " tagihan" : "") + (x.total ? ", " + rp(x.total) : ""),
               onClick: function () { p.onPick(x); } },
               h("b", null, x.title),
-              h("span", { className: "ap-tbl-state" }, STATE_LABEL[x.state]),
+              h("span", { className: "ap-tbl-state" }, STATE_LABEL[x.state], x.count > 1 ? h("span", { className: "ap-tbl-count" }, x.count + " tagihan") : null),
               x.state === "free" ? (x.seats ? h("small", null, x.seats + " kursi") : null)
                 : h("small", null, rp(x.total) + (x.since ? " · " + ageLabel(x.since) : "")));
           })));

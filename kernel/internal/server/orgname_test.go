@@ -38,7 +38,7 @@ func TestOrgNameSetOnStart(t *testing.T) {
 	}
 	defer pool.Close()
 	if _, err := Seed(ctx, pool, reg, SeedOptions{Org: "mogu-s61i", FixturesDir: filepath.Join(dir, "fixtures"), Email: "ceo@saga.co.id",
-		Password: "rangka-demo", UserRecord: "USR-001", Now: fixedNow}); err != nil {
+		Password: "rangka-demo", UserRecord: "USR-001", Now: fixedNow}); err != nil { // synthetic test fixture
 		t.Fatal(err)
 	}
 	name := func() string {

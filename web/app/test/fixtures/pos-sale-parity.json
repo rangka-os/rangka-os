@@ -590,6 +590,53 @@
      "type": "data"
     },
     {
+     "name": "table",
+     "to": "dining_table",
+     "type": "link"
+    },
+    {
+     "default": "0",
+     "name": "guests",
+     "type": "int"
+    },
+    {
+     "default": "0",
+     "name": "rev",
+     "type": "int"
+    },
+    {
+     "name": "bill_asked",
+     "type": "check"
+    },
+    {
+     "name": "send_kitchen",
+     "type": "check"
+    },
+    {
+     "default": "[]",
+     "name": "sent_to_kitchen",
+     "type": "json"
+    },
+    {
+     "name": "merge_into",
+     "to": "pos_sale",
+     "type": "link"
+    },
+    {
+     "name": "merged",
+     "type": "check"
+    },
+    {
+     "default": "[]",
+     "name": "split_lines",
+     "type": "json"
+    },
+    {
+     "name": "split_of",
+     "to": "pos_sale",
+     "type": "link"
+    },
+    {
      "name": "customer",
      "to": "customer",
      "type": "link"
@@ -633,7 +680,7 @@
      "type": "data"
     },
     {
-     "default": "'takeaway'",
+     "default": "table != '' ? 'dine_in' : 'takeaway'",
      "name": "order_type",
      "options": [
       {
@@ -900,6 +947,10 @@
   },
   "pos_sale_item": {
    "fields": [
+    {
+     "name": "line_key",
+     "type": "data"
+    },
     {
      "name": "item",
      "to": "item",

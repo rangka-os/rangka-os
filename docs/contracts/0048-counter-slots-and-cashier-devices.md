@@ -158,6 +158,20 @@ pulang" that goes straight to the catalogue without a table. Offline, the map sh
 check, `seats` a number (`screen_slot_type`); `match` keys are fields of the table model and values fields of
 `session.model`, and `match` without `session` is `screen_slot_type` (same as 0039).
 
+**Status: accepted (22 Nov 2026), as built in rangka-os and rangka-apps#122.**
+- *Slot and renderer.* `customer.table` as above, validated by both validators; the renderer is `web/app/tables.js` plus
+  the counter's table mode. The map lists tables (`filter` AND `match`) and the drafts that link one; offline it shows the
+  last loaded copy labelled "data terakhir <jam>" and busy tables are disabled (another device's bill needs the connection).
+- *Conditional writes.* `_if` compares declared model fields only, so `pos_sale` carries a hidden int `rev`; the counter
+  sends `rev + 1` with `_if: {rev}` on every write of an open bill. Two devices on one bill: the later write gets 409.
+- *Merge and split* are rangka-apps flows (`pos_sale_merge`, `pos_sale_split`), atomic inside the PATCH: the counter sets
+  `merge_into` or `split_lines`. Merge needed the flow `find` step to return child rows; the kernel now loads them for
+  matched records. A merged bill keeps its lines as a record, frees its table and cannot be paid. Stock moves only when a
+  bill is paid, so merge and split never move stock twice. Totals: the merged bill's total is the sum of both; the two bills of
+  a split add up to the original (lines move whole). A bill with promo, member or deposit is not split.
+- *Split bills* are the only case of two drafts on one table (`split_of` set); a hand-made second bill is refused (`table_busy`).
+- *Not in v1:* split by seat, equal split, table sitting-time colours.
+
 ### 3. `session.moves`: cash in and cash out during a shift
 
 **Model (rangka-apps `modules/pos`).** `pos_cash_move`, submittable (nothing links to it, 0030 §10): `shift` (link),

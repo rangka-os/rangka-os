@@ -1429,3 +1429,42 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 
 /* contract 0074 §4: an empty dashboard list is one muted sentence in a compact card */
 .ap-dash-empty { margin: 0; padding: 12px 16px 16px; color: var(--muted); font-size: 14px; }
+
+/* table map of the counter (tables.js, contract 0048 section 2): free = plain, occupied = ok tint, bill asked = warn tint */
+.ap-counter-tables { display: block; padding-bottom: 16px; }
+.ap-tbl { display: grid; gap: 14px; }
+.ap-tbl-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ap-tbl-h > b { font: 600 18px/24px var(--font-sans); color: var(--ink); margin-right: auto; }
+.ap-tbl-legend { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ap-tbl-chip { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); font: 500 12px/18px var(--font-sans); color: var(--ink-2); background: var(--surface); }
+.ap-tbl-chip[data-state="busy"] { background: var(--ok-tint); color: var(--ok); border-color: transparent; }
+.ap-tbl-chip[data-state="asked"] { background: var(--warn-tint); color: var(--on-warn); border-color: var(--warn-line); }
+.ap-tbl-stale { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--warn-tint); color: var(--on-warn); border: 1px solid var(--warn-line); font-size: 14px; }
+.ap-tbl-empty { margin: 0; color: var(--muted); font-size: 14px; }
+.ap-tbl-area h3 { margin: 0 0 8px; font: 600 14px/20px var(--font-sans); color: var(--ink-2); }
+.ap-tbl-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+.ap-tbl-card { display: grid; gap: 2px; align-content: center; justify-items: start; min-height: 88px; padding: 10px 12px; text-align: left; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--ink); font-family: var(--font-sans); }
+.ap-tbl-card b { font: 700 20px/24px var(--font-sans); }
+.ap-tbl-card .ap-tbl-state { font: 600 12px/16px var(--font-sans); color: var(--ink-2); }
+.ap-tbl-card small { font: 400 12px/16px var(--font-sans); color: var(--muted); }
+.ap-tbl-count { padding: 0 6px; border-radius: 999px; background: var(--surface); color: var(--ink-2); font: 600 11px/16px var(--font-sans); white-space: nowrap; }
+.ap-tbl-card[data-state="busy"] { background: var(--ok-tint); border-color: transparent; }
+.ap-tbl-card[data-state="busy"] .ap-tbl-state { color: var(--ok); }
+.ap-tbl-card[data-state="asked"] { background: var(--warn-tint); border-color: var(--warn-line); }
+.ap-tbl-card[data-state="asked"] .ap-tbl-state { color: var(--on-warn); }
+.ap-tbl-card:disabled { opacity: .55; cursor: not-allowed; }
+.ap-tbl-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ap-tbl-bar { display: grid; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.ap-tbl-bar-t { display: flex; align-items: baseline; gap: 8px; }
+.ap-tbl-bar-t b { font: 600 16px/22px var(--font-sans); color: var(--ink); }
+.ap-tbl-bar-t small { color: var(--muted); font-size: 13px; }
+.ap-tbl-bar-a { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-tbl-split { display: grid; gap: 12px; max-width: 520px; }
+.ap-tbl-split ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ap-tbl-split label { display: flex; align-items: center; gap: 10px; min-height: var(--touch); padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.ap-tbl-split label span { flex: 1; }
+.ap-tbl-split small { color: var(--muted); }
+.ap-tbl-guests { display: grid; gap: 12px; justify-items: start; max-width: 360px; margin-top: 16px; padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--r-dialog); background: var(--surface); }
+.ap-tbl-stepper { display: flex; align-items: center; gap: 16px; }
+.ap-tbl-stepper output { min-width: 32px; text-align: center; font: 700 24px/28px var(--font-sans); color: var(--ink); }

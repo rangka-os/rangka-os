@@ -166,7 +166,7 @@ func TestDefaultsWaitForTheSeedOfANewOrg(t *testing.T) {
 	os.WriteFile(filepath.Join(fx, "outlet.rk"), []byte("outlet:\n  - {name: OUT-001, outlet_name: Dago}\n"), 0o644)
 	seed := func(org, dir string) {
 		if _, err := Seed(ctx, db, reg, SeedOptions{Org: org, FixturesDir: dir, Email: "owner-" + org + "@x.test",
-			Password: "rangka-demo", RecordOptional: true, Now: fixedNow}); err != nil {
+			Password: "rangka-demo", RecordOptional: true, Now: fixedNow}); err != nil { // synthetic test fixture
 			t.Fatalf("seed %s: %v", org, err)
 		}
 	}

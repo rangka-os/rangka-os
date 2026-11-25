@@ -558,7 +558,22 @@
     var shiftName = session && typeof session === "object" ? session.name : null;
 
     /* ----- the model's numbers for this cart (contract 0034) */
-    function computeBody() { return saleBody(c, cart, null, shiftName, sets.document, customer, checkout); }
+    /* The preview of an open table bill computes what the server will: the table (a bill on a table defaults to
+       dine-in, so it takes service charge) and the checkout values the bill already stores, under this device's own
+       picks (rangka-apps#122 with #121's charges). */
+    function computeBody() {
+      if (!bill || !tbl) return saleBody(c, cart, null, shiftName, sets.document, customer, checkout);
+      var body = saleBody(c, cart, null, shiftName, sets.document, customer, Object.assign({}, bill.kept || {}, checkout));
+      body[tbl.link] = bill.table;
+      if (tbl.guests) body[tbl.guests] = bill.guests;
+      return body;
+    }
+    /* the checkout values a bill record stores (the order type the server gave it, a member picked earlier) */
+    function billKept(rec) {
+      var o = {};
+      checkoutSlots(doc).forEach(function (sl) { var v = rec[sl.field]; if (v !== undefined && v !== null && v !== "" && v !== false) o[sl.field] = v; });
+      return o;
+    }
     var calcKey = (doc.summary || devOn) && cart.length ? JSON.stringify(computeBody()) : "";
     /* The device's own computation of the sale (contract 0058 §10): engine.js over the pulled records, the open
        session and the outlet; the rules whose check needs what only the kernel holds (the cashier's email, records
@@ -705,7 +720,7 @@
       }
       return r0.then(function (r) {
         var rec = r && r.record ? r.record : r;
-        setBill(Object.assign({}, bill, { name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill] }));
+        setBill(Object.assign({}, bill, { name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill], kept: billKept(rec) }));
         setCart(RA.tables.cartFromBill(doc, rec));
         return rec;
       });
@@ -742,7 +757,7 @@
         var rec = r && r.data && r.data[0];
         if (!rec) throw new Error("Tagihan tidak ditemukan");
         billKey.current = null;
-        setBill({ table: x.name, title: x.title, guests: Number(rec[tbl.guests]) || 1, name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill] });
+        setBill({ table: x.name, title: x.title, guests: Number(rec[tbl.guests]) || 1, name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill], kept: billKept(rec) });
         setCart(RA.tables.cartFromBill(doc, rec)); setCustomer(rec[c.customer.field] || ""); setTmode(null);
       }, function (e) { setErr(errText(e)); }).then(function () { setBusy(false); });
     }

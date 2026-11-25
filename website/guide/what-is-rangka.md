@@ -32,7 +32,7 @@ QRIS as first-class integrations, and plans priced per company or outlet rather 
   are not built yet.
 - **Rangka Console**: the control pane that shows every layer, capability, app, change set and connector.
 - **A design system**: React components with Frappe UI structure in Rangka colours (Ink, Bata, warm stone), light and dark, used by every screen.
-- **Rangka AI** (Raka): an agent that proposes change sets, never code, and never approves or applies them. It runs as
+- **Rangka AI** (Zafdoz): an agent that proposes change sets, never code, and never approves or applies them. It runs as
   a sidecar the kernel relays chat to. See [Rangka AI](/tools/rangka-ai).
 
 ## Who it is for

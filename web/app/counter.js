@@ -1,7 +1,7 @@
 /* Rangka end-user app: the counter work screen (contract 0030 §2, type counter): sell at a counter.
  *
  * RangkaApp.workRenderers.counter({ctx, screen, set, sets, reload}). Slots (screen.counter):
- *   catalogue {model, filter, title, search, group_by, price, barcode, image, limit}: the items to tap, loaded once
+ *   catalogue {model, filter, title, search, group_by, price, barcode, image, variants {group, label, title}, limit}: the items to tap, loaded once
  *     (GET /r/<model>?filter=…&limit=…) and kept in the device cache for offline use; searched on the device; a barcode
  *     typed or scanned into the search box and ended with Enter adds that item.
  *   document {model, lines, line {item, qty, price, note, amount, flag}, total, change, summary, checkout, set}: one sale. Prices, discounts,
@@ -139,6 +139,56 @@
     });
   }
 
+  /** The shortest common prefix of the titles, cut back to a whole word and stripped of trailing separators
+   *  ("Kaos Polos - M" and "Kaos Polos - L" give "Kaos Polos"); "" when they share none. */
+  function commonTitle(titles) {
+    var list = (titles || []).map(String).filter(Boolean);
+    if (!list.length) return "";
+    var p = list[0];
+    list.forEach(function (t) { while (p && t.indexOf(p) !== 0) p = p.slice(0, -1); });
+    if (p.length && !list.every(function (t) { return t.length === p.length || /[\s\-\/,:(]/.test(t.charAt(p.length)); })) {
+      var cut = p.search(/[\s\-\/,:(][^\s\-\/,:(]*$/);
+      p = cut > 0 ? p.slice(0, cut) : "";
+    }
+    return p.replace(/[\s\-\/,:(]+$/, "");
+  }
+
+  /** The tiles to show (variants slot): rows sharing a non-empty group collapse into one tile {variants: [rows]} with the
+   *  product title (the optional title field, else the shortest common prefix, else the group code), the lowest price and
+   *  the summed stock (left(it) per row, null when no row has a figure); a group of one row stays a plain tile. Tiles keep
+   *  the order of their first row. */
+  function variantTiles(rows, left) {
+    var seen = {}, out = [];
+    (rows || []).forEach(function (it) {
+      if (!it.vgroup) { out.push(it); return; }
+      var g = seen[it.vgroup];
+      if (!g) { g = seen[it.vgroup] = { vgroup: it.vgroup, variants: [], key: "group:" + it.vgroup }; out.push(g); }
+      g.variants.push(it);
+    });
+    return out.map(function (t) {
+      if (!t.variants) return t;
+      if (t.variants.length === 1) return t.variants[0];
+      var named = t.variants.filter(function (v) { return v.vtitle; })[0];
+      var prices = t.variants.map(function (v) { return Number(v.price) || 0; });
+      var stock = null;
+      t.variants.forEach(function (v) { var n = left ? left(v) : v.left; if (n != null) stock = (stock || 0) + n; });
+      t.title = named ? named.vtitle : commonTitle(t.variants.map(function (v) { return v.title; })) || t.vgroup;
+      t.price = Math.min.apply(null, prices);
+      t.from = Math.max.apply(null, prices) > t.price;
+      t.image = (t.variants.filter(function (v) { return v.image; })[0] || {}).image || "";
+      t.left = stock;
+      t.group = t.variants[0].group;
+      return t;
+    });
+  }
+
+  /** The sheet's label of a variant: its label field, else its title without the product's title, else the title. */
+  function variantLabel(v, product) {
+    if (v.vlabel) return v.vlabel;
+    var t = String(v.title || ""), p = String(product || "");
+    return p && t.indexOf(p) === 0 && t.length > p.length ? t.slice(p.length).replace(/^[\s\-\/,:(]+|[)\s]+$/g, "") || t : t;
+  }
+
   /** The summary slot's fields as rows {name, label, value} from a computed record; fields the record lacks (hidden
    *  from the caller, contract 0027) are skipped. fields: the document model's meta fields. */
   function summaryRows(names, fields, rec) {
@@ -219,6 +269,9 @@
   RA.openFilter = openFilter;
   RA.findByBarcode = findByBarcode;
   RA.catalogueMatch = catalogueMatch;
+  RA.commonTitle = commonTitle;
+  RA.variantTiles = variantTiles;
+  RA.variantLabel = variantLabel;
 
   /* ================================================================ views */
   var React = global.React, R = global.Rangka;
@@ -338,14 +391,41 @@
     return /^(https?:)?\/|^data:image\//.test(v) ? v : "/api/v1/attachments/" + encodeURIComponent(v);
   }
 
+  /** The choice sheet (contract 0048 §1): a dialog over the catalogue listing what to pick for one tile. Variants use it
+   *  now; the options of a made-to-order item plug in as more row kinds. rows: [{key, label, price, badge, out, n}];
+   *  onPick(row) adds it. Escape, the backdrop and the close button dismiss it. */
+  function ChoiceSheet(p) {
+    var ref = useRef(null);
+    useEffect(function () {
+      var prev = global.document.activeElement;
+      if (ref.current) { var b = ref.current.querySelector("button[data-row]") || ref.current.querySelector("button"); if (b) b.focus(); }
+      function key(e) { if (e.key === "Escape") p.onClose(); }
+      global.document.addEventListener("keydown", key);
+      return function () { global.document.removeEventListener("keydown", key); if (prev && prev.focus) prev.focus(); };
+    }, []);
+    return h("div", { className: "ap-counter-choice-bg", onClick: function (e) { if (e.target === e.currentTarget) p.onClose(); } },
+      h("div", { className: "ap-counter-choice", role: "dialog", "aria-modal": "true", "aria-label": p.title, ref: ref },
+        h("div", { className: "ap-counter-choice-h" },
+          h("div", null, h("h2", null, p.title), p.subtitle ? h("p", null, p.subtitle) : null),
+          h("button", { type: "button", className: "ap-counter-sheet-x", "aria-label": "Tutup", onClick: p.onClose }, h(R.Icon, { name: "close" }))),
+        h("ul", { className: "ap-counter-choice-rows" }, p.rows.map(function (r) {
+          return h("li", { key: r.key }, h("button", { type: "button", "data-row": "1", className: r.out ? "out" : "", onClick: function () { p.onPick(r); },
+            "aria-label": r.label + ", " + rp(r.price) + (r.out ? ", habis" : r.badge ? ", " + r.badge : "") + (r.n ? ", " + r.n + " di pesanan" : "") },
+            h("span", { className: "ap-counter-choice-t" }, r.label, r.n ? h("strong", null, r.n) : null),
+            r.badge || r.out ? h("em", { className: "ap-counter-left" + (r.out ? " out" : "") }, r.out ? "Habis" : r.badge) : null,
+            h("b", null, rp(r.price))));
+        }))));
+  }
+
   /* ---------------------------------------------------------------- the counter */
   function CounterScreen(p) {
     var ctx = p.ctx, s = p.screen, c = s.counter || {}, sets = p.sets || {}, scope = RA.outboxScope(ctx.me);
-    var cat = c.catalogue || {}, ses = c.session || null, doc = c.document || {};
+    var cat = c.catalogue || {}, ses = c.session || null, doc = c.document || {}, vr = cat.variants || null;
     var docMeta = (ctx.meta.models || {})[doc.model] || {};
     var online = useOnline(), wide = useWide();
     var ss = useState(ses ? "loading" : "none"), session = ss[0], setSession = ss[1]; // "loading" | null | record | "none"
     var is = useState(null), items = is[0], setItems = is[1];
+    var vs = useState(null), vsheet = vs[0], setVsheet = vs[1]; // the tile whose variant sheet is open
     var ce = useState(null), catErr = ce[0], setCatErr = ce[1];
     var cs = useState([]), cart = cs[0], setCart = cs[1];
     var qs = useState(""), q = qs[0], setQ = qs[1];
@@ -421,7 +501,9 @@
         var rows = ((r && r.data) || []).map(function (x) {
           return { item: x.name, title: String(x[cat.title] || x.title || x.name), price: x[cat.price], group: cat.group_by ? String(x[cat.group_by] || "") : "",
             barcode: cat.barcode ? x[cat.barcode] : "", search: (cat.search || []).map(function (f) { return x[f] || ""; }).join(" "),
-            image: cat.image ? x[cat.image] || "" : "", left: typeof cat.available === "string" && x[cat.available] != null ? Number(x[cat.available]) : null };
+            image: cat.image ? x[cat.image] || "" : "",
+            vgroup: vr ? String(x[vr.group] || "") : "", vlabel: vr ? String(x[vr.label] || "") : "", vtitle: vr && vr.title ? String(x[vr.title] || "") : "",
+            left: typeof cat.available === "string" && x[cat.available] != null ? Number(x[cat.available]) : null };
         });
         setItems(rows);
         RA.outbox.cache.put(key, rows);
@@ -900,6 +982,8 @@
     var groups = [];
     (items || []).forEach(function (it) { if (it.group && groups.indexOf(it.group) < 0) groups.push(it.group); });
     var shown = catalogueMatch(items, q, group);
+    function leftOf(it) { return avSlot ? (bal && bal[it.item] != null ? bal[it.item] : null) : it.left; }
+    var tiles = vr ? variantTiles(shown, leftOf) : shown;
     var inCart = {};
     cart.forEach(function (l) { inCart[l.item] = (inCart[l.item] || 0) + l.qty; });
 
@@ -923,16 +1007,20 @@
           return h("button", { key: g || "*", type: "button", role: "tab", "aria-selected": group === g ? "true" : "false", onClick: function () { setGroup(g); } }, g ? groupLabel(g) : "Semua");
         })) : null,
       catErr ? h("div", { className: "ap-work-err" }, catErr) : !items ? h("p", { className: "ap-work-loading" }, "Memuat katalog…") :
-        h("div", { className: "ap-counter-grid" }, shown.map(function (it) {
-          var left = avSlot ? (bal && bal[it.item] != null ? bal[it.item] : null) : it.left;
-          var out = left != null && left <= 0, low = left != null && left > 0 && left <= 5, n = inCart[it.item] || 0;
-          return h("button", { key: it.item, type: "button", className: "ap-counter-item" + (out ? " out" : "") + (n ? " picked" : ""), onClick: function () { add(it); },
-            "aria-label": it.title + ", " + rp(it.price) + (out ? ", habis" : low ? ", sisa " + left : "") + (n ? ", " + n + " di pesanan" : "") },
+        h("div", { className: "ap-counter-grid" }, tiles.map(function (it) {
+          var vs0 = it.variants || null;
+          var left = vs0 ? it.left : leftOf(it);
+          var out = left != null && left <= 0, low = left != null && left > 0 && left <= 5;
+          var n = vs0 ? vs0.reduce(function (s, v) { return s + (inCart[v.item] || 0); }, 0) : inCart[it.item] || 0;
+          return h("button", { key: it.key || it.item, type: "button", className: "ap-counter-item" + (vs0 ? " variants" : "") + (out ? " out" : "") + (n ? " picked" : ""),
+            "aria-haspopup": vs0 ? "dialog" : undefined, onClick: function () { if (vs0) setVsheet(it); else add(it); },
+            "aria-label": it.title + ", " + (vs0 ? vs0.length + " varian, " + (it.from ? "mulai " : "") : "") + rp(it.price) + (out ? ", habis" : low ? ", sisa " + left : "") + (n ? ", " + n + " di pesanan" : "") },
             h("span", { className: "ap-counter-pic " + tintOf(it.title), "aria-hidden": "true" },
               it.image ? h(TileImage, { src: imageSrc(it.image), initials: initials(it.title) }) : h("i", null, initials(it.title)),
               n ? h("strong", { className: "ap-counter-n" }, n) : null),
             h("span", { className: "ap-counter-item-t" }, it.title),
-            h("span", { className: "ap-counter-item-p" }, h("span", null, rp(it.price)),
+            h("span", { className: "ap-counter-item-p" }, h("span", null, (it.from ? "mulai " : "") + rp(it.price)),
+              vs0 ? h("em", { className: "ap-counter-more" }, vs0.length + " varian") : null,
               out ? h("em", { className: "ap-counter-left out" }, "Habis") : low ? h("em", { className: "ap-counter-left" }, "sisa " + left) : null));
         }), !shown.length && (q || group) ? h("p", { className: "ap-work-loading" }, "Tidak ada yang cocok.") : null),
       items && !items.length && !catErr ? h("div", { className: "ap-counter-nocat", role: "status" },
@@ -1109,8 +1197,14 @@
             h(R.Button, { variant: "primary", onClick: startBill }, "Buka tagihan"))) : null,
         err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null);
     }
+    var variantSheet = vsheet && vsheet.variants ? h(ChoiceSheet, { title: vsheet.title, subtitle: vsheet.variants.length + " varian",
+      rows: vsheet.variants.map(function (v) {
+        var l = leftOf(v);
+        return { key: v.item, label: variantLabel(v, vsheet.title), price: v.price, out: l != null && l <= 0, badge: l != null && l > 0 && l <= 5 ? "sisa " + l : "", n: inCart[v.item] || 0, it: v };
+      }),
+      onPick: function (r) { add(r.it); setVsheet(null); }, onClose: function () { setVsheet(null); } }) : null;
     return h("div", { className: "ap-counter" + (sheet || pay || stuck || (done && !cart.length) ? " sheet" : "") + (paying ? " paying" : "") },
-      paying ? h("section", { className: "ap-counter-tender", "aria-label": "Pembayaran" }, tender) : catalogue, side, bar);
+      paying ? h("section", { className: "ap-counter-tender", "aria-label": "Pembayaran" }, tender) : catalogue, side, bar, variantSheet);
   }
   RA.workRenderers = RA.workRenderers || {};
   RA.workRenderers.counter = CounterScreen;

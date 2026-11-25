@@ -30,7 +30,7 @@ Results come as `content: [{type: "text", text: <json>}]` plus `structuredConten
 Tools follow the caller's model permissions, like REST.
 
 There is deliberately **no tool to approve or apply a change set**: a person does that in the Console or the app.
-`rangka_approve` is for document approvals only (contract 0007). The embedded assistant Raka gets a narrower set:
+`rangka_approve` is for document approvals only (contract 0007). The embedded assistant Zafdoz gets a narrower set:
 the read tools, the change-set tools up to preview, `rangka_approvals_list`, `rangka_notices`, the catalogue and the skills; any other
 tool is refused with `ai_forbidden`.
 

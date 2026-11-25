@@ -133,3 +133,56 @@ test("lineAmount: the model's amount of a line from the computed record, null wi
   assert.strictEqual(A.lineAmount({ lines: "items", line: {} }, rec, 0), null);
   assert.strictEqual(A.lineAmount(doc, null, 0), null);
 });
+
+test("commonTitle: the shortest common prefix cut to a whole word", () => {
+  assert.strictEqual(A.commonTitle(["Kaos Polos - M", "Kaos Polos - L"]), "Kaos Polos");
+  assert.strictEqual(A.commonTitle(["Teh Botol 250 ml", "Teh Botol 600 ml"]), "Teh Botol");
+  assert.strictEqual(A.commonTitle(["Kopi Susu Besar", "Kopi Susu Kecil", "Kopi Susu Sedang"]), "Kopi Susu");
+  assert.strictEqual(A.commonTitle(["Beras Pandan", "Berkah"]), "");
+  assert.strictEqual(A.commonTitle([]), "");
+});
+
+test("variantTiles: one tile per group, lowest price, summed stock; a lone row and a row without group stay plain", () => {
+  const rows = [
+    { item: "A-S", title: "Kopi Susu Kecil", price: 15000, vgroup: "KOPI-SUSU", vlabel: "Kecil", left: 3 },
+    { item: "X", title: "Roti", price: 12000, vgroup: "" },
+    { item: "A-M", title: "Kopi Susu Sedang", price: 18000, vgroup: "KOPI-SUSU", vlabel: "Sedang", left: 4 },
+    { item: "A-L", title: "Kopi Susu Besar", price: 22000, vgroup: "KOPI-SUSU", vlabel: "Besar", left: null },
+    { item: "T", title: "Teh", price: 8000, vgroup: "TEH", vlabel: "Hangat" },
+  ];
+  const t = plain(A.variantTiles(rows));
+  assert.deepStrictEqual(t.map((x) => x.item || x.key), ["group:KOPI-SUSU", "X", "T"]);
+  assert.strictEqual(t[0].title, "Kopi Susu");
+  assert.strictEqual(t[0].price, 15000);
+  assert.strictEqual(t[0].from, true);
+  assert.strictEqual(t[0].left, 7);
+  assert.strictEqual(t[0].variants.length, 3);
+  assert.strictEqual(t[2].title, "Teh");
+});
+
+test("variantTiles: the title field wins; stock comes from left(); equal prices are not 'mulai'; no figure stays null", () => {
+  const rows = [
+    { item: "S", title: "Es Teh S", price: 5000, vgroup: "ES-TEH", vtitle: "Es Teh Manis" },
+    { item: "L", title: "Es Teh L", price: 5000, vgroup: "ES-TEH" },
+  ];
+  let t = plain(A.variantTiles(rows, (v) => ({ S: 0, L: 2 })[v.item]))[0];
+  assert.strictEqual(t.title, "Es Teh Manis");
+  assert.strictEqual(t.from, false);
+  assert.strictEqual(t.left, 2);
+  t = plain(A.variantTiles(rows))[0];
+  assert.strictEqual(t.left, null);
+  const noCommon = plain(A.variantTiles([{ item: "1", title: "Alfa", price: 1, vgroup: "G" }, { item: "2", title: "Beta", price: 2, vgroup: "G" }]))[0];
+  assert.strictEqual(noCommon.title, "G");
+});
+
+test("variantLabel: the label field, else the title minus the product title", () => {
+  assert.strictEqual(A.variantLabel({ title: "Kaos Polos - M", vlabel: "M / Hitam" }, "Kaos Polos"), "M / Hitam");
+  assert.strictEqual(A.variantLabel({ title: "Kaos Polos - M" }, "Kaos Polos"), "M");
+  assert.strictEqual(A.variantLabel({ title: "Kaos Polos" }, "Kaos Polos"), "Kaos Polos");
+});
+
+test("a barcode scan still finds the exact variant (the tile collapse does not touch the row list)", () => {
+  const rows = [{ item: "A", title: "X S", barcode: "111", vgroup: "X" }, { item: "B", title: "X L", barcode: "222", vgroup: "X" }];
+  A.variantTiles(rows);
+  assert.strictEqual(A.findByBarcode(rows, "222").item, "B");
+});

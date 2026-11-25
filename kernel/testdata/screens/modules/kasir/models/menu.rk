@@ -8,6 +8,9 @@ fields:
   - {name: category, type: data, label: {id: Kategori}, in_list: true}
   - {name: price, type: currency, label: {id: Harga}, required: true, in_list: true}
   - {name: barcode, type: data, label: {id: Barcode}}
+  - {name: variant_group, type: data, label: {id: Grup varian}}
+  - {name: variant_label, type: data, label: {id: Varian}}
+  - {name: variant_title, type: data, label: {id: Nama produk}}
   - {name: active, type: check, label: {id: Aktif}, default: 'true'}
 permissions:
   - {role: kasir, read: true}

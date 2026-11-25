@@ -1,4 +1,4 @@
-# 0044 Streamed Raka turns
+# 0044 Streamed Zafdoz turns
 
 Status: proposed (10 Nov 2026) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (`/v1/turn`,
 `/v1/interview` and `/v1/chat` streams), rangka-cloud (relay and chat UI; private) · Builds on: 0020, 0035, 0041,
@@ -7,13 +7,13 @@ amended 10 Nov 2026)
 
 ## Context
 
-A Raka turn from rangka-cloud is one blocking request: `/v1/turn` (0041) or `/v1/interview` (0042) answers JSON after
+A Zafdoz turn from rangka-cloud is one blocking request: `/v1/turn` (0041) or `/v1/interview` (0042) answers JSON after
 up to three minutes, and the owner sees nothing until then. rangka-ai already knows what it is doing while it works:
 the agent emits `tool`, `text`, `changeset` and `escalate` events, and `/v1/chat` (0020) streams them as SSE. The two
 endpoints Cloud calls throw them away.
 
-This contract lets both endpoints stream on request, adds the events a live "Raka is working" view needs, and keeps
-proof before claim (0035 §5): nothing the owner sees while Raka works is later taken back.
+This contract lets both endpoints stream on request, adds the events a live "Zafdoz is working" view needs, and keeps
+proof before claim (0035 §5): nothing the owner sees while Zafdoz works is later taken back.
 
 ## Decision
 
@@ -95,7 +95,7 @@ Text arrives one model call at a time, split into chunks of about 40 characters 
   rangka-ai's.
 - **`cloud_*` tools get a fixed label and a fixed summary per tool name** ("Membaca riwayat bisnis…"), never built from
   the input or the result. This is required in place `console`: 0041 §6 masks tool results, not tool inputs, and a
-  label must not show what Raka searched for (`cloud_logs` `q`). rangka-ai applies the same rule to `cloud_*` tools in
+  label must not show what Zafdoz searched for (`cloud_logs` `q`). rangka-ai applies the same rule to `cloud_*` tools in
   every place.
 - Every streamed string (`text`, `note`, `thinking`, `label`, `summary`, `escalate.reason`, `changeset.title`,
   `error.message`) passes
@@ -227,7 +227,7 @@ data: {"reply":"Dari daftar sewamu, DP-nya selalu 50%. Betul begitu?","map":{…
   with fixed `cloud_*` labels; the §3 rules in the agent's model node and in the consult loop; scrubbing of every
   streamed string.
 - **rangka-cloud relays** (private, non-normative here): it asks for SSE, maps these events to its own browser events,
-  stores messages from `result` as today, and holds interview `text` until its post-checks pass. Its design is "Raka
+  stores messages from `result` as today, and holds interview `text` until its post-checks pass. Its design is "Zafdoz
   chat that shows its work" (10 Nov 2026); its browser events (`step`, `done`, …) are Cloud-internal and not part of
   this contract.
 - **rangka-os:** this file only.

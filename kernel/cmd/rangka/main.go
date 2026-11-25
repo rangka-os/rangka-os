@@ -42,7 +42,7 @@ Usage:
   rangka version
 
 Settings can also come from the environment or a .env file in the current directory:
-  DATABASE_URL, RANGKA_APPS, RANGKA_SITE, RANGKA_CONNECTORS, RANGKA_FIXTURES, RANGKA_ORG, RANGKA_ADDR,
+  DATABASE_URL, RANGKA_APPS, RANGKA_SITE, RANGKA_CONNECTORS, RANGKA_FIXTURES, RANGKA_ORG, RANGKA_ORG_NAME (serve: display name), RANGKA_ADDR,
   RANGKA_OWNER_EMAIL, RANGKA_OWNER_PASSWORD (seed), RANGKA_USER_PASSWORD (user add: new accounts or --reset-password),
   RANGKA_MASTER_KEY or RANGKA_MASTER_KEY_FILE (serve: the key-encryption key of the db secrets driver). Values already set in the environment win.
 

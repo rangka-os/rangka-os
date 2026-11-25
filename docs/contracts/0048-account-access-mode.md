@@ -153,7 +153,7 @@ refused write takes no number, no credit and no lock.
 ## Consequences
 
 - A held tenant keeps its data readable and exportable, and keeps receiving money (webhooks, edge sales, the counter
-  under `open`). What stops is change: back-office edits, configuration, new people, Raka.
+  under `open`). What stops is change: back-office edits, configuration, new people, Zafdoz.
 - Known gaps: a person mid-form when the hold starts loses that form's unsaved changes on save (the message says why);
   under `held`, a web counter opened before the hold and offline until after it has its presses refused when it
   reconnects (they are newer than `since`) and shown to the cashier per 0030 §7.

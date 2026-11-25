@@ -51,6 +51,9 @@ func cmdMigrate(args []string) int {
 		if err := server.SyncOrgs(ctx, db, reg); err != nil {
 			return fail(err)
 		}
+		if err := server.SeedDefaultsAll(ctx, db, reg, func(f string, a ...any) { fmt.Printf("-- "+f+"\n", a...) }); err != nil {
+			return fail(err)
+		}
 	}
 	printSteps(res.Steps, res.Refused)
 	for _, n := range res.Notes {

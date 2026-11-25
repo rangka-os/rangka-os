@@ -1,22 +1,22 @@
-# 0047 Raka's memory: per business and across businesses
+# 0047 Zafdoz's memory: per business and across businesses
 
 Status: proposed (12 Nov 2026) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (memory in the
 prompt, budgets, `/v1/distill`), rangka-cloud (episode and memory storage, pgvector retrieval, outcomes, lesson PRs,
-"Yang Raka ingat" page), rangka-os kernel (per-business memory for self-hosted sites, phase 2) · Depends on: 0046
+"Yang Zafdoz ingat" page), rangka-os kernel (per-business memory for self-hosted sites, phase 2) · Depends on: 0046
 (offers and answers are stored; implemented after 0045 and 0046) · Builds on: 0042, 0045
 
 ## Context
 
-- **Owner decision (Dede, 12 Nov 2026).** Raka learns across sessions, not only from thumbs up or down. Both kinds of
-  memory are wanted: what one business decided (so Raka does not start from zero or offer the same thing twice) and
-  patterns across businesses (so Raka consults better on the next similar case). The engine owns how Raka uses and
+- **Owner decision (Dede, 12 Nov 2026).** Zafdoz learns across sessions, not only from thumbs up or down. Both kinds of
+  memory are wanted: what one business decided (so Zafdoz does not start from zero or offer the same thing twice) and
+  patterns across businesses (so Zafdoz consults better on the next similar case). The engine owns how Zafdoz uses and
   distils memory; Postgres with pgvector stores it.
 - **What exists.**
   - rangka-cloud `internal/cloud/learn.go`: `captureExample` stores a consenting owner's finished interview after a
     build or when a guest's work is claimed with consent (scrubbed transcript, summary, map, an embedding when
     pgvector is on); `similarExamples` sends similar examples of other owners into the first 6 interview turns (2 to
     an owner, 1 to a guest), ranked by the facts text when no map exists. Table `examples` (`store/schema.sql`),
-    consent `ExamplesConsent` (worded as helping Raka interview other owners), scrubber `internal/learn` (names,
+    consent `ExamplesConsent` (worded as helping Zafdoz interview other owners), scrubber `internal/learn` (names,
     contacts, addresses, and already all numbers and amounts, `Rp`/`juta`/`rb` included).
   - Owners cannot delete a project themselves; projects are deleted by staff, by the guest-expiry janitor, or with
     the account (`/api/akun/hapus`, which also deletes the owner's examples).
@@ -47,8 +47,8 @@ When sources disagree, the first wins:
 3. what this owner said or confirmed (business memory, the map's settings);
 4. shared memory: hints only.
 
-Raka never tells an owner what other owners chose ("pemilik lain memilih X"). Shared memory only changes which offer
-Raka makes first and which questions it asks.
+Zafdoz never tells an owner what other owners chose ("pemilik lain memilih X"). Shared memory only changes which offer
+Zafdoz makes first and which questions it asks.
 
 ### 2. Episodes
 
@@ -112,7 +112,7 @@ its outcome later.
   validation drops an option with the same contents as a live `declined` item (`declined_recently`), unless the map
   state changed or the catalogue now has a module or connector the option uses that it did not have then.
 - Values the owner states (DP 50%, opening hours) stay map settings and change sets, not memory.
-- Raka proposes new items in its reply (`memory_ops: [{op: "put"|"remove", value}]`, at most 3 per turn); Cloud
+- Zafdoz proposes new items in its reply (`memory_ops: [{op: "put"|"remove", value}]`, at most 3 per turn); Cloud
   stores them. `declined` and `waiting` items are also written by Cloud itself from answers and `later`.
 
 ### 4. Shared memory
@@ -147,15 +147,15 @@ known name. For episodes it also:
 - never copies file names or anything read from owner files;
 - re-runs every rule on the result; an episode that still matches one is not written to shared memory.
 
-### 6. The owner sees what Raka remembers
+### 6. The owner sees what Zafdoz remembers
 
-- Cloud console page "Yang Raka ingat": the business memory items with their reason, and a delete button per item and
+- Cloud console page "Yang Zafdoz ingat": the business memory items with their reason, and a delete button per item and
   for all. Deleting is immediate.
 - **Consent (UU PDP).** Shared memory needs a new, separate opt-in, `SharedMemoryConsent`, off by default; the old
   `ExamplesConsent` does not carry over, because its wording covered only helping interviews. Proposed wording, to be
-  checked by a lawyer before release: *"Boleh Raka belajar dari keputusanmu? Pilihan yang kamu terima atau tolak, dan
-  apakah rancangannya tetap dipakai, disimpan tanpa nama, angka, dan data pelanggan, lalu dipakai Raka untuk memberi
-  saran yang lebih baik ke usaha lain. Ringkasan polanya (tanpa data usahamu) bisa masuk ke panduan Raka. Kamu bisa
+  checked by a lawyer before release: *"Boleh Zafdoz belajar dari keputusanmu? Pilihan yang kamu terima atau tolak, dan
+  apakah rancangannya tetap dipakai, disimpan tanpa nama, angka, dan data pelanggan, lalu dipakai Zafdoz untuk memberi
+  saran yang lebih baik ke usaha lain. Ringkasan polanya (tanpa data usahamu) bisa masuk ke panduan Zafdoz. Kamu bisa
   mematikannya kapan saja."* The same page shows it and lets the owner switch it off; switching off removes their
   shared copies within 24 hours.
 - **Deletion.** Every path that deletes a project (staff, guest-expiry janitor) or an account (`/api/akun/hapus`)
@@ -190,14 +190,14 @@ first. The percentages and the budget live in rangka-ai configuration, not in sk
   `raka-lesson`; an open pull request for the same group is updated, not duplicated. A person reviews and merges it.
 - **Credentials.** A GitHub App installed on rangka-os, rangka-apps and rangka-cloud with contents and pull-request
   write only, separate from `RANGKA_CLOUD_GITHUB_TOKEN` (issues). The pull request body carries only counts, shares
-  and the group key, never owner data. Raka's behaviour changes only through merged skills and through the
+  and the group key, never owner data. Zafdoz's behaviour changes only through merged skills and through the
   hints of §4; it never edits its own prompts or skills.
 - A lesson never concerns limits: anything about what is allowed goes to the platform (0045), not to a skill.
 
 ### 9. Self-hosted sites (phase 2)
 
 - The kernel stores business memory for its site (`rk_ai_memory`, same items as §3) and sends it on the relay
-  (`POST /v1/chat`, 0020); the Console gets the "Yang Raka ingat" page.
+  (`POST /v1/chat`, 0020); the Console gets the "Yang Zafdoz ingat" page.
 - There is no shared memory on a self-hosted site: one site is one business, and nothing leaves it.
 - Phase 1 is Cloud only.
 
@@ -216,7 +216,7 @@ first. The percentages and the budget live in rangka-ai configuration, not in sk
   writes from 0046 answers, outcome job (§2), retrieval and grouping (§4), scrubber additions (§5).
 - Studio catalogue items carry `version` (§2).
 - Gap-closed check on catalogue deploy and on issue close, and the scripted owner message (§3).
-- `SharedMemoryConsent` and its switch, "Yang Raka ingat" page, deletion in every project and account delete path (§6).
+- `SharedMemoryConsent` and its switch, "Yang Zafdoz ingat" page, deletion in every project and account delete path (§6).
 - Weekly distil job and lesson pull requests through a GitHub App (§8).
 
 **rangka-os**
@@ -229,6 +229,6 @@ first. The percentages and the budget live in rangka-ai configuration, not in sk
 - The consent wording in §6 needs a lawyer's review (UU PDP) before release.
 
 - Thumbs up or down: whether to keep them as a weak signal on episodes.
-- Several businesses under one account: whether a `preference` in one business is shown to Raka in another.
+- Several businesses under one account: whether a `preference` in one business is shown to Zafdoz in another.
 - Whether lessons that recur for one business kind should become a business-kind playbook skill instead of edits to
   `rangka-consult`.

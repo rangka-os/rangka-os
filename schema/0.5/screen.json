@@ -231,6 +231,29 @@
                 }
               ]
             },
+            "variants": {
+              "type": "object",
+              "description": "Items sharing a non-empty group collapse into one tile; tapping it opens a sheet of the variants with price and stock (contract 0048 §1). A barcode scan still adds the exact variant",
+              "required": [
+                "group",
+                "label"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "group": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "Data field of the catalogue model: the same value on every variant of one product"
+                },
+                "label": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "Data field of the catalogue model: the variant's name in the sheet (e.g. 'M / Hitam')"
+                },
+                "title": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "Optional data field: the product name on the tile; without it, the shortest common item title prefix"
+                }
+              }
+            },
             "limit": {
               "type": "integer",
               "minimum": 1,

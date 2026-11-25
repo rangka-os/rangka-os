@@ -76,7 +76,7 @@ func TestPlanLimitsV2(t *testing.T) {
 		t.Fatal(err)
 	}
 	refreshPlan(e)
-	if msg := get(e.must(200, "GET", "/api/v1/plan", nil).JSON, "usage", "apps", "message"); msg != "Kolam Juragan Grup sudah penuh. Tambah kapasitas atau kurangi pemakaian di bisnis lain." {
+	if msg := get(e.must(200, "GET", "/api/v1/plan", nil).JSON, "usage", "apps", "message"); msg != "Kolam Zafdoz Grup sudah penuh. Tambah kapasitas atau kurangi pemakaian di bisnis lain." {
 		t.Fatalf("pool message: %v", msg)
 	}
 	if err := plan.RemoveCap(ctx, e.s.DB, plan.Apps, "test"); err != nil {

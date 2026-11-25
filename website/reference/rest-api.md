@@ -162,7 +162,7 @@ data: {"id":"ntc_9f2c…","kind":"kernel.approval.requested","severity":"warn","
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET · POST | `/changesets` | List; propose → 201 with `layers`, `risk`, `status: proposed`. An assistant (Raka) proposes over MCP: a change set that touches a part only a person may change (`apps/`, `system.rk`, roles, `config.ai`…) is refused with `ai_forbidden_path` and the paths (sorted, unique) at `structuredContent.detail.paths`. Over REST an assistant's write is refused earlier with 403 `ai_forbidden` |
+| GET · POST | `/changesets` | List; propose → 201 with `layers`, `risk`, `status: proposed`. An assistant (Zafdoz) proposes over MCP: a change set that touches a part only a person may change (`apps/`, `system.rk`, roles, `config.ai`…) is refused with `ai_forbidden_path` and the paths (sorted, unique) at `structuredContent.detail.paths`. Over REST an assistant's write is refused earlier with 403 `ai_forbidden` |
 | GET | `/changesets/{id}` | Full change set with validation, preview (`migrations`, `affected`, `files[{path, before, after}]`) and history. Every change set carries `approvable_by`: the roles that may approve it (`["owner"]` for high risk, else `config.ai.approvers` plus `owner`, sorted) |
 | POST | `/changesets/{id}/validate` · `preview` · `approve` · `reject` · `apply` · `revert` | Approve only from `previewed`, by a signed-in approver; high risk owner only (403 `owner_required`) |
 
@@ -197,7 +197,7 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | --- | --- | --- |
 | GET | `/system/status` | Version, uptime, deploy target, schema version, every capability's driver and health, connectors health, OIDC clients |
 | GET | `/system/jobs?state=` · `/system/jobs/{id}` | Queue jobs |
-| POST | `/system/jobs/{id}/replay` | Queue a dead-lettered (`discarded`) job again as a new job → `202 {id, replay_of}`. The dead-letter row stays. A connector call is rendered again with the org's current keys, so set the missing key first, then replay. A second replay of the same job returns the first replay. Owner or a `connector_auth` role only (`403`; Raka and helpers `403 ai_forbidden`); a job that is not dead-lettered → `409 job_not_dead`. Audited as `job.replay` |
+| POST | `/system/jobs/{id}/replay` | Queue a dead-lettered (`discarded`) job again as a new job → `202 {id, replay_of}`. The dead-letter row stays. A connector call is rendered again with the org's current keys, so set the missing key first, then replay. A second replay of the same job returns the first replay. Owner or a `connector_auth` role only (`403`; Zafdoz and helpers `403 ai_forbidden`); a job that is not dead-lettered → `409 job_not_dead`. Audited as `job.replay` |
 | GET | `/system/audit?kind=&actor=&org=&limit=` | Audit log |
 | GET | `/orgs` · `/orgs/{id}/members` | Organisations (with plan and usage) and members |
 | GET | `/files` · `/files/{path}` | Every metadata file with kind and layer; one file's text and parsed form (`/files/meta/…` is an older alias) |
@@ -222,7 +222,7 @@ From inside the sandbox these routes answer `409 sandbox_inside`. CLI: `rangka s
 
 Write-only ([contract 0017](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0017-connector-secrets.md)): no
 answer, audit entry, change set, export or log ever holds a secret value, the owner's included. The routes are for the
-org's `owner` and roles named in `config.rk` `connector_auth: [role, …]`; a `sales_rep` gets `403 forbidden`, Raka and
+org's `owner` and roles named in `config.rk` `connector_auth: [role, …]`; a `sales_rep` gets `403 forbidden`, Zafdoz and
 OIDC helpers `403 ai_forbidden`. API tokens may read; writing needs a browser session or a token minted with the
 `secrets:write` scope (`POST /tokens {"name": "cloud", "scopes": ["secrets:write"]}`, by a person who may manage
 secrets; Rangka Cloud provisioning).
@@ -339,8 +339,8 @@ triggers:
 
 ## AI chat
 
-The embedded assistant Raka (contract 0020). The kernel relays the chat to the rangka-ai sidecar set with
-`--ai-url`, giving it a 10-minute token that acts as the signed-in person over MCP. Raka reads and proposes change
+The embedded assistant Zafdoz (contract 0020). The kernel relays the chat to the rangka-ai sidecar set with
+`--ai-url`, giving it a 10-minute token that acts as the signed-in person over MCP. Zafdoz reads and proposes change
 sets; it never approves, applies or writes records.
 
 | Method | Path | Notes |

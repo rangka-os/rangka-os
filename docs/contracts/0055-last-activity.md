@@ -23,7 +23,7 @@ last used a business. The kernel cannot tell it today:
 
 - New column `rk_members.last_active_at timestamptz` (null = never active since this contract shipped).
 - The kernel sets it to now when it authenticates a request for that member in that organisation, by any means:
-  session cookie, API token, OIDC access token, assistant token (a person talking to Raka is a person using the
+  session cookie, API token, OIDC access token, assistant token (a person talking to Zafdoz is a person using the
   business). Signing in counts too.
 - **Not activity:** a system session (§2), and dev-open requests with no real principal.
 - **Write throttle:** the row is written only when the stored value is older than 5 minutes, so a busy user causes at

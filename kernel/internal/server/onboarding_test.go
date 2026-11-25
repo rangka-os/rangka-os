@@ -130,6 +130,36 @@ stages:
 	}
 }
 
+// Contract 0076 §4: the process's starter reaches Mulai di sini by model, minus the rows already saved as records; a
+// model that is not a stage (a prerequisite) gets its rows too.
+func TestOnboardingStarterLeavesOutSavedRows(t *testing.T) {
+	e, _ := canvasEnv(t, func(root string) {
+		dir := filepath.Join(root, "site", "processes")
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "mulai.rk"), []byte(`name: mulai
+starter:
+  customer: [{customer_name: Toko Maju}, {customer_name: Warung Bu Sri, city: Depok}]
+stages:
+  - {name: peluang, model: deal}
+`), 0o644)
+	})
+	rows := func() []any {
+		v, _ := get(e.must(200, "GET", "/api/v1/onboarding", nil).JSON, "starter", "customer").([]any)
+		return v
+	}
+	if got := rows(); len(got) != 2 || get(got[1], "city") != "Depok" {
+		t.Fatalf("starter %v", got)
+	}
+	e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": " toko maju "})
+	if got := rows(); len(got) != 1 || get(got[0], "customer_name") != "Warung Bu Sri" {
+		t.Fatalf("after saving Toko Maju: %v", got)
+	}
+	e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "Warung Bu Sri"})
+	if got, ok := get(e.must(200, "GET", "/api/v1/onboarding", nil).JSON, "starter").(map[string]any); !ok || len(got) != 0 {
+		t.Fatalf("every row saved: starter is {} (%v)", got)
+	}
+}
+
 func TestOnboardingConfigProcess(t *testing.T) {
 	e, _ := canvasEnv(t, func(root string) {
 		dir := filepath.Join(root, "site", "processes")
@@ -175,7 +205,7 @@ func TestOnboardingRoleAndHide(t *testing.T) {
 	}
 }
 
-// Raka reads the steps over MCP (contract 0053 §6) and never hides them (§3).
+// Zafdoz reads the steps over MCP (contract 0053 §6) and never hides them (§3).
 func TestOnboardingMCPAndAssistant(t *testing.T) {
 	e, _ := canvasEnv(t, nil)
 	res := rpc(e, 21, "tools/call", map[string]any{"name": "rangka_onboarding", "arguments": map[string]any{}})
@@ -272,7 +302,7 @@ func TestOnboardingScanOldestBatchesGrow(t *testing.T) {
 	}
 }
 
-// Tur sorotan (contract 0053 §7): each person keeps their own tour states; "" forgets one; Raka writes none.
+// Tur sorotan (contract 0053 §7): each person keeps their own tour states; "" forgets one; Zafdoz writes none.
 func TestOnboardingToursPerPerson(t *testing.T) {
 	e, _ := canvasEnv(t, nil)
 	rep := canvasRep(t, e)

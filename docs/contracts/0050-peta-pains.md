@@ -7,7 +7,7 @@ on: 0042, 0046
 
 ## Context
 
-- **Two tracks (Dede, 14 Nov 2026).** Raka works for two things.
+- **Two tracks (Dede, 14 Nov 2026).** Zafdoz works for two things.
   - **The system it builds (rangka-os).** This must start from the owner's pain points and answer them with a
     solution.
   - **The plan and price (rangka-cloud).** This may use a short predefined business profile (a separate Cloud
@@ -18,9 +18,9 @@ on: 0042, 0046
   - A pain the owner names has no place of its own:
     - the legacy fact `pain_points` becomes a setting text ("Yang paling repot: …");
     - a piece's `why` may mention it, but nothing links the problem to the pieces that answer it.
-  - So neither the studio nor the offer can show "this problem is answered by this", and Raka cannot tell which
+  - So neither the studio nor the offer can show "this problem is answered by this", and Zafdoz cannot tell which
     problems are still unanswered.
-- **Raka offers, it does not ask how to build (Dede, 14 Nov 2026).** The offer (0046) is Raka's recommendation,
+- **Zafdoz offers, it does not ask how to build (Dede, 14 Nov 2026).** The offer (0046) is Zafdoz's recommendation,
   derived from the map. Pains make that recommendation explainable: each option says which problems it answers and
   which it leaves.
 
@@ -73,18 +73,18 @@ deep-equal.
 
 ### 4. The interview and the offer
 
-- **Raka's agenda.**
-  - Raka asks about problems early: what costs the owner time or money, and what is done by hand again and again.
+- **Zafdoz's agenda.**
+  - Zafdoz asks about problems early: what costs the owner time or money, and what is done by hand again and again.
   - Each problem becomes a pain in the owner's words, tied to its stage when the stage is known.
   - A piece placed because of a problem lists it in `solves`.
 - **When to offer (amends 0046 "When to offer").** In addition to 0046's rules, the map must have every pain
   answered, or listed in the option's `not_covered` in the owner's words. An unanswered pain also stays an `open`
-  item until Raka has asked about it.
+  item until Zafdoz has asked about it.
 - **Offer card.** For each option, Cloud derives the problems it answers from the option's `pieces` and their
   `solves`. It shows them as "Masalah yang terjawab", above records and screens. The offer shape in 0046 does not
   change.
 - **Recommendation.** 0046's recommendation stays: the most exact option that covers every stage the owner described.
-  Between two options that both cover every stage, Raka recommends the one that answers more pains.
+  Between two options that both cover every stage, Zafdoz recommends the one that answers more pains.
 
 ### 5. Studio
 
@@ -98,7 +98,7 @@ The panel sits above the stages.
 
 ### 6. Build
 
-`/v1/plan` (0042 §8) ignores `pains` and `solves`; they change what Raka recommends and explains, not what is built.
+`/v1/plan` (0042 §8) ignores `pains` and `solves`; they change what Zafdoz recommends and explains, not what is built.
 
 ## Consequences
 
@@ -111,8 +111,8 @@ The panel sits above the stages.
   - Studio panel "Masalahmu".
   - The offer card shows "Masalah yang terjawab".
 - **Skill `rangka-consult` changes with this contract.**
-  - Its pain ops only apply when the map Raka receives carries a `pains` array.
-  - Before rangka-ai and Cloud implement this contract, Raka keeps a pain in the piece's `why` and an unanswered one
+  - Its pain ops only apply when the map Zafdoz receives carries a `pains` array.
+  - Before rangka-ai and Cloud implement this contract, Zafdoz keeps a pain in the piece's `why` and an unanswered one
     in `open`, so the skill is safe to ship before them.
 
 ## Out of scope

@@ -1,3 +1,4 @@
+# 24 Nov 2026: the offline eval backend cannot compute dashboards and the site has no sales, so an honest "not available" answer is graded as correct; naming the top outlet needs a kernel (--kernel)
 name: dashboards-answer-sales-question
 skill: rangka-dashboards
 stage: console
@@ -9,7 +10,7 @@ expect:
     not_mentions: ["sudah aku buat", "sudah ditambahkan"]
   escalate: false
 rubric:
-  - "Answers from the existing dashboard (rangka_dashboard on fnb_overview with period 7) and proposes no change set"
+  - "Answers from the existing dashboard (rangka_dashboard on fnb_overview with period 7), or, when it cannot be computed or holds no sales, says so plainly and names that dashboard and its sales-per-outlet chart; proposes no change set"
   - "Every rupiah figure in the reply comes from the kernel's widget values; none is estimated or summed by the agent"
   - "Says the period is the last 7 days up to today, not the calendar week, and that only submitted sales count"
-  - "Names the top outlet from the net_by_outlet chart"
+  - "Names the top outlet from the net_by_outlet chart when the dashboard returned values; never names one it did not get"

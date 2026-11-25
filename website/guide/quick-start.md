@@ -55,7 +55,7 @@ make run-demo                # or another port: make run-demo ADDR=:8090
 
 `make run-demo` builds the binary, starts a temporary Postgres, migrates it from the `.rk` files, seeds the demo data
 and serves on port 8080 with `--dev-open` (every request acts as the owner, no sign-in). When `../rangka-ai` is built
-(`npm run build` there), it also starts the scripted Raka sidecar, so the assistant answers in the app. Ctrl-C stops
+(`npm run build` there), it also starts the scripted Zafdoz sidecar, so the assistant answers in the app. Ctrl-C stops
 everything and removes the database.
 
 | Open | What you get |

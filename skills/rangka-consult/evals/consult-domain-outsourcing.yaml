@@ -7,8 +7,8 @@ expect:
     not_mentions: ["modul", "konektor", "katalog", "jasa_proyek", "kepingan"]
   escalate: false
 rubric:
-  - "The reply reacts to the owner's story and asks exactly one question, in Bahasa Indonesia with 'kamu'"
-  - "The question digs where money moves: how the client invoice or the payroll is derived from attendance, or how long clients take to pay"
+  - "The reply reacts to the owner's story and asks exactly one question (an open question, or a confirmation of up to three stated assumptions; a suggestion phrased without its own question does not count), in Bahasa Indonesia, addressing the owner as kamu (or with -mu), never Anda"
+  - "The question (open, or a confirmation of assumptions) digs where money moves: how the client invoice or the payroll is derived from attendance, or how long clients take to pay"
   - "Payroll and client billing are mapped as stages from the same attendance, with a catalogue piece that covers field attendance, payroll and invoicing"
   - "No tax, BPJS or THR rate is stated as a figure; any mention of them defers to the system's per-period settings or a tax consultant"
-  - "The reply does not pitch features or name an app before the owner's day is understood"
+  - "The reply names no app, module or price before the owner's day is understood; one suggestion about a way of working for a problem the owner named is allowed"

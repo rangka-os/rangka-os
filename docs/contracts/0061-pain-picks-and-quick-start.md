@@ -2,7 +2,7 @@
 
 Status: proposed (16 Nov 2026; decisions by Dede the same day, see "Decisions by Dede"; 19 Nov 2026 amended by 0061b: the card follows the business profile, §6 "Langsung mulai" withdrawn) · Owner of the change: rangka-os (this contract, skill `rangka-consult`) · Affects:
 rangka-ai (`/v1/interview` request, map ops, consult prompt), rangka-cloud (pick storage, studio card, quick start
-build; private) · Amends: 0050 §4 (Raka's agenda for pains the owner picked), 0054 §4 (what follows a saved profile) ·
+build; private) · Amends: 0050 §4 (Zafdoz's agenda for pains the owner picked), 0054 §4 (what follows a saved profile) ·
 Builds on: 0042, 0046, 0050, 0053, 0054, 0054a, 0059 · Asked by: Dede, 16 Nov 2026
 
 ## Context
@@ -12,7 +12,7 @@ Builds on: 0042, 0046, 0050, 0053, 0054, 0054a, 0059 · Asked by: Dede, 16 Nov 2
   karyawan, gaji, lainnya (free text tapi gk perlu diresponse). Langsung mulai (dengan checkbox optional sample data)
   gk perlu di studio lagi harusnya."
 - **What exists.**
-  - 0050 puts the owner's problems on the map as `pains` and links them to pieces with `solves`. Raka draws them out in
+  - 0050 puts the owner's problems on the map as `pains` and links them to pieces with `solves`. Zafdoz draws them out in
     an open interview ("Dari semua itu, mana yang paling bikin repot atau rugi?"). The offer card shows "Masalah yang
     terjawab"; `/v1/plan` writes them into stage `answers` for Mulai di sini (0053 §1).
   - 0054 asks the business profile on a card with fixed options. It feeds the plan and price only.
@@ -25,12 +25,12 @@ Builds on: 0042, 0046, 0050, 0053, 0054, 0054a, 0059 · Asked by: Dede, 16 Nov 2
 
 ## Decisions by Dede (16 Nov 2026)
 
-1. **Picks are for the system, not the price.** They give Raka the owner's problem context to design the system, and
+1. **Picks are for the system, not the price.** They give Zafdoz the owner's problem context to design the system, and
    the card comes after the business profile is filled (§5).
 2. **"Langsung mulai" builds the preview only.** It lands in "Pratinjau usahamu"; hosting stays the owner's separate
    step (§6).
-3. **No module is no dead end.** Raka builds its own piece for a need the catalogue lacks (0033), and when the piece is
-   generic Raka proposes it to rangka-apps or rangka-connectors as a pull request (0051). Rekrutmen therefore gets a
+3. **No module is no dead end.** Zafdoz builds its own piece for a need the catalogue lacks (0033), and when the piece is
+   generic Zafdoz proposes it to rangka-apps or rangka-connectors as a pull request (0051). Rekrutmen therefore gets a
    custom piece (§1, §6).
 4. **Build the demo data** (0052 §4, the pack pool in rangka-cloud). Tracked as its own task; "Isi data contoh" uses it
    once it lands (§6).
@@ -66,9 +66,9 @@ text is what goes on the map, written as the owner would say it. Every option na
   invoices and `invoice_reminder`; `catalogue` has items and price lists; `stock` has balances, counts, transfers and
   recipes; `contacts` has customers with `credit_guard`; `pipeline` has leads, deals and follow-up activities.
 - **Rekrutmen has no module.** Its option carries a fixed custom design instead: records "Lowongan" and "Pelamar",
-  steps "Catat lamaran yang masuk", "Jadwalkan wawancara", "Terima pelamar jadi karyawan". In the interview Raka
+  steps "Catat lamaran yang masuk", "Jadwalkan wawancara", "Terima pelamar jadi karyawan". In the interview Zafdoz
   designs the piece from the owner's flow; in "Langsung mulai" Cloud places this design (§6) and `/v1/plan` builds it as
-  a company table (0033, 0042 §8). When such pieces recur across businesses, Raka proposes a catalogue module as a pull
+  a company table (0033, 0042 §8). When such pieces recur across businesses, Zafdoz proposes a catalogue module as a pull
   request (0051).
 - The module requirements (`payroll` needs `workforce`, `projects`, `invoicing`; `outlet_sales` needs `outlets` and
   `stock`) are added by the build's composition check, as for any map.
@@ -101,9 +101,9 @@ text is what goes on the map, written as the owner would say it. Every option na
   `n_pick_<module>_other` and the owner's words as text (cut to 300). No `stage`, `how_often` or `cost`.
 - **Cloud owns these pains.** After every save of the picks and after every consult turn, Cloud puts them back
   exactly: a picked pain missing from the map is added, its text is restored, and an `n_pick_` pain that is no longer
-  picked is removed (with its `solves` entries). Raka's own pains keep their place before them.
-- At most 15 picks and 4 `other` fit the 0050 limit of 20 pains. When Raka's own pains and the picks together pass 20,
-  Raka's newest own pains are dropped first; picks are never dropped.
+  picked is removed (with its `solves` entries). Zafdoz's own pains keep their place before them.
+- At most 15 picks and 4 `other` fit the 0050 limit of 20 pains. When Zafdoz's own pains and the picks together pass 20,
+  Zafdoz's newest own pains are dropped first; picks are never dropped.
 - Everything downstream is unchanged and now sees the picks: the offer card's "Masalah yang terjawab" (0050 §4), the
   "Masalahmu" panel (0050 §5), and the stage `answers` that `/v1/plan` writes for Mulai di sini (0053 §1).
 - The picks never change the plan or the price (0054 holds: a pain never changes the price).
@@ -116,40 +116,43 @@ text is what goes on the map, written as the owner would say it. Every option na
 | --- | --- |
 | `pain_picks` | `[{module, code, label, pain}]` for each pick and `[{module, code: "other", text}]` for each `other`, in §1 order; absent = `[]` |
 
-- **Raka's agenda (amends 0050 §4).**
-  - With picks, Raka does not ask what is hard ("mana yang paling bikin repot") for a group the owner answered. It
+- **Zafdoz's agenda (amends 0050 §4).**
+  - With picks, Zafdoz does not ask what is hard ("mana yang paling bikin repot") for a group the owner answered. It
     asks about the flow, and places pieces with `solves` on the `n_pick_` pains.
-  - Raka may ask one concrete question about a picked pain only when the answer changes which piece answers it
+  - Zafdoz may ask one concrete question about a picked pain only when the answer changes which piece answers it
     ("Kasbonnya dipotong dari gaji bulan itu?"), with `answers` (0059).
-  - **"Lainnya" gets no reply.** Raka never answers, quotes or comments on an `other` text in chat. It is data: Raka may
+  - **"Lainnya" gets no reply.** Zafdoz never answers, quotes or comments on an `other` text in chat. It is data: Zafdoz may
     answer it with a piece, or leave it unanswered on the offer.
-  - Raka never names a group's options in chat: the card asks them (the same rule as 0054a §2 for the profile).
+  - Zafdoz never names a group's options in chat: the card asks them (the same rule as 0054a §2 for the profile).
 - **Map ops.** rangka-ai drops a `put` or `remove` of a pain whose id starts with `n_pick_` (`dropped_ops` reason
   `picked_pain`). Cloud's restore (§3) is the backstop for an older rangka-ai.
 - An older rangka-ai ignores `pain_picks`; the pains are still on the map.
 
 ### 5. The card (studio)
 
+- **Amended by 0075 §5:** after the profile save the card is shown only when the story named no problem (no pain on
+  the map outside `n_pick_…`), and one chat answer after the card is enough before an offer (was two).
+
 - **When.** With rangka-ai, in the interview: right after the profile card is saved complete and the picks were never
-  saved, Cloud adds Raka's message with card kind `pains` (returned in the profile `PUT` reply). Raka's text: "Sekarang
+  saved, Cloud adds Zafdoz's message with card kind `pains` (returned in the profile `PUT` reply). Zafdoz's text: "Sekarang
   pilih yang paling bikin repot di usahamu. Boleh lebih dari satu." "Ubah" on "Masalahmu" in the peta panel adds the
   card again (`POST /api/projects/{id}/pain-picks/card`).
 - **Layout.**
   - Title "Kesulitan usaha", sub "Pilih yang paling repot sekarang. Boleh lebih dari satu."
   - One group per module: the group label, its chips (multi-select, ✓ when chosen), and "+ Lainnya". "Lainnya" opens a
-    text field: "Tulis singkat. Cukup dicatat, Raka tidak akan membahasnya."
+    text field: "Tulis singkat. Cukup dicatat, Zafdoz tidak akan membahasnya."
   - Footer:
     - checkbox "Isi data contoh" (off by default), with the hint "bisa dihapus nanti";
     - primary "Langsung mulai" (§6);
-    - secondary "Lanjut ngobrol dengan Raka".
+    - secondary "Lanjut ngobrol dengan Zafdoz".
   - Both buttons save first and are disabled until at least one chip or one "Lainnya" is filled. "Langsung mulai"
     also needs at least one pick answered by a module or a custom design (a "Lainnya" text alone is not); otherwise it
     is disabled with "Pilih minimal satu yang bisa langsung dijawab sistem."
   - Under 600 px the groups stack; chips wrap; buttons at least 44 px high.
 - **Saving.** `PUT /api/projects/{id}/pain-picks` with the §2 shape. 200 `{pain_picks, peta}`; 400 `bad_pains` for a
   broken §2 rule; 404 `not_found`. "Lanjut ngobrol" then posts the 0054a chat action `profile_saved` when the profile
-  save has not been answered yet, so Raka answers the profile and the picks in one turn. A later edit posts nothing.
-- The build gate stays the profile (0054 §4). An owner who skips the card can still talk with Raka, who draws the
+  save has not been answered yet, so Zafdoz answers the profile and the picks in one turn. A later edit posts nothing.
+- The build gate stays the profile (0054 §4). An owner who skips the card can still talk with Zafdoz, who draws the
   problems out in chat as before (0050).
 
 ### 6. "Langsung mulai" (quick start)
@@ -182,7 +185,7 @@ text is what goes on the map, written as the owner would say it. Every option na
     the pack's first product names; rows and fields of models the site lacks are left out;
   - it runs once per project (a rebuild does not seed again, an existing Ruang coba is left alone); a failure is
     logged and never fails the build;
-  - after the built message Raka adds one scripted line: "Data contoh ada di Ruang coba. Di aplikasinya, klik logo di
+  - after the built message Zafdoz adds one scripted line: "Data contoh ada di Ruang coba. Di aplikasinya, klik logo di
     kiri atas lalu pilih Ruang coba. Data usahamu sendiri tetap kosong."
 
   The flag still pre-ticks "Pakai data contoh" in the hosting form, which copies only `fixtures/start.rk` into the

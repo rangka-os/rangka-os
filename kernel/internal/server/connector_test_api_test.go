@@ -159,7 +159,7 @@ func TestConnectorTestRefusesAI(t *testing.T) {
 	if r := ai.do("POST", testPath, map[string]any{"action": "list_items"}); r.Status != 403 || errCode(r) != "ai_forbidden" || len(v.sent()) != 0 {
 		t.Fatalf("assistant POST test: %d %s", r.Status, r.Body)
 	}
-	// Raka reads the state to explain it
+	// Zafdoz reads the state to explain it
 	e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
 	if r := ai.do("GET", testPath, nil); r.Status != 200 || r.JSON["state"] != "tested" {
 		t.Fatalf("assistant GET test: %d %s", r.Status, r.Body)

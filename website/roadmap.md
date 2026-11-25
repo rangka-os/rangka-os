@@ -21,7 +21,7 @@ Pre-releases `v0.5.0-alpha.*` are on GitHub Releases and npm (`next` tag). Not r
 | Responsive layout (0038), nested navigation (0037), 44px touch targets in the web app, Console and design system | Done |
 | Rangka skills for AI agents and the catalogue over MCP and REST (0035, 0036) | Done (installing from the catalogue: not yet) |
 | Web app at `/app/` and Rangka Console | v0 |
-| Rangka AI (Raka) and the kernel's chat relay | v0: tested offline and against the kernel; not yet run with a real model |
+| Rangka AI (Zafdoz) and the kernel's chat relay | v0: tested offline and against the kernel; not yet run with a real model |
 | Releases: binaries, ghcr.io image, npm `@rangka-os/cli` and `@rangka-os/create` | Pre-releases only |
 | Go dependencies | pgx v5 and bcrypt are real; chi, cel-go, River, jsonschema and yaml.v3 are still in-tree stand-ins |
 

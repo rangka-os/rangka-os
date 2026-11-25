@@ -1,3 +1,4 @@
+# 24 Nov 2026: reusing the customer NIK is what rangka-modelling teaches (one set of master data), so the rubric accepts it
 name: review-ktp-minimal-and-hidden
 skill: rangka-review
 stage: console
@@ -13,7 +14,7 @@ expect:
     not_mentions: ["sudah aku buat", "sudah ditambahkan", "hidden_for"]
   escalate: false
 rubric:
-  - "The KTP number is an x_ field on the rental booking, with a 16-digit check, not a separate model"
+  - "The KTP number reuses the NIK the customer record already has, or is one x_ field on the rental booking; it has a 16-digit check; no separate model"
   - "The number is hidden from warehouse or rental staff roles that do not need it (hidden_for), or the reply explains who can see it"
   - "Treats the KTP photo as more sensitive than the number: either leaves it out and asks, or adds it hidden from staff and says why, in one sentence"
   - "States at most two trade-offs to the owner, in Bahasa Indonesia, without platform words"

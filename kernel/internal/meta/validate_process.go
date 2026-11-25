@@ -45,6 +45,45 @@ func (v *validator) process(p *Process, all map[string]vis) {
 			v.processWhen(d.Path, at+"/when", sm["when"], model.m, all)
 		}
 	}
+	starter := asMap(raw["starter"])
+	for _, mn := range keys(starter) {
+		var m *Model
+		if x, ok := all[mn]; ok {
+			m = x.m
+		}
+		v.processStarter(d.Path, "starter/"+mn, asList(starter[mn]), mn, m, all)
+	}
+}
+
+// starterTypes are the field types a stage's starter may fill (contract 0076 §4): plain text the owner said.
+var starterTypes = map[string]bool{"data": true, "small_text": true, "text": true}
+
+// processStarter checks a process's starter rows of one model (contract 0076 §4), as check_starter in
+// rangka_validate.py: the model exists and is master data (not submittable), and each key is a plain text field of it
+// that is not computed, read-only or hidden from a role. m is nil when the model is not known.
+func (v *validator) processStarter(path, at string, rows []any, model string, m *Model, all map[string]vis) {
+	if m == nil {
+		v.rep.extra("error", path, at, "process_starter_model", fmt.Sprintf(`"%s" is not a model%s`, model, suggest(model, keys(all))))
+		return
+	}
+	if m.IsSubmittable {
+		v.rep.extra("error", path, at, "process_starter_document", fmt.Sprintf(`"%s" is a document; starter holds master data only`, model))
+		return
+	}
+	fields := fieldMap(m)
+	for i, r := range rows {
+		for _, k := range keys(asMap(r)) {
+			where := fmt.Sprintf("%s/%d/%s", at, i, k)
+			f, ok := fields[k]
+			if !ok {
+				v.rep.extra("error", path, where, "process_starter_field", fmt.Sprintf(`"%s" is not a field of %s%s`, k, model, suggest(k, keys(fields))))
+				continue
+			}
+			if !starterTypes[str(f, "type")] || f["compute"] != nil || boolean(f, "read_only") || len(asList(f["hidden_for"])) > 0 {
+				v.rep.extra("error", path, where, "process_starter_field", fmt.Sprintf(`field "%s" of %s cannot come from the interview: plain text fields only, not computed, read-only or hidden from a role`, k, model))
+			}
+		}
+	}
 }
 
 // processWhen runs the CEL field check of a rule's check over the stage model and reports its first problem

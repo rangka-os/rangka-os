@@ -24,16 +24,16 @@ const (
 )
 
 // connectorTestGuard refuses the caller and the connector, and answers when either is refused. The assistant may read
-// the test (write false) so Raka can explain it; it never runs or confirms one.
+// the test (write false) so Zafdoz can explain it; it never runs or confirms one.
 func (s *Server) connectorTestGuard(w http.ResponseWriter, c *caller, name string, write bool) bool {
 	switch c.p.Via {
 	case "ai":
 		if write {
-			writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa menguji atau mengonfirmasi penghubung; minta pemilik usaha.")
+			writeError(w, 403, "ai_forbidden", "Zafdoz dan helper tidak bisa menguji atau mengonfirmasi penghubung; minta pemilik usaha.")
 			return false
 		}
 	case "oidc":
-		writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa menguji atau mengonfirmasi penghubung; minta pemilik usaha.")
+		writeError(w, 403, "ai_forbidden", "Zafdoz dan helper tidak bisa menguji atau mengonfirmasi penghubung; minta pemilik usaha.")
 		return false
 	}
 	if write && !c.p.Human() { // a token carries its minter's roles, but a test and a confirmation are a person's act
@@ -211,7 +211,7 @@ func (s *Server) postConnectorConfirmWrites(w http.ResponseWriter, r *http.Reque
 	name := r.PathValue("connector")
 	// the assistant is refused first: it acts with the roles of the owner who minted its token
 	if c.p.Via == "ai" || c.p.Via == "oidc" {
-		writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa menguji atau mengonfirmasi penghubung; minta pemilik usaha.")
+		writeError(w, 403, "ai_forbidden", "Zafdoz dan helper tidak bisa menguji atau mengonfirmasi penghubung; minta pemilik usaha.")
 		return
 	}
 	if !c.p.Human() {

@@ -22,7 +22,7 @@ Summary for design, **not legal advice**; as of 2026, verify with a lawyer for a
 | Purpose | Every personal field has a `help` saying why it is kept ("Untuk faktur pajak pembeli orang pribadi") |
 | Minimise | Prefer a check field ("KTP sudah dicek") over storing a KTP photo; store NIK only when a document needs it (e-Faktur for a buyer without NPWP) |
 | Access by role | `hidden_for` on every role that does not need the field (contract 0027); row conditions (`permissions` with `if:`) so staff see only their own records, as `staff_attendance` does |
-| No leaks in messages | Keep contact and identity fields out of notice texts (validator `notice_personal_field`); never repeat them in Raka's replies |
+| No leaks in messages | Keep contact and identity fields out of notice texts (validator `notice_personal_field`); never repeat them in Zafdoz's replies |
 | Retention | Agree with the owner when the data is no longer needed and record it in the field's `help`; submitted tax documents are kept as the tax law requires, personal extras (photos) are removed when the purpose ends |
 | Consent | When consent is the basis (marketing WhatsApp, for example), record it: `customer.wa_opt_out` exists for WhatsApp; a company `x_` check field with a date for others |
 | Rights | A correction is an edit of a draft or master record; a submitted document is cancelled and amended. A deletion request on data tied to tax documents is a lawyer or consultant question |
@@ -31,11 +31,11 @@ Existing protections to point to rather than rebuild: `customer.npwp`/`nik`/`pas
 and cashiers; employee `phone`/`email` visible to owner and head office only (contract 0056); payroll identity only
 for finance; attendance selfies and positions readable only by the worker, their outlet supervisor and head office.
 
-## Raka's own handling
+## Zafdoz's own handling
 
 - Never ask the owner to paste customers' or employees' NIK, NPWP, photos or salaries into chat. Data goes in through
   forms and imports.
-- Raka's memory of the business needs separate consent (contract 0047); never store personal data of customers or
+- Zafdoz's memory of the business needs separate consent (contract 0047); never store personal data of customers or
   employees in it.
 
 ## Owner phrasing

@@ -54,7 +54,7 @@ func TestEgressFromEnv(t *testing.T) {
 }
 
 // Audit business-raka F1: under "public" a company connector cannot reach a service on the kernel's own host (the
-// Raka sidecar on loopback), by address, by a name that resolves to it, or through a redirect from a public URL.
+// Zafdoz sidecar on loopback), by address, by a name that resolves to it, or through a redirect from a public URL.
 func TestEgressGuardRefusesInternal(t *testing.T) {
 	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("raka")) }))
 	defer internal.Close()

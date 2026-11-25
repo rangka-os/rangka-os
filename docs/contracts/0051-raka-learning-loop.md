@@ -1,4 +1,4 @@
-# 0051 Raka's learning loop: from company pieces to catalogue pieces
+# 0051 Zafdoz's learning loop: from company pieces to catalogue pieces
 
 Status: accepted (14 Nov 2026, Dede) · Owner of the change: rangka-os (this contract) · Affects: rangka-cloud (candidate job,
 fingerprints, GitHub App, consent wording), rangka-ai (`/v1/generalise`), rangka-connectors (CODEOWNERS, branch
@@ -8,9 +8,9 @@ Builds on: 0000, 0016, 0033, 0045 §5, 0047
 
 ## Context
 
-- **Owner decision (Dede, 14 Nov 2026).** Raka should keep improving what Rangka covers. When owners need pieces the
-  catalogue lacks, Raka builds them for that business (company connectors, models and flows, 0016 and 0033). The
-  pieces that recur across businesses should become generic catalogue pieces, which Raka proposes as pull requests
+- **Owner decision (Dede, 14 Nov 2026).** Zafdoz should keep improving what Rangka covers. When owners need pieces the
+  catalogue lacks, Zafdoz builds them for that business (company connectors, models and flows, 0016 and 0033). The
+  pieces that recur across businesses should become generic catalogue pieces, which Zafdoz proposes as pull requests
   under its own GitHub identity. People review and merge them.
 - **What exists.**
   - 0047 §8: a weekly distil job turns shared-memory patterns into skill edits, which Cloud opens as pull requests
@@ -30,7 +30,7 @@ Builds on: 0000, 0016, 0033, 0045 §5, 0047
 
 ## Decision
 
-### 1. Raka's GitHub identity
+### 1. Zafdoz's GitHub identity
 
 - **One GitHub App, `raka`** (shown as `raka[bot]`): the App of 0047 §8, not a second one. A machine user is not used.
   It would take a seat, it would need a long-lived personal token, and its scopes cannot be narrowed per repository.
@@ -77,7 +77,7 @@ Builds on: 0000, 0016, 0033, 0045 §5, 0047
 ### 3. Signals and what may leave a business
 
 - **Only consenting owners.** A business contributes only while its owner has `SharedMemoryConsent` (0047 §6). That
-  wording gains one sentence (lawyer's review still pending, 0047 Open): *"Bentuk kepingan yang Raka susun untukmu
+  wording gains one sentence (lawyer's review still pending, 0047 Open): *"Bentuk kepingan yang Zafdoz susun untukmu
   (tanpa nama, angka, dan data usahamu) juga bisa dipakai Tim Rangka untuk menambah dukungan di katalog."*
   Self-hosted sites send nothing (0047 §9).
 - **Never a copy of an owner file.** From each source piece Cloud computes a **fingerprint**, and only fingerprints
@@ -95,7 +95,7 @@ Builds on: 0000, 0016, 0033, 0045 §5, 0047
 
 ### 4. When a piece is a candidate
 
-A rule in Cloud code picks candidates. Raka does not.
+A rule in Cloud code picks candidates. Zafdoz does not.
 
 | Kind | Candidate when | Owning repo |
 | --- | --- | --- |
@@ -148,7 +148,7 @@ A rule in Cloud code picks candidates. Raka does not.
   - no money-touching connector in phase 1 (§4);
   - a phase 3 module with a `stock:` block, `is_submittable`, `append_only` or money fields needs reviews from both
     Dede and the second engineer.
-- What Raka learns changes the catalogue only through merged pull requests. Raka never edits its own prompts, skills or
+- What Zafdoz learns changes the catalogue only through merged pull requests. Zafdoz never edits its own prompts, skills or
   catalogue files directly (0047 §8).
 - Nothing an owner typed reaches GitHub: issues and pull requests are built from fingerprints, counts and fixed text.
 
@@ -162,7 +162,7 @@ A rule in Cloud code picks candidates. Raka does not.
     match go to `requires:`. Then it deletes the `x_` connector.
   - **State.** The new connector starts `untested` (0033 §3). Flows stay refused at apply time (`connector_untested`)
     until the owner tests it.
-  - **Risk.** High (owner only). Raka may propose this op. It is the one exception to 0033 §5's escalation of
+  - **Risk.** High (owner only). Zafdoz may propose this op. It is the one exception to 0033 §5's escalation of
     connector edits and deletes.
 - **Owners may keep `x_`.** Nothing is migrated without approval.
 - **Company models** (phase 3) would need a data move from `r_x_*` to the module table. Not designed here (Open).

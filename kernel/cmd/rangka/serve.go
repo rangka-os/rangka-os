@@ -27,6 +27,7 @@ func cmdServe(args []string) int {
 	web := fs.String("web", os.Getenv("RANGKA_WEB"), "static web directory served at / (default: rangka-os/web)")
 	templates := fs.String("templates", os.Getenv("RANGKA_TEMPLATES"), "theme/layout templates (default: rangka-os/templates)")
 	org := fs.String("org", os.Getenv("RANGKA_ORG"), "organisation id (default $RANGKA_ORG, else the site directory name)")
+	orgName := fs.String("org-name", os.Getenv("RANGKA_ORG_NAME"), "the organisation's display name, set on every start (default $RANGKA_ORG_NAME; unset: a new org is named after its id)")
 	deploy := fs.String("deploy-target", envOr("RANGKA_DEPLOY_TARGET", "dev"), "dev, docker, helm, desktop, cloud or partner (shown in /system/status)")
 	filesDir := fs.String("files-dir", envOr("RANGKA_FILES_DIR", ""), "attachments directory (default: system.rk files.path, else ./data/files)")
 	devOpen := fs.Bool("dev-open", false, "serve /api and /mcp without sign-in, as the org owner (local demos only)")
@@ -57,7 +58,7 @@ func cmdServe(args []string) int {
 	}
 	appsParent := filepath.Dir(filepath.Clean(c.apps))
 	cfg := server.Config{
-		AppsDir: c.apps, SiteDir: c.site, DatabaseURL: c.db, Addr: *addr, Org: *org, DevOpen: *devOpen, Schemas: set, Version: Version,
+		AppsDir: c.apps, SiteDir: c.site, DatabaseURL: c.db, Addr: *addr, Org: *org, OrgName: strings.TrimSpace(*orgName), DevOpen: *devOpen, Schemas: set, Version: Version,
 		WebDir:        server.FindDir(*web, "web", "../web", filepath.Join(appsParent, "..", "rangka-os", "web"), bundle.Dir("web")),
 		TemplatesDir:  server.FindDir(*templates, "templates", "../templates", filepath.Join(appsParent, "..", "rangka-os", "templates"), bundle.Dir("templates")),
 		ConnectorsDir: c.connectorsDir(), ModulesDir: c.modules, DeployTarget: *deploy, FilesDir: *filesDir,

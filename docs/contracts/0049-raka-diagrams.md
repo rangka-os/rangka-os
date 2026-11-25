@@ -1,4 +1,4 @@
-# 0049 Raka draws the flow
+# 0049 Zafdoz draws the flow
 
 Status: proposed (13 Nov 2026) · Owner of the change: rangka-os (this contract, design system) · Affects: rangka-ai
 (offer, agent and consult replies), rangka-cloud (studio, konsol) · Amends: 0046 §2 (option `flow`), 0046 §3 (options
@@ -7,24 +7,24 @@ shown side by side), 0046 §1 (at least two options when two paths exist, §5) �
 ## Context
 
 - **Owner feedback (Dede, 13 Nov 2026).** The offer (0046) is the moment the owner confirms how their business will
-  run, but it is a text list: the recommended option as "Yang dicatat / Layar kerja / Yang Raka bantu", the others
+  run, but it is a text list: the recommended option as "Yang dicatat / Layar kerja / Yang Zafdoz bantu", the others
   folded behind "Lihat pilihan lain". The confirmation is too text-based. The owner should see the flow, compare the
   options side by side (like two answers next to each other), and open a diagram large in a popup with zoom.
-- **Raka fixes its own diagrams (Dede, 13 Nov 2026).** A broken diagram is never thrown at the owner. Raka checks
+- **Zafdoz fixes its own diagrams (Dede, 13 Nov 2026).** A broken diagram is never thrown at the owner. Zafdoz checks
   every diagram it writes before the answer is sent, repairs it from the error, and if it still cannot, drops the
   diagram and keeps the text. A broken block on screen is a bug, not an expected state.
 - **Two things, one format.** Offer cards show every option with a diagram of the owner's flow from first contact to
-  money in. Raka's ordinary answers may also contain a diagram (a `mermaid` fence). Both render through Mermaid, one
+  money in. Zafdoz's ordinary answers may also contain a diagram (a `mermaid` fence). Both render through Mermaid, one
   component, one zoom popup.
 - Approach picked by Dede: Mermaid everywhere. Offer diagrams are made by code from the map; answer diagrams are
-  written by Raka and checked and repaired in rangka-ai with a flowchart subset checker; the browser falls back if
+  written by Zafdoz and checked and repaired in rangka-ai with a flowchart subset checker; the browser falls back if
   anything still slips through. Design: `rangka-cloud/docs/specs/2026-11-13-raka-diagram-offer-design.md`.
 - **One flow is no comparison (Dede, 14 Nov 2026).** After 0049 shipped, offers mostly showed one option, so the
   side-by-side row never appeared. Three causes: 0046 §1 merges `custom` into `modules` when no custom piece is needed
   and asks for alternatives "only when they differ"; `clean_offer` (rangka-ai `raka/interview/offer.py`) silently drops
   an option that is relabelled to a path already taken; and `rangka-consult` still says alternatives "sit behind
-  'Lihat pilihan lain'". Dede: Raka always prepares a second option to compare, whenever a second path honestly exists.
-  Approach picked: the rule in the skill plus a check in rangka-ai that asks Raka once for the missing alternative
+  'Lihat pilihan lain'". Dede: Zafdoz always prepares a second option to compare, whenever a second path honestly exists.
+  Approach picked: the rule in the skill plus a check in rangka-ai that asks Zafdoz once for the missing alternative
   (§5).
 
 ## Decision
@@ -57,7 +57,7 @@ the map and the option's `pieces` and `not_covered`. The model never writes it.
   3. `covered`: everything else. A stage that lists none of the option's pieces and is not in `not_covered` is
      `covered` with an empty `pieces` line.
 - The flow's `pieces` field holds piece labels for display only; it is never used to decide `state`.
-- Coverage stays Raka's judgement (0046 §1: no coverage model in data). `not_covered` is where Raka already states
+- Coverage stays Zafdoz's judgement (0046 §1: no coverage model in data). `not_covered` is where Zafdoz already states
   it, so the diagram shows exactly what the option's lists say, no more.
 - A `bundle` option whose apps are not map pieces shows covered stages with an empty `pieces` list. The diagram never
   invents piece names.
@@ -67,7 +67,7 @@ the map and the option's `pieces` and `not_covered`. The model never writes it.
 
 ### 2. Diagrams in answers
 
-Raka may write a `mermaid` fence in an answer (consult interview reply and agent turn). rangka-ai's prompts say
+Zafdoz may write a `mermaid` fence in an answer (consult interview reply and agent turn). rangka-ai's prompts say
 when: a flow of 3 or more steps the owner asked about or is deciding on; never as decoration; at most one diagram per
 answer; `flowchart` only; Bahasa Indonesia labels; no styling, no init blocks.
 
@@ -155,7 +155,7 @@ has no accept action.
 ### 4. The offer card side by side (amends 0046 §3)
 
 ```
-Raka: Ini masih tawaran, belum aku bangun apa-apa.
+Zafdoz: Ini masih tawaran, belum aku bangun apa-apa.
 ┌─ Sesuai alurmu ★ Disarankan ─┐ ┌─ Modul + konektor ───────────┐ ┌─ Paket ─────┐
 │ [diagram]          ⤢         │ │ [diagram, gap dashed]   ⤢    │ │ ...         │
 │ Yang dicatat · Layar kerja … │ │ Belum tercakup: kondisi alat │ │             │
@@ -168,11 +168,11 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
   susun". The others have a secondary action "Pilih ini". The ids are the same as 0046 §3,
   `offer_accept:<offer id>:<option id>`, so nothing changes in what Cloud receives.
 - **"Lihat pilihan lain" is removed.** Every option is visible at once; the recommended option stays first and marked
-  and the others stay quiet (0046 §1: Raka never pushes them), so comparison does not turn into choice paralysis.
+  and the others stay quiet (0046 §1: Zafdoz never pushes them), so comparison does not turn into choice paralysis.
 - "Ubah sesuatu" (`offer_change:<offer id>`) and "Tidak dulu" (`offer_decline:<offer id>`) belong to the whole offer,
   under the row.
 - Each column: path label, title, diagram (click or the zoom button opens `DiagramViewer`), then the lists as today
-  (records, screens, Raka does, needs approval, adds), collapsed after the first two sections ("Lihat rincian") so
+  (records, screens, Zafdoz does, needs approval, adds), collapsed after the first two sections ("Lihat rincian") so
   columns stay comparable in height.
 - A gap is visible in the diagram and named under it ("Belum tercakup: ...").
 - **Widths:** the chat column decides. Options sit side by side when each column gets at least 260 px (the gap between columns is
@@ -188,10 +188,10 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
 
 ### 5. At least two options when two paths exist (amends 0046 §1)
 
-The recommendation rule of 0046 §1 stays: the most exact option is recommended, shown first and marked, and Raka
+The recommendation rule of 0046 §1 stays: the most exact option is recommended, shown first and marked, and Zafdoz
 never pushes the others in the reply. What changes is that an alternative is no longer optional.
 
-- **The rule.** Raka offers at least two options whenever a second path honestly exists:
+- **The rule.** Zafdoz offers at least two options whenever a second path honestly exists:
 
   | Recommended | Required alternative | When it exists |
   | --- | --- | --- |
@@ -205,9 +205,9 @@ never pushes the others in the reply. What changes is that an alternative is no 
   `pieces` on the map, owner's-words lists that are true for that option, gaps in `not_covered`. A thin honest
   alternative beats a padded one.
 - **The check in rangka-ai** (`raka/interview/consult.py`, after the offer is checked):
-  1. When the cleaned offer has one option, Raka is asked once more (once per turn, apart from `OFFER_ASKS`) with
+  1. When the cleaned offer has one option, Zafdoz is asked once more (once per turn, apart from `OFFER_ASKS`) with
      `ALT_REQUIRED`: the offer as cleaned, the path of the required alternative from the table, the map's pieces, and
-     the reason. For `bundle` required the ask says that when no app fits, Raka answers with `offer` and empty
+     the reason. For `bundle` required the ask says that when no app fits, Zafdoz answers with `offer` and empty
      `options` (a cheap "no"; code keeps the single option). **No ask when code can already see no second path:** a
      `custom` option whose pieces are all `custom`.
   2. The answer's ops are not applied: the map, its hash and every option's `flow` stay those of the first offer.
@@ -241,14 +241,14 @@ never pushes the others in the reply. What changes is that an alternative is no 
 - This contract; the offer `flow` shape in the docs reference next to 0046.
 - Design system: vendored Mermaid (`web/app/vendor/mermaid.min.js`, pinned in `web/app/vendor/README.md`), `flowToMermaid`, `Diagram`,
   `DiagramViewer`, RichText fence, `OfferCompare`; Figma designs in "Agent chat" first.
-- The Raka chat in the rangka-os app renders answers through RichText, with diagrams.
+- The Zafdoz chat in the rangka-os app renders answers through RichText, with diagrams.
 - §5: `skills/rangka-consult/SKILL.md` "The order and the recommendation" says at least two options when two paths
   exist (the table in §5) and drops "Lihat pilihan lain". No design-system change.
 
 **rangka-ai**
 - `flow` on every option, computed in code in `raka/interview/offer.py` (§1).
 - `raka/diagram.py` check, repair loop in the agent and consult paths, claims in labels, `max_diagram_repairs = 2`,
-  `diagram.repair` / `diagram.dropped` to the agent's log hook (§2). The prompt text for when Raka draws a diagram
+  `diagram.repair` / `diagram.dropped` to the agent's log hook (§2). The prompt text for when Zafdoz draws a diagram
   lives in rangka-ai's prompts (§2).
 - Tests: valid subset, each refused construct, limits, line numbers; fixed on the first repair, dropped after two, a
   note dropped without repair, claim and diagram repairs together; `flow` from map and option for every `state`.
@@ -266,7 +266,7 @@ never pushes the others in the reply. What changes is that an alternative is no 
   offer card when 0046 §5 lands.
 - `POST /api/raka/diagram-error` (§3). Copy of the design-system bundle and vendored Mermaid (`web/vendor/`, pinned in
   `web/VENDOR.md`).
-- e2e with a fake Raka: three options side by side with diagrams; phone scroll; zoom, then "Pilih ini" from the popup
+- e2e with a fake Zafdoz: three options side by side with diagrams; phone scroll; zoom, then "Pilih ini" from the popup
   accepts that option; an answered or superseded offer has no accept in the popup; an answer with a `mermaid` fence
   renders; a broken fence never reaches the page.
 - §5: nothing (the card already draws any number of options).

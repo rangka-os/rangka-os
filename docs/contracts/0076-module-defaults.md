@@ -30,7 +30,10 @@ rangka-ai (`/v1/plan` writes `starter`), rangka-cloud (none: its `rangka migrate
 
 - After every migrate: `rangka seed` (a new business, after its fixtures), `rangka migrate` (Cloud's deploys),
   `rangka serve` at start, and the reload after a change set is applied (a module installed later).
-- Per org (`rk_orgs`), per model: **only when the org has no record of that model.** An org that already has a unit
+- Per org (`rk_orgs`) that has been seeded (it has a member), per model: **only when the org has no record of that
+  model.** An org `rangka migrate` has synced from config.rk but not yet seeded waits for its `rangka seed`, which
+  loads its fixtures first: the fixtures keep their numbers (UOM-001…) and the defaults only fill what they left empty
+  (25 Nov 2026: migrate-time defaults took demo-fnb's unit numbers and its fixture units were skipped). An org that already has a unit
   gets none; an owner who deletes a default does not get it back; running it again adds nothing.
 - As the system actor, through the same path as fixtures (`Engine.Seed`): defaults, computed fields and naming apply.
 - A defaults file that does not load, or a record the model refuses, is logged and that org's defaults are skipped;
@@ -82,7 +85,8 @@ opened the Barang form with the name filled, and the unit picker offered Unit (U
 ## Tests
 
 - Kernel `internal/engine/defaults_test.go`: own models only, an org with records gets nothing, a new org gets the
-  defaults once, a broken file is an error for that module.
+  defaults once, a broken file is an error for that module. `internal/server/seed_test.go`: an unseeded org gets
+  nothing at migrate; seeded with fixtures it keeps only the fixtures' records, without fixtures it gets the defaults.
 - `internal/meta/process_test.go` and the broken-canvas golden report (Go = Python): the three starter codes.
 - `internal/server/onboarding_test.go`: starter by model, saved rows left out.
 - web app node tests: `starterRows` (own model and needed models), `starterTitle`, `newValues` (prefill).

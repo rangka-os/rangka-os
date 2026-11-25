@@ -581,6 +581,11 @@
      "type": "date"
     },
     {
+     "default": "now()",
+     "name": "sold_at",
+     "type": "datetime"
+    },
+    {
      "name": "buyer",
      "type": "data"
     },

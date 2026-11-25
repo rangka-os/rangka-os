@@ -13,8 +13,8 @@ private) · Owner of the change: rangka-os (this contract) · Asked by: Dede, 19
 - **What exists.** Cloud sends one fixed list (0061 §1, `pain_options`) with every project. rangka-ai keeps a copy of
   the codes and drops a code it does not know. The domain packs (skill `rangka-consult`, `references/domains/`) list
   the common pains of each business type, most of them without a 0061 code.
-- **"Langsung mulai" is gone.** rangka-cloud #166 (17 Nov 2026) removed the quick start: the owner talks with Raka
-  before anything is built, and the card has one button, "Lanjut ngobrol dengan Raka". This amendment brings the
+- **"Langsung mulai" is gone.** rangka-cloud #166 (17 Nov 2026) removed the quick start: the owner talks with Zafdoz
+  before anything is built, and the card has one button, "Lanjut ngobrol dengan Zafdoz". This amendment brings the
   contract in line.
 
 ## Decision
@@ -119,7 +119,7 @@ pack yet and their groups are a first draft.
 | | `prod_cost` | HPP produk | HPP per produk tidak ketahuan | `production` | |
 | | `prod_material` | Pemakaian bahan | Pemakaian bahan produksi tidak tercatat | `production` | |
 
-- **Custom designs** (like Rekrutmen in 0061 §1; Raka designs the piece from the owner's flow, 0033, 0051):
+- **Custom designs** (like Rekrutmen in 0061 §1; Zafdoz designs the piece from the owner's flow, 0033, 0051):
   - `training_teacher_pay`: records "Honor pengajar"; steps "Hitung pertemuan tiap pengajar dari absen kelas", "Buat
     rekap honor tiap bulan".
   - `os_contract_end`: records "Kontrak kerja"; steps "Catat tanggal akhir kontrak tiap karyawan", "Ingatkan sebelum
@@ -148,7 +148,7 @@ pack yet and their groups are a first draft.
 ### 6. The card (amends 0061 §5)
 
 - The sub line reads "Pilih yang paling repot sekarang, boleh lebih dari satu. Pilihannya mengikuti profil usahamu."
-- One button, "Lanjut ngobrol dengan Raka", which saves first (rangka-cloud #166). No "Isi data contoh", no "Langsung
+- One button, "Lanjut ngobrol dengan Zafdoz", which saves first (rangka-cloud #166). No "Isi data contoh", no "Langsung
   mulai".
 
 ### 7. "Langsung mulai" is withdrawn (0061 §6)

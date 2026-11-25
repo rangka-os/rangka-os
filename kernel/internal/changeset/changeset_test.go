@@ -697,7 +697,7 @@ func TestFlowConnectors(t *testing.T) {
 	}
 }
 
-// Fix wave item 5: validator items name the change-set op path, so Raka's self-repair finds the file it wrote: a
+// Fix wave item 5: validator items name the change-set op path, so Zafdoz's self-repair finds the file it wrote: a
 // connector directory (site or shared) maps to connectors/<n>.rk.
 func TestRelItemsConnectorPaths(t *testing.T) {
 	in := []meta.Item{

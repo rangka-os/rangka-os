@@ -7,7 +7,7 @@ expect:
     not_mentions: ["modul", "konektor", "katalog", "kelas_kursus", "kepingan"]
   escalate: false
 rubric:
-  - "The reply asks exactly one question, for example who receives the bill (student, parent or company) or the class quota"
+  - "The reply asks exactly one question (an open question, or a confirmation of up to three stated assumptions; a suggestion phrased without its own question does not count), for example who receives the bill (student, parent or company) or the class quota"
   - "Unpaid SPP is recorded as the owner's problem in their own words and answered by a piece that bills monthly or by instalment"
   - "Monthly SPP and the 3-month instalment package are both kept as billing ways the owner stated, not merged into one"
   - "No PPN exemption is promised for the courses; tax treatment is left to a tax consultant if raised"

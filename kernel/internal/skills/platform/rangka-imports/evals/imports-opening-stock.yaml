@@ -13,5 +13,5 @@ rubric:
   - "Uses the opening stock import (a goods receipt from the supplier 'Saldo awal'), not a stock adjustment and not a direct edit of stock"
   - "Says the file needs Tanggal, SKU, Qty and Harga pokok columns and that items must exist first, matched by SKU rather than name"
   - "Asks for or confirms one cut-off date for the opening stock"
-  - "Says the receipt arrives as a draft and stock moves only when the owner (or who the owner names) checks and submits it; Raka never submits"
+  - "Says the receipt arrives as a draft and stock moves only when the owner (or who the owner names) checks and submits it; Zafdoz never submits"
   - "Mentions one file per outlet"

@@ -22,7 +22,7 @@ Schema: `schema/0.5/dashboard.json`. Field reference and edge cases: [widgets-an
 | --- | --- |
 | asks a question ("omzet minggu ini?", "cabang mana paling laku?") | Answer from an existing dashboard (section 2). Change nothing. |
 | asks to see something every day ("tambahin di depan…") | Propose a site dashboard change (sections 3 to 6). |
-| is in the studio, no system yet ("nanti aku lihat apa aja?") | Pick 4 to 6 KPIs from [kpi-by-business.md](references/kpi-by-business.md) and say which home dashboard of the chosen app shows them. Write no dashboard file: none can be validated before the site exists. |
+| is in the studio, no system yet ("nanti aku lihat apa aja?") | Pick 4 to 6 KPIs from [kpi-by-business.md](references/kpi-by-business.md), one KPI per line (count them: never two in one bullet), and say which home dashboard of the chosen app shows them. Write no dashboard file: none can be validated before the site exists. |
 
 ## 2. Answering a question
 
@@ -44,7 +44,9 @@ Schema: `schema/0.5/dashboard.json`. Field reference and edge cases: [widgets-an
    model. Tell them who can see it; never work around it with another query.
 
 Numbers come from the kernel. Never estimate, round up or invent a figure, and never give a number a dashboard did
-not return.
+not return. When `rangka_dashboard` cannot compute (offline, an error) or the records are empty, say so in one
+sentence, then name the dashboard and the widget that answers it ("Penjualan bersih" and "Penjualan bersih per outlet"
+on the home dashboard) so the owner can open it; still propose no change.
 
 ## 3. Pick what to show: few numbers the owner acts on
 
@@ -60,6 +62,14 @@ For every widget, name the action it triggers. No action, no widget.
 A good home dashboard has 2 to 4 numbers, 1 to 2 charts and 1 to 2 work-queue lists: 6 to 10 widgets. Start from
 the business's menu in [kpi-by-business.md](references/kpi-by-business.md) and keep only what the owner said they
 care about. Owner words map to KPIs there too ("omzet" is net sales of submitted documents, not invoices drafted).
+
+### When the owner asks for a long list or an anti-pattern
+
+"Masukin semua angka biar lengkap", a pie of every area, an average of monthly rates: push back before you build.
+For each item, one line: keep it, or swap it for the version in section 8 and say why in the owner's words ("jumlah
+user tidak bikin kamu melakukan apa-apa; yang belum bayar bisa langsung ditagih"). Then propose only the kept and
+swapped items, 10 widgets at most on the dashboard, or ask first when a swap changes what the owner gets. Never add a
+vanity count, a monthly-rate average or a many-slice donut just because it was asked.
 
 ## 4. Choose the widget
 
@@ -114,7 +124,8 @@ Only a **site dashboard** can be written from the site, and it **replaces** an i
    model is visible, company `x_` models and fields included.
 3. Propose with `rangka_changeset_propose`:
    - first change: `{"op": "create", "path": "dashboards/<name>.rk", "content": "<the whole file>"}`, keeping the
-     widgets the owner still uses and the `roles`, `cache`, `default_period` of the original;
+     widgets the owner still uses and the `roles`, `cache`, `default_period` of the original. Copy `roles` exactly:
+     adding or dropping a role changes who can open the dashboard, and that is not what the owner asked;
    - later changes: `patch` that file (`{"op": "add", "path": "/widgets/2", "value": {...}}`).
 
    In a checkout: write `<site>/dashboards/<name>.rk`, then `rangka validate --apps <apps> --site <site>`.
@@ -122,7 +133,8 @@ Only a **site dashboard** can be written from the site, and it **replaces** an i
    set (`GET /api/v1/preview/{id}/dashboards/{name}`) computes the new widgets on real data; a widget over a table
    not migrated yet shows an error there instead of a value. Before proposing, sanity-check a new filter with
    `rangka_query` on the same model and filter: a `total` of 0 usually means a wrong filter.
-5. Tell the owner what you prepared and what each new widget is for, never that it is done (`rangka-changesets`).
+5. Tell the owner what you prepared, one line per new widget with the action it is for, and end with "cek
+   pratinjaunya, lalu setujui kalau sudah pas". Never say it is done (`rangka-changesets`).
 
    > Aku sudah siapkan usulan dashboard Sewa hari ini: tambah "Uang masuk" (pembayaran yang sudah diajukan, 30 hari
    > terakhir, dibanding 30 hari sebelumnya) dan daftar "Telat kembali" untuk dihubungi. Cek pratinjaunya, lalu setujui

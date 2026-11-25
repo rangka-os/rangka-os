@@ -87,7 +87,7 @@ dozens of placed workers); `over_100` happens fast because placed workers count 
 
 - **Payroll is high risk.** Wage, allowances, overtime, BPJS (Ketenagakerjaan, Pensiun, Kesehatan), PPh 21 (TER, PTKP
   status) and THR are computed by the payroll module from rates stored on each payroll run (UMK, JKK rate, wage caps).
-  Raka never sets or guesses a rate: the owner or their consultant enters it. Verify with a tax consultant.
+  Zafdoz never sets or guesses a rate: the owner or their consultant enters it. Verify with a tax consultant.
 - **Daily vs. monthly workers** are taxed differently (`pay_basis`, `employment` on the payroll profile). Ask which
   the owner has before mapping payroll.
 - **PPN on the client invoice and PPh 23 withheld by the client** depend on PKP status and the service type.
@@ -105,4 +105,4 @@ dozens of placed workers); `over_100` happens fast because placed workers count 
   files for PPN and PPh 23 (per the `pajak` summary); confirm anything else with `rangka_catalogue` before mapping it,
   otherwise it stays `open`.
 - Payroll paid straight from the system into workers' bank accounts: not supported; payment stays a recorded transfer.
-- Labour-law questions (PKWT limits, severance): Raka does not advise; suggest a labour consultant.
+- Labour-law questions (PKWT limits, severance): Zafdoz does not advise; suggest a labour consultant.

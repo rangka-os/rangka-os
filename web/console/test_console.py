@@ -434,21 +434,21 @@ with sync_playwright() as pw:
         fail(f"phone: console errors {errs[:3]}")
     ctx.close()
 
-    # 10. Raka (contract 0020): a mocked kernel reporting features.ai gets the ask bar (⌘J), the drawer and the sidebar button;
-    # demo mode never shows Raka
+    # 10. Zafdoz (contract 0020): a mocked kernel reporting features.ai gets the ask bar (⌘J), the drawer and the sidebar button;
+    # demo mode never shows Zafdoz
     ctx, page, errs = new_page(browser, 1440, "light")
     page.goto(BASE + "?demo=1#/changesets")
     page.wait_for_selector(".rk-pagehead h1", timeout=15000)
     fx = page.evaluate("async () => { const a = window.RangkaConsole.api; return { meta: await a.meta(), status: await a.status(), cs: await a.changesets() }; }")
     page.keyboard.press("ControlOrMeta+j")
     page.wait_for_timeout(200)
-    if page.locator(".rk-askbar").count() or page.locator(".cn-ask").count() or "Tanya Raka" in page.locator(".rk-side").inner_text():
+    if page.locator(".rk-askbar").count() or page.locator(".cn-ask").count() or "Tanya Zafdoz" in page.locator(".rk-side").inner_text():
         fail("raka: shown in demo mode")
     page.locator(".rk-side-search").click()
     page.wait_for_selector(".rk-cmd input")
     page.keyboard.type("halo")
-    if page.get_by_text("Tanya Raka").count():
-        fail("raka: ⌘K offers Tanya Raka in demo mode")
+    if page.get_by_text("Tanya Zafdoz").count():
+        fail("raka: ⌘K offers Tanya Zafdoz in demo mode")
     ctx.close()
 
     CHAT_FRAMES = [("tool", {"name": "rangka_list", "summary": "Membaca 20 faktur…"}), ("text", {"delta": "Ada 3 faktur jatuh tempo. "}),
@@ -481,20 +481,20 @@ with sync_playwright() as pw:
             page.locator(".rk-side .cn-ask").wait_for(timeout=3000)
             page.locator(".rk-side .cn-ask").click()
             if page.locator(".cn-nav-open").count():
-                fail("raka 390: the nav drawer stays open after Tanya Raka")
+                fail("raka 390: the nav drawer stays open after Tanya Zafdoz")
         else:
             if not page.locator(".rk-side .cn-ask").count():
-                fail("raka 1440: no Tanya Raka in the sidebar")
+                fail("raka 1440: no Tanya Zafdoz in the sidebar")
             page.keyboard.press("ControlOrMeta+j")
-        bar = page.get_by_role("dialog", name="Tanya Raka")
+        bar = page.get_by_role("dialog", name="Tanya Zafdoz")
         bar.wait_for(timeout=5000)
         chip = bar.locator(".rk-askbar-chip").inner_text()
         if "Change set" not in chip:
             fail(f"raka {width}: ask bar context {chip!r}")
-        box = bar.get_by_role("textbox", name="Tanya Raka")
+        box = bar.get_by_role("textbox", name="Tanya Zafdoz")
         box.fill("berapa faktur jatuh tempo?")
         box.press("Enter")
-        drawer = page.get_by_role("complementary", name="Percakapan dengan Raka")
+        drawer = page.get_by_role("complementary", name="Percakapan dengan Zafdoz")
         drawer.get_by_text("Aku juga menyusun usulan field Nomor PO.", exact=False).wait_for(timeout=10000)
         if drawer.get_by_text("Membaca 20 faktur…").count() != 1:
             fail(f"raka {width}: no activity line")
@@ -540,7 +540,7 @@ with sync_playwright() as pw:
             page.get_by_role("menuitem", name="Keluar").click()
             page.wait_for_function("() => !Object.keys(sessionStorage).some(k => k.startsWith('rk.console.ai') || k.startsWith('rk.ai.'))", timeout=5000)
         ctx.close()
-        if width == 1440:  # ⌘K offers Tanya Raka and prefills the ask bar with the query
+        if width == 1440:  # ⌘K offers Tanya Zafdoz and prefills the ask bar with the query
             ctx, page, errs = new_page(browser, 1440, "light")
             mock_kernel(page, True, [])
             page.goto(BASE + "#/changesets")
@@ -549,13 +549,13 @@ with sync_playwright() as pw:
             page.wait_for_selector(".rk-cmd input")
             page.mouse.move(1, 1)
             page.keyboard.type("stok menipis")
-            page.get_by_role("dialog", name="Menu perintah").get_by_role("group", name="Tanya Raka").locator(".rk-cmd-item").click()
-            val = page.get_by_role("dialog", name="Tanya Raka").get_by_role("textbox", name="Tanya Raka").input_value()
+            page.get_by_role("dialog", name="Menu perintah").get_by_role("group", name="Tanya Zafdoz").locator(".rk-cmd-item").click()
+            val = page.get_by_role("dialog", name="Tanya Zafdoz").get_by_role("textbox", name="Tanya Zafdoz").input_value()
             if val != "stok menipis":
                 fail(f"raka ⌘K: ask bar prefilled with {val!r}")
             ctx.close()
 
-    # a kernel without features.ai: no Raka either
+    # a kernel without features.ai: no Zafdoz either
     ctx, page, errs = new_page(browser, 1440, "light")
     mock_kernel(page, False, [])
     page.goto(BASE + "#/changesets")

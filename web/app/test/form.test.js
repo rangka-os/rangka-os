@@ -219,3 +219,18 @@ test("writerText: system writers read Otomatis, people keep their name", () => {
   assert.strictEqual(A.writerText("siti@example.com"), "siti@example.com");
   assert.strictEqual(A.writerText(undefined), "");
 });
+
+test("newValues: a new form starts from a prefill, model fields only, never a name (contract 0076 §4)", () => {
+  const RA = load();
+  const mm = { fields: [{ name: "item_name", type: "data" }, { name: "sku", type: "data" }] };
+  assert.deepStrictEqual(plain(RA.newValues("item", mm, { item_name: "Tenda", name: "BRG-9", nope: "x" })), { item_name: "Tenda" });
+  // a page-level opener leaves one for this model; it is used once
+  RA.pendingPrefill = { model: "item", values: { sku: "TND" }, at: Date.now() };
+  assert.deepStrictEqual(plain(RA.newValues("item", mm, null)), { sku: "TND" });
+  assert.deepStrictEqual(plain(RA.newValues("item", mm, null)), {});
+  // another model's, or a stale one, is not used
+  RA.pendingPrefill = { model: "customer", values: { customer_name: "A" }, at: Date.now() };
+  assert.deepStrictEqual(plain(RA.newValues("item", mm, null)), {});
+  RA.pendingPrefill = { model: "item", values: { sku: "OLD" }, at: Date.now() - 120000 };
+  assert.deepStrictEqual(plain(RA.newValues("item", mm, null)), {});
+});

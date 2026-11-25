@@ -2,11 +2,16 @@ package server
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // The seed never makes an account that is linked to upstream sign-in, and not yet in the org, its owner: that
@@ -115,5 +120,70 @@ func TestSeedDefaultRecordWithoutFixtures(t *testing.T) {
 	}
 	if rec, _ := res.Rows[0][1].(string); rec == "" {
 		t.Fatalf("owner record = %q, want the record the sync created", rec)
+	}
+}
+
+// Contract 0076 §2: `rangka migrate` syncs config.rk's orgs before `rangka seed` runs. The defaults wait for an org's
+// seed, which loads the fixtures first, so the fixtures keep their numbers (OUT-001…) and the defaults only fill what
+// they left empty (kernel CI on 25 Nov 2026: demo-fnb's units were replaced by the defaults).
+func TestDefaultsWaitForTheSeedOfANewOrg(t *testing.T) {
+	e := newEnv(t, false, func(apps, _ string) {
+		os.MkdirAll(filepath.Join(apps, "core", "defaults"), 0o755)
+		os.WriteFile(filepath.Join(apps, "core", "defaults", "outlet.rk"),
+			[]byte("outlet:\n  - {outlet_name: Pusat}\n  - {outlet_name: Gudang}\n"), 0o644)
+	})
+	ctx := context.Background()
+	db := e.s.DB
+	reg, err := LoadRegistry(e.s.Cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outlets := func(org string) []string {
+		res, err := db.Query(pg.WithOrg(ctx, org), fmt.Sprintf("select name from %s where org_id = $1 order by name", pg.QuoteIdent(store.TableName("outlet"))), org)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, r := range res.Rows {
+			out = append(out, r[0].(string))
+		}
+		return out
+	}
+	for _, org := range []string{"dengan-data", "tanpa-data"} {
+		if err := auth.EnsureOrg(ctx, db, org, org); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// migrate / serve: neither org has been seeded, so neither gets anything yet
+	if err := SeedDefaultsAll(ctx, db, reg, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := append(outlets("dengan-data"), outlets("tanpa-data")...); len(got) != 0 {
+		t.Fatalf("unseeded orgs got defaults: %v", got)
+	}
+	// seed with fixtures: the fixture's outlet keeps OUT-001 and the defaults add nothing to a filled table
+	fx := t.TempDir()
+	os.WriteFile(filepath.Join(fx, "outlet.rk"), []byte("outlet:\n  - {name: OUT-001, outlet_name: Dago}\n"), 0o644)
+	seed := func(org, dir string) {
+		if _, err := Seed(ctx, db, reg, SeedOptions{Org: org, FixturesDir: dir, Email: "owner-" + org + "@x.test",
+			Password: "rangka-demo", RecordOptional: true, Now: fixedNow}); err != nil {
+			t.Fatalf("seed %s: %v", org, err)
+		}
+	}
+	seed("dengan-data", fx)
+	if got := outlets("dengan-data"); !reflect.DeepEqual(got, []string{"OUT-001"}) {
+		t.Fatalf("seeded with fixtures: outlets %v, want only the fixture's", got)
+	}
+	// seed without fixtures: the defaults
+	seed("tanpa-data", t.TempDir())
+	if got := outlets("tanpa-data"); len(got) != 2 {
+		t.Fatalf("seeded without fixtures: outlets %v, want the two defaults", got)
+	}
+	// a later migrate adds nothing to either
+	if err := SeedDefaultsAll(ctx, db, reg, nil); err != nil {
+		t.Fatal(err)
+	}
+	if a, b := outlets("dengan-data"), outlets("tanpa-data"); len(a) != 1 || len(b) != 2 {
+		t.Fatalf("after another migrate: %v %v", a, b)
 	}
 }

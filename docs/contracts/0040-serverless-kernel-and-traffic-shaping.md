@@ -10,7 +10,7 @@ Rangka Cloud first planned one always-on Fargate task per business (rangka-cloud
 times the net price of the Juragan package (Rp 100.000, about Rp 89.000 after PPN and payment fees). Most small
 businesses are idle most of the day, so Dede decided on 8 Nov:
 
-- small and medium packages (Mulai, Juragan, Juragan Pro, Juragan Grup) run each business's kernel on **AWS Lambda**,
+- small and medium packages (Mulai, Juragan, Zafdoz Pro, Zafdoz Grup) run each business's kernel on **AWS Lambda**,
   paid per request, against the shared Aurora Serverless v2 cluster; enterprise keeps a dedicated, always-on kernel;
 - a cold start of a second or two for a quiet business is accepted;
 - traffic above a package's allowance is **slowed down, not blocked**.

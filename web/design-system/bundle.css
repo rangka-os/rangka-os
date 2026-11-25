@@ -390,7 +390,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 
 /* ---------------------------------------------------------------- mascot, brand */
 .rk-mascot { display: block; flex: none; color: var(--ink); overflow: visible; }
-/* Raka's titik and particles: body colour at rest, teal while Raka works, red when something failed. The pose is
+/* Zafdoz's titik and particles: body colour at rest, teal while Zafdoz works, red when something failed. The pose is
    drawn per frame by the shared loop in bundle.js; CSS only colours it and pulses the ring. */
 .rk-mascot-titik[data-on], .rk-mascot-fx[data-on] { fill: var(--raka); }
 .rk-mascot-fx { fill: currentColor; }
@@ -907,7 +907,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
   .rk-docpanel { width: auto; flex: none; border-left: 0; border-top: 1px solid var(--line); padding: 0; }
 }
 
-/* ---------------------------------------------------------------- Raka: ⌘J ask bar (bottom centre) and the chat drawer (right, non-modal) */
+/* ---------------------------------------------------------------- Zafdoz: ⌘J ask bar (bottom centre) and the chat drawer (right, non-modal) */
 /* the drawer has its own composer: an ask bar rendered next to an open drawer steps aside */
 .rk-chat ~ .rk-askbar, .rk-askbar:has(~ .rk-chat) { display: none; }
 .rk-askbar { position: fixed; z-index: 55; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); box-sizing: border-box;
@@ -925,12 +925,12 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-askbar-chat:hover { background: var(--hover); color: var(--ink); }
 .rk-askbar .rk-btn-primary .rk-kbd { background: transparent; color: inherit; opacity: .7; padding: 0 0 0 2px; }
 .rk-askbar button:focus-visible, .rk-chat button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-/* Raka chat, rangka.pen "Raka Chat · Komponen bersama" (the Juragan studio draws the same set). */
+/* Zafdoz chat, rangka.pen "Zafdoz Chat · Komponen bersama" (the Juragan studio draws the same set). */
 .rk-chat { position: fixed; z-index: 45; top: 0; right: 0; bottom: 0; width: min(440px, 100%); box-sizing: border-box; display: flex; flex-direction: column;
   background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow-pop); font: 13.5px/1.55 var(--font-sans); }
 .rk-chat-float { top: auto; bottom: 88px; right: 24px; height: min(680px, calc(100dvh - 112px)); border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden;
   box-shadow: 0 16px 40px rgba(28, 25, 23, .15), 0 2px 6px rgba(28, 25, 23, .06); }
-/* Dock: the page becomes a card with an 8px gutter on the sunken --soft background, Raka fills the right edge. Full covers the window. */
+/* Dock: the page becomes a card with an 8px gutter on the sunken --soft background, Zafdoz fills the right edge. Full covers the window. */
 html[data-raka="dock"], html[data-raka="full"] { background: var(--soft); }
 html[data-raka] body { background: transparent; }
 /* the shell's 8px margins stay inside the app root (no margin collapse through it), so the page is exactly one window tall */
@@ -938,7 +938,7 @@ html[data-raka="dock"] #rk-app { display: flow-root; }
 /* overflow: clip rounds the corners without making .rk-shell a scroll container, so the page's sticky bars keep sticking to the window. */
 html[data-raka="dock"] .rk-shell { margin: 8px var(--raka-dock-w, 400px) 8px 8px; border-radius: 12px; overflow: clip; height: calc(100% - 16px); min-height: calc(100dvh - 16px);
   border: 1px solid var(--line); box-sizing: border-box; box-shadow: 0 1px 3px rgba(28, 25, 23, .06); }
-/* Full hides the shell's layout regions (not focusable); Raka and the overlays the hosts render inside .rk-shell stay visible. */
+/* Full hides the shell's layout regions (not focusable); Zafdoz and the overlays the hosts render inside .rk-shell stay visible. */
 html[data-raka="full"] .rk-shell > :is(.rk-side, .rk-topnav, .rk-shell-main) { visibility: hidden; }
 html[data-raka="full"] .rk-chat-full { visibility: visible; }
 /* Dock: the sticky page bars sit inside the card's gutter; bottom-right overlays stay over the page, not over the panel. */
@@ -975,7 +975,7 @@ html[data-raka="dock"] .rk-toasts.float { right: calc(var(--raka-dock-w, 400px) 
 /* Chat / Pesan kamu */
 .rk-chat-me { align-self: flex-end; max-width: calc(100% - 48px); box-sizing: border-box; padding: 9px 12px; border-radius: 12px; background: var(--soft); color: var(--ink);
   line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-/* Chat / Pesan Raka (+ hover) */
+/* Chat / Pesan Zafdoz (+ hover) */
 .rk-chat-raka { position: relative; display: flex; gap: 10px; align-items: flex-start; }
 .rk-chat-raka::before { content: ""; position: absolute; inset: -10px; z-index: -1; border-radius: 12px; pointer-events: none; transition: background .12s; }
 .rk-chat-raka:hover::before { background: var(--soft); }
@@ -1048,7 +1048,7 @@ html[data-raka="dock"] .rk-toasts.float { right: calc(var(--raka-dock-w, 400px) 
 .rk-chat-comp .rk-send { width: 26px; height: 26px; border-radius: 7px; }
 .rk-chat-comp .rk-send .rk-icon { width: 14px; height: 14px; }
 .rk-chat-comp .rk-send.busy:disabled { background: var(--soft); box-shadow: inset 0 0 0 1px var(--line-strong); }
-/* OS / Raka · Diam | Hover | Tersembunyi | Tersembunyi hover | Terbuka */
+/* OS / Zafdoz · Diam | Hover | Tersembunyi | Tersembunyi hover | Terbuka */
 .rk-fab { position: fixed; z-index: 44; right: 24px; bottom: 24px; display: flex; align-items: center; }
 .rk-fab-btn { position: relative; display: flex; align-items: center; gap: 12px; height: 52px; padding: 0; border: 2px solid var(--surface); border-radius: 16px; background: var(--surface);
   box-shadow: 0 6px 18px rgba(28, 25, 23, .2); color: var(--ink); cursor: pointer; font: inherit; text-align: left; }
@@ -1074,7 +1074,7 @@ html[data-raka="dock"] .rk-toasts.float { right: calc(var(--raka-dock-w, 400px) 
 /* open: ink with a chevron */
 .rk-fab[data-state=open] .rk-fab-btn { width: 52px; justify-content: center; border: 0; background: var(--primary); color: var(--primary-ink); }
 .rk-fab[data-state=open] .rk-fab-btn .rk-icon { width: 20px; height: 20px; }
-/* tucked against the right edge: half of Raka shows */
+/* tucked against the right edge: half of Zafdoz shows */
 .rk-fab[data-state=tucked] { right: 0; }
 .rk-fab[data-state=tucked] .rk-fab-btn { width: 28px; height: 44px; gap: 10px; padding: 0 0 0 6px; border: 1px solid var(--line-strong); border-right: 0; border-radius: 12px 0 0 12px;
   box-shadow: -2px 3px 10px rgba(28, 25, 23, .15); overflow: hidden; }
@@ -1187,7 +1187,7 @@ html[data-raka="dock"] .rk-toasts.float { right: calc(var(--raka-dock-w, 400px) 
   .rk-tw .rk-table tbody tr:hover td:first-child, .rk-tw .rk-table tbody tr:hover td.rk-cb-cell + td { background: linear-gradient(var(--hover), var(--hover)), var(--surface); }
 }
 
-/* ---- Chat / Format / * (Figma "Raka Chat" › Isi jawaban): Raka's markdown. Body 13/20, headings 16/24 and 14/20 semibold,
+/* ---- Chat / Format / * (Figma "Zafdoz Chat" › Isi jawaban): Zafdoz's markdown. Body 13/20, headings 16/24 and 14/20 semibold,
    tables and key-values in an 8px card with a soft head, code in mono 12/16 with a head (language, file, Salin). */
 .rk-md { display: flex; flex-direction: column; gap: 10px; min-width: 0; font-size: var(--font-size); line-height: 20px; color: var(--ink-2); overflow-wrap: anywhere; white-space: normal; }
 .rk-chat-text.rk-md { white-space: normal; }
@@ -1258,7 +1258,7 @@ html[data-raka="dock"] .rk-toasts.float { right: calc(var(--raka-dock-w, 400px) 
 .rk-diagram-src summary { cursor: pointer; color: var(--link); font: 500 12px/16px var(--font-sans); }
 .rk-diagram-src summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .rk-diagram-src .rk-md-pre { margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
-/* coverage classes Raka puts on nodes (class A covered); !important beats Mermaid's #id-scoped style block */
+/* coverage classes Zafdoz puts on nodes (class A covered); !important beats Mermaid's #id-scoped style block */
 .rk-diagram .node.covered rect, .rk-diagram .node.covered polygon, .rk-diagram .node.covered circle { fill: var(--selected) !important; stroke: var(--line) !important; stroke-width: 1px !important; }
 .rk-diagram .node.not_covered rect, .rk-diagram .node.not_covered polygon, .rk-diagram .node.not_covered circle { fill: var(--warn-tint) !important; stroke: var(--warn-line) !important; stroke-width: 1px !important; stroke-dasharray: 4 3 !important; }
 .rk-diagram .node.later rect, .rk-diagram .node.later polygon, .rk-diagram .node.later circle { fill: var(--soft) !important; stroke: var(--line) !important; stroke-width: 1px !important; stroke-dasharray: 4 3 !important; }
@@ -1285,7 +1285,7 @@ html[data-raka="dock"] .rk-toasts.float { right: calc(var(--raka-dock-w, 400px) 
   .rk-diagram-viewer .rk-dialog-main { padding: 8px 12px; }
   .rk-diagram-viewer .rk-dialog-foot { padding: 0 12px 12px; }
 }
-/* ---- OfferCompare: Raka's offer options side by side (contract 0049 §4, Figma Agent chat › Chat/OfferCompare).
+/* ---- OfferCompare: Zafdoz's offer options side by side (contract 0049 §4, Figma Agent chat › Chat/OfferCompare).
    The card's own width decides: a grid of equal columns once each gets 260 px, the options stacked full width below
    (recommended on top), so a narrow chat panel never scrolls sideways. */
 .rk-offer { container: rk-offer / inline-size; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; box-sizing: border-box; color: var(--ink); font: 400 13px/20px var(--font-sans); }

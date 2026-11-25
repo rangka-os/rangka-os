@@ -36,7 +36,7 @@ var Neutrals = map[string][2]map[string]string{
 // buttonTokens are the tokens a family sets only when primary buttons stay ink.
 var buttonTokens = map[string]bool{"primary": true, "primary-hover": true, "primary-ink": true}
 
-// Locked are tokens a theme may not set (contract 0067 §1): status colours and Raka.
+// Locked are tokens a theme may not set (contract 0067 §1): status colours and Zafdoz.
 func Locked(name string) bool {
 	for _, p := range []string{"ok", "warn", "bad", "info", "discovery", "raka"} {
 		if name == p || strings.HasPrefix(name, p+"-") {

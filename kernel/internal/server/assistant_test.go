@@ -72,7 +72,7 @@ func TestAssistantCannotApproveApplyOrWrite(t *testing.T) {
 			t.Fatalf("%s %s = %d %s, want 403 ai_forbidden", method, path, r.Status, r.Body)
 		}
 	}
-	forbidden("POST", "/api/v1/r/lead", map[string]any{"lead_name": "Dari Raka", "phone": "+62811"})
+	forbidden("POST", "/api/v1/r/lead", map[string]any{"lead_name": "Dari Zafdoz", "phone": "+62811"})
 	forbidden("PATCH", "/api/v1/r/lead/LEAD-00031", map[string]any{"lead_name": "Ganti"})
 	forbidden("DELETE", "/api/v1/r/lead/LEAD-00031", nil)
 	forbidden("POST", "/api/v1/r/sales_invoice/INV-2026-00043/submit", map[string]any{})
@@ -110,7 +110,7 @@ func TestAssistantProposalIsMarked(t *testing.T) {
 		t.Fatalf("propose: source %v author %v risk %v", cs["source"], cs["author"], cs["risk"])
 	}
 	id := cs["id"].(string)
-	// Raka's token can never apply, over REST or at the service
+	// Zafdoz's token can never apply, over REST or at the service
 	if r := ai.do("POST", "/api/v1/changesets/"+id+"/apply", nil); r.Status != 403 || get(r.JSON, "error", "code") != "ai_forbidden" {
 		t.Fatalf("apply over REST: %d %s", r.Status, r.Body)
 	}
@@ -130,7 +130,7 @@ func TestAssistantProposalIsMarked(t *testing.T) {
 	hist, _ := got["history"].([]any)
 	last, _ := hist[len(hist)-1].(map[string]any)
 	if last["status"] != "applied" || !strings.Contains(fmt.Sprint(last["note"]), "auto_apply") || last["by"] != "system" {
-		t.Fatalf("applied by the kernel on config, not by Raka: %v", last)
+		t.Fatalf("applied by the kernel on config, not by Zafdoz: %v", last)
 	}
 	// medium risk still waits for a person
 	mid := call(ai, "rangka_changeset_propose", addRegion())
@@ -144,7 +144,7 @@ func TestAssistantProposalIsMarked(t *testing.T) {
 	}
 }
 
-// Without config.ai.auto_apply: low_risk nothing Raka proposes is applied automatically.
+// Without config.ai.auto_apply: low_risk nothing Zafdoz proposes is applied automatically.
 func TestAssistantNoAutoApplyByDefault(t *testing.T) {
 	e := newEnv(t, false, nil)
 	ai := assistantEnv(t, e, 10*time.Minute)

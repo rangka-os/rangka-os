@@ -389,10 +389,7 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 		if sk == nil {
 			return nil, fmt.Errorf("no skill %q (rangka_skills lists them)", sarg(args, "name"))
 		}
-		files := sk.Files
-		if files == nil {
-			files = []string{}
-		}
+		files := sk.Served()
 		return map[string]any{"name": sk.Name, "description": sk.Description, "metadata": sk.Metadata, "source": sk.Source, "instructions": sk.Body, "files": files}, nil
 	case "rangka_skill_file":
 		sk := h.library().Get(sarg(args, "name"))

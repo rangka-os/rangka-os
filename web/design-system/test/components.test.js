@@ -191,7 +191,7 @@ test("CommandMenu: a filter:false group keeps its items whatever the query; othe
   const t = texts(tree);
   assert.ok(t.includes("CV Sinar"), "server match kept though its title lacks the query");
   assert.ok(t.includes("Maju terus") && !t.includes("Pelanggan"), "the local group still filters");
-  assert.ok(!t.some((x) => /Tanya Raka/.test(x)), "ask: false drops Tanya Raka");
+  assert.ok(!t.some((x) => /Tanya Zafdoz/.test(x)), "ask: false drops Tanya Zafdoz");
 });
 
 const CTX = { label: "Faktur penjualan" };
@@ -292,9 +292,9 @@ test("ChatDrawer renders turns with activity and a changeset card", () => {
   const custom = render(R.ChatDrawer({ open: true, turns: TURNS, renderChangeset: (cs) => ({ type: "i", props: { className: "mine" }, children: [cs.id] }) }));
   assert.ok(texts(custom).indexOf("cs-7") >= 0 && texts(custom).indexOf("Lihat pratinjau") < 0, "renderChangeset replaces the card");
 
-  const other = render(R.ChatDrawer({ open: true, turns: [{ role: "assistant", text: "", escalate: "Hanya pemilik yang bisa mengubah peran.", error: "Raka tidak bisa dihubungi." }] }));
+  const other = render(R.ChatDrawer({ open: true, turns: [{ role: "assistant", text: "", escalate: "Hanya pemilik yang bisa mengubah peran.", error: "Zafdoz tidak bisa dihubungi." }] }));
   assert.ok(nodes(other, (n) => hasClass(n, "rk-alert-info") && texts(n).indexOf("Hanya pemilik yang bisa mengubah peran.") >= 0).length === 1, "escalation is an info Alert");
-  assert.ok(nodes(other, (n) => hasClass(n, "rk-alert-bad") && texts(n).indexOf("Raka tidak bisa dihubungi.") >= 0).length === 1, "error is a bad Alert");
+  assert.ok(nodes(other, (n) => hasClass(n, "rk-alert-bad") && texts(n).indexOf("Zafdoz tidak bisa dihubungi.") >= 0).length === 1, "error is a bad Alert");
   assert.strictEqual(R.ChatDrawer({ open: false, turns: [] }), null);
 });
 
@@ -341,7 +341,7 @@ test("AskBar and ChatDrawer ignore Enter and Esc while an IME is composing", () 
   assert.deepStrictEqual([sent, closed], [["drawer"], ["drawer"]], "plain keys still work");
 });
 
-// ---- RichText: Raka's markdown (Figma "Raka Chat" › Isi jawaban), drawn as elements, never HTML
+// ---- RichText: Zafdoz's markdown (Figma "Zafdoz Chat" › Isi jawaban), drawn as elements, never HTML
 const md = (text, extra) => render(R.RichText(Object.assign({ text }, extra)));
 const tags = (tree, t) => nodes(tree, (n) => n.type === t);
 
@@ -420,7 +420,7 @@ test("RichText folds a long answer behind Tampilkan semua, not while streaming",
   assert.strictEqual(nodes(md("Pendek.", { collapse: 4 }), (n) => hasClass(n, "rk-md-more")).length, 0);
 });
 
-test("ChatDrawer draws Raka's answer with RichText and keeps the owner's text plain", () => {
+test("ChatDrawer draws Zafdoz's answer with RichText and keeps the owner's text plain", () => {
   const tree = render(R.ChatDrawer({ open: true, turns: [{ role: "user", text: "**tebal?**" }, { role: "assistant", text: "Ada **3 faktur**." }] }));
   assert.deepStrictEqual(texts(nodes(tree, (n) => hasClass(n, "rk-chat-me"))[0]), ["**tebal?**"]);
   assert.deepStrictEqual(texts(tags(nodes(tree, (n) => hasClass(n, "rk-chat-raka"))[0], "strong")[0]), ["3 faktur"]);
@@ -438,8 +438,8 @@ test("clampDockWidth keeps the dock between 360 and 640 and leaves the page 640p
 });
 
 test("conversationTitle is the first message, cut at 60 on a word", () => {
-  assert.strictEqual(R.conversationTitle([]), "Raka");
-  assert.strictEqual(R.conversationTitle([{ role: "user", text: "  Halo   Raka " }]), "Halo Raka");
+  assert.strictEqual(R.conversationTitle([]), "Zafdoz");
+  assert.strictEqual(R.conversationTitle([{ role: "user", text: "  Halo   Zafdoz " }]), "Halo Zafdoz");
   assert.strictEqual(R.conversationTitle([{ role: "assistant", text: "x" }, { role: "user", text:
     "Berapa faktur jatuh tempo minggu ini dan siapa saja pelanggan yang paling sering telat bayar?" }]),
     "Berapa faktur jatuh tempo minggu ini dan siapa saja…");
@@ -455,7 +455,7 @@ test("ChatDrawer head per mode, and no approval note or subtitle in any mode", (
   assert.deepStrictEqual(labels("drawer").filter((l) => /Percakapan baru|Perbesar|Kecilkan|Tutup/.test(l)), ["Percakapan baru", "Tutup"]);
   for (const mode of ["drawer", "float", "dock", "full"]) {
     const t = texts(render(R.ChatDrawer(Object.assign({}, base, { mode })))).join(" ");
-    assert.ok(t.indexOf("Raka hanya mengusulkan") < 0, mode + ": no approval note");
+    assert.ok(t.indexOf("Zafdoz hanya mengusulkan") < 0, mode + ": no approval note");
     assert.ok(t.indexOf("Kopi Senja") < 0, mode + ": no subtitle");
   }
   const full = render(R.ChatDrawer(Object.assign({}, base, { mode: "full", turns: [{ role: "user", text: "Berapa faktur jatuh tempo?" }] })));
@@ -474,7 +474,7 @@ test("ChatDrawer Esc: Full collapses to Dock, Dock closes; the grip resizes by 1
   render(R.ChatDrawer(props("dock"))).props.onKeyDown(esc);
   assert.deepStrictEqual(calls.splice(0), ["collapse", "close"]);
   const grip = nodes(render(R.ChatDrawer(props("dock"))), (n) => n.props && n.props.role === "separator")[0];
-  assert.strictEqual(grip.props["aria-label"], "Ubah lebar panel Raka");
+  assert.strictEqual(grip.props["aria-label"], "Ubah lebar panel Zafdoz");
   assert.strictEqual(grip.props["aria-valuenow"], 400);
   assert.strictEqual(grip.props["aria-valuemin"], 360);
   assert.strictEqual(grip.props["aria-valuemax"], 640);
@@ -499,8 +499,8 @@ test("ChatDrawer keeps the same wrapper chain to the log and composer in Dock an
   }
 });
 
-// ---- Raka (Lampu status, 20 Nov 2026; actions 21 Nov): ink head with cut-out eyes, titik teal only while Raka works
-test("Raka draws the head, two visible eyes in the mask and the titik; teal only while working, red when failed", () => {
+// ---- Zafdoz (Lampu status, 20 Nov 2026; actions 21 Nov): ink head with cut-out eyes, titik teal only while Zafdoz works
+test("Zafdoz draws the head, two visible eyes in the mask and the titik; teal only while working, red when failed", () => {
   for (const s of R.RAKA_STATES) {
     const tree = render(R.Raka({ size: 40, state: s }));
     assert.strictEqual(tree.type, "svg");
@@ -516,14 +516,14 @@ test("Raka draws the head, two visible eyes in the mask and the titik; teal only
     assert.strictEqual(nodes(tree, (n) => n.type === "path" && n.props.fill === "currentColor" && n.props.mask).length, 1, s + ": body follows currentColor");
   }
   assert.strictEqual(render(R.Raka({ state: "bogus" })).props["data-state"], "netral", "unknown state falls back to netral");
-  assert.strictEqual(render(R.Raka({ title: "" })).props["aria-hidden"], "true", "an empty title hides a decorative Raka");
+  assert.strictEqual(render(R.Raka({ title: "" })).props["aria-hidden"], "true", "an empty title hides a decorative Zafdoz");
   assert.match(render(R.Raka({ state: "kerja" })).props["aria-label"], /sedang bekerja/);
   assert.match(render(R.Raka({ state: "nyusun" })).props["aria-label"], /sedang menyusun/);
   const happy = nodes(render(R.Raka({ state: "senang" })), (n) => n.type === "polygon" && n.props.display !== "none");
   assert.strictEqual(happy.length, 2, "senang shows the chevron eyes");
 });
 
-test("Raka keeps a particle pool and lists its states and reactions", () => {
+test("Zafdoz keeps a particle pool and lists its states and reactions", () => {
   const tree = render(R.Raka({ size: 56 }));
   assert.strictEqual(nodes(tree, (n) => hasClass(n, "rk-mascot-fx")).length, 12, "12 reusable squares");
   assert.strictEqual(nodes(tree, (n) => n.type === "path" && n.props["data-rk"] === "fz").length, 3, "3 z letters for tidur");
@@ -550,30 +550,30 @@ test("rakaMood maps a step label to a working state; rakaTurnState follows a cha
   assert.strictEqual(R.rakaTurnState({ text: "ok" }, false), "netral");
 });
 
-test("every Raka is alive by default; interactive: false keeps one still", () => {
+test("every Zafdoz is alive by default; interactive: false keeps one still", () => {
   const live = (tree) => hasClass(tree, "live") && typeof tree.props.onClick === "function";
   assert.ok(live(render(R.Raka({ size: 22, title: "" }))), "a 22 px chat avatar is live");
-  assert.ok(live(render(R.Raka({ size: 56 }))), "a large Raka is live");
+  assert.ok(live(render(R.Raka({ size: 56 }))), "a large Zafdoz is live");
   assert.ok(!live(render(R.Raka({ size: 22, interactive: false }))), "interactive: false keeps it still");
   const drawer = render(R.ChatDrawer({ open: true, turns: [{ role: "assistant", text: "Halo" }] }));
   const avatars = nodes(drawer, (n) => n.type === "svg" && hasClass(n, "rk-mascot"));
   assert.ok(avatars.length >= 1 && avatars.every(live), "chat drawer avatars are live");
 });
 
-test("RakaLauncher shows Raka working (muter) while busy; pending changesets do not light the titik", () => {
+test("RakaLauncher shows Zafdoz working (muter) while busy; pending changesets do not light the titik", () => {
   const raka = (p) => nodes(render(R.RakaLauncher(Object.assign({ open: false, onToggle() {} }, p))), (n) => n.type === "svg" && hasClass(n, "rk-mascot"))[0];
   assert.strictEqual(raka({ busy: true }).props["data-state"], "muter");
   assert.strictEqual(raka({ state: "nyusun" }).props["data-state"], "nyusun");
   assert.strictEqual(raka({ pending: 2 }).props["data-state"], "netral");
 });
 
-test("ChatDrawer: Raka thinks before the first word, follows the running step, and shows gagal on a failed turn", () => {
+test("ChatDrawer: Zafdoz thinks before the first word, follows the running step, and shows gagal on a failed turn", () => {
   const tree = render(R.ChatDrawer({ open: true, busy: true, turns: [{ role: "user", text: "rekap minggu ini" }] }));
   const states = nodes(tree, (n) => n.type === "svg" && hasClass(n, "rk-mascot")).map((n) => n.props["data-state"]);
   assert.ok(states.filter((x) => x === "mikir").length >= 2, "head and waiting row think before the first word: " + states);
   const working = render(R.ChatDrawer({ open: true, busy: true, turns: [{ role: "user", text: "x" }, { role: "assistant", text: "", activity: ["Menyusun usulan"] }] }));
   const ws = nodes(working, (n) => n.type === "svg" && hasClass(n, "rk-mascot")).map((n) => n.props["data-state"]);
   assert.ok(ws.filter((x) => x === "nyusun").length >= 2, "head and turn follow the running step: " + ws);
-  const failed = render(R.ChatDrawer({ open: true, turns: [{ role: "user", text: "x" }, { role: "assistant", text: "", error: "Raka tidak bisa dihubungi." }] }));
+  const failed = render(R.ChatDrawer({ open: true, turns: [{ role: "user", text: "x" }, { role: "assistant", text: "", error: "Zafdoz tidak bisa dihubungi." }] }));
   assert.ok(nodes(failed, (n) => n.type === "svg" && hasClass(n, "rk-mascot")).some((n) => n.props["data-state"] === "gagal"), "a failed turn shows gagal");
 });

@@ -140,3 +140,28 @@ func TestReadFileStaysInside(t *testing.T) {
 		t.Errorf("SKILL.md: %v", err)
 	}
 }
+
+func TestEvalFilesAreNotServed(t *testing.T) {
+	found := false
+	for _, s := range Platform() {
+		for _, f := range s.Served() {
+			if hidden(f) {
+				t.Errorf("%s serves %s", s.Name, f)
+			}
+		}
+		for _, f := range s.Files {
+			if !hidden(f) {
+				continue
+			}
+			found = true
+			for _, p := range []string{f, "./" + f, "evals/../" + f} {
+				if _, err := s.ReadFile(p); err == nil {
+					t.Errorf("%s: ReadFile(%q) should fail", s.Name, p)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Skip("no platform skill ships eval files")
+	}
+}

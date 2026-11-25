@@ -56,4 +56,4 @@ Use the folder your harness reads instead of `.claude/skills` when it differs.
 | An MCP client connected to a kernel | nothing to install | `rangka_skills`, `rangka_skill` (see [Skills](./)) |
 | Anything else | as plain instructions | give the agent `SKILL.md` files from the zip |
 
-Raka needs none of this: it reads the skills from the kernel it works on.
+Zafdoz needs none of this: it reads the skills from the kernel it works on.

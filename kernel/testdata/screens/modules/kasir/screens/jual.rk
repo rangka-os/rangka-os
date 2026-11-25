@@ -16,6 +16,7 @@ counter:
     group_by: category
     price: price
     barcode: barcode
+    variants: {group: variant_group, label: variant_label, title: variant_title}
     available: {model: stok_menu, item: menu, qty: qty, match: {outlet: outlet}}
   document:
     model: penjualan

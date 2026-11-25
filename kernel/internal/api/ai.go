@@ -147,7 +147,7 @@ func (s *Server) aiAcquire(person string) (release func(), code, msg string) {
 	}
 	if len(recent) >= limit {
 		st.starts[person] = recent
-		return nil, "ai_rate_limited", "Terlalu banyak pertanyaan untuk Raka. Coba lagi beberapa menit lagi."
+		return nil, "ai_rate_limited", "Terlalu banyak pertanyaan untuk Zafdoz. Coba lagi beberapa menit lagi."
 	}
 	st.starts[person] = append(recent, now)
 	st.busy[person] = true
@@ -217,7 +217,7 @@ func trimHistory(h []aiTurn) []aiTurn {
 func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 	// the assistant token minted for a chat carries the member's full outlets: not from a PIN session (contract 0058 §2)
 	if c.p.Via == "pin" {
-		writeError(w, http.StatusForbidden, "pin_session_limited", "Raka belum bisa dipakai dari sesi PIN kasir.")
+		writeError(w, http.StatusForbidden, "pin_session_limited", "Zafdoz belum bisa dipakai dari sesi PIN kasir.")
 		return
 	}
 	if !s.AI.on() {
@@ -225,7 +225,7 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	if s.Engine.Reg().SiteConfig("ai.enabled") == false {
-		writeError(w, http.StatusForbidden, "ai_disabled", "Raka dimatikan untuk organisasi ini (config.ai.enabled).")
+		writeError(w, http.StatusForbidden, "ai_disabled", "Zafdoz dimatikan untuk organisasi ini (config.ai.enabled).")
 		return
 	}
 	var body aiChatBody
@@ -308,12 +308,12 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 	// ends the stream with an error event, ai_timeout when the chat ran out of time
 	stop := func(code, msg string) {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) && r.Context().Err() == nil {
-			code, msg = "ai_timeout", "Raka terlalu lama menjawab. Coba pertanyaan yang lebih singkat."
+			code, msg = "ai_timeout", "Zafdoz terlalu lama menjawab. Coba pertanyaan yang lebih singkat."
 		}
 		rec.outcome = code
 		sse.event("error", map[string]any{"code": code, "message": msg})
 	}
-	const unavailable = "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi."
+	const unavailable = "Zafdoz sedang tidak bisa dihubungi. Coba lagi sebentar lagi."
 
 	payload, _ := json.Marshal(out)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.AI.URL, "/")+"/v1/chat", bytes.NewReader(payload))
@@ -341,7 +341,7 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 			s.Log("ai: sidecar answered %d to POST /v1/chat", res.StatusCode)
 		}
 		if res.StatusCode == http.StatusBadRequest {
-			stop("bad_request", "Raka tidak bisa membaca pertanyaan ini.")
+			stop("bad_request", "Zafdoz tidak bisa membaca pertanyaan ini.")
 		} else {
 			stop("ai_unavailable", unavailable)
 		}
@@ -445,7 +445,7 @@ func (s *Server) auditChat(r *http.Request, c *caller, rec *aiRecord, took time.
 	}
 	data := map[string]any{"tools": tools, "changesets": ids, "duration_ms": took.Milliseconds(), "outcome": outcome}
 	ctx := context.WithoutCancel(r.Context())
-	if err := store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "ai.chat", "", "Chat dengan Raka", data); err != nil && s.Log != nil {
+	if err := store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "ai.chat", "", "Chat dengan Zafdoz", data); err != nil && s.Log != nil {
 		s.Log("ai: audit: %v", err)
 	}
 }

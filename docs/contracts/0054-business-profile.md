@@ -1,20 +1,20 @@
 # 0054 Business profile in onboarding: the plan comes from the profile
 
-Status: proposed (14 Nov 2026; amended 15 Nov 2026 by 0054a: one question per fact, Raka answers the saved profile, scale and outlets as one question on the card; 16 Nov 2026 by 0054a §5: business name first, the card turn asks nothing else, "cabang" in owner copy) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (`/v1/interview`
+Status: proposed (14 Nov 2026; amended 15 Nov 2026 by 0054a: one question per fact, Zafdoz answers the saved profile, scale and outlets as one question on the card; 16 Nov 2026 by 0054a §5: business name first, the card turn asks nothing else, "cabang" in owner copy) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (`/v1/interview`
 request and reply, consult prompt), rangka-cloud (profile storage, studio profile card, plan and offer-kind
 suggestion, offer card, build gate, Kendali "Calon pelanggan"; private) · Builds on: 0042 (consultant interview),
 0046 (offer), 0050 (pains), 0041 (prices from Cloud docs) · Implemented together with: 0050
 
 ## Context
 
-- **Two tracks (Dede, 14 Nov 2026).** Raka works for two things.
+- **Two tracks (Dede, 14 Nov 2026).** Zafdoz works for two things.
   - **The system it builds (rangka-os).** It starts from the owner's problems and answers them with pieces on the
     map. That is 0042, 0046 and 0050.
   - **The plan, the price and the sales team (rangka-cloud).** It uses a short business profile with fixed options.
     That is this contract.
   - The profile never puts a piece on the map. A pain never changes the price.
 - **Design.** Figma "Rangka OS" › page "Rangka Cloud" › board "Profil usaha di onboarding · usulan" (node
-  47:143366): profile card in the interview (A), "Lainnya" with Raka digging (B), plan and offer card (C), Kendali
+  47:143366): profile card in the interview (A), "Lainnya" with Zafdoz digging (B), plan and offer card (C), Kendali
   "Calon pelanggan" (D), mapping (E), rules (F).
 - **Decisions by Dede (14 Nov 2026)** that replace the board's proposals:
   1. The plan is **not** chosen by scale alone. Scale, number of outlets, staff, customers, products and sales
@@ -29,7 +29,7 @@ suggestion, offer card, build gate, Kendali "Calon pelanggan"; private) · Build
 - **What exists today.**
   - `store.Project.Profile` holds legacy interview answers and `consultBody.profile` is the example profile name
     ("default"). Neither is this profile, so the new field is named `business_profile` everywhere.
-  - `config/tiers.yaml` has, per package: `outlets` and `users` limits (0 = no limit), `businesses`, the monthly Raka
+  - `config/tiers.yaml` has, per package: `outlets` and `users` limits (0 = no limit), `businesses`, the monthly Zafdoz
     turns, and `price.per_month`. The ordered packages for new businesses are `mulai`, `juragan`, `pro`, `grup`;
     `enterprise` is sized per contract.
   - Staff accounts (`internal/staff`) have no roles yet.
@@ -73,8 +73,8 @@ Eight questions. Each has fixed options plus "Lainnya", except `outlets`, which 
 | field | one of the eight names; a missing field is unanswered |
 | `value` | a code of the field; for `sales_channels` a list of 1–7 distinct codes; for `outlets` an integer 1–999 |
 | `text` | the owner's words for `other`, kept as written; required when `value` is or contains `other`, else absent; 1–200 characters |
-| `note` | Raka's one-sentence summary after digging into `other`; at most 300 characters; optional |
-| `source` | `owner` (the owner clicked or typed) or `raka_guess` (Raka read it from the story or a file) |
+| `note` | Zafdoz's one-sentence summary after digging into `other`; at most 300 characters; optional |
+| `source` | `owner` (the owner clicked or typed) or `raka_guess` (Zafdoz read it from the story or a file) |
 | `confirmed` | `true` only after the owner clicked a chip or saved the card; a `raka_guess` is never confirmed by itself |
 
 - **Complete** means all eight fields are present and confirmed.
@@ -98,20 +98,20 @@ Eight questions. Each has fixed options plus "Lainnya", except `outlets`, which 
 
 | Field | Rule |
 | --- | --- |
-| `profile_guesses` | `{field: {value, text?}}`: Raka's reading of the story and files, for fields that are not confirmed; always emitted, `{}` when none |
-| `profile_notes` | `{field: note}`: a summary of an `other` answer Raka dug into this turn; always emitted, `{}` when none |
+| `profile_guesses` | `{field: {value, text?}}`: Zafdoz's reading of the story and files, for fields that are not confirmed; always emitted, `{}` when none |
+| `profile_notes` | `{field: note}`: a summary of an `other` answer Zafdoz dug into this turn; always emitted, `{}` when none |
 
 - rangka-ai validates both against §1 and §2. A guess with an unknown field or code, a bad number, or `other`
   without `text` is dropped silently. So is a guess for a field that is confirmed in the request. A note for a field
   that is not `other` is dropped.
-- **Raka's agenda.**
-  - After the owner's first story, Raka fills `profile_guesses` with what the story says. It does not ask the
+- **Zafdoz's agenda.**
+  - After the owner's first story, Zafdoz fills `profile_guesses` with what the story says. It does not ask the
     profile questions one by one: the card asks them.
-  - The profile is context for the next questions, never a source of pieces. Online sales point Raka at marketplace
+  - The profile is context for the next questions, never a source of pieces. Online sales point Zafdoz at marketplace
     problems; 21 staff or more points it at attendance and payroll. Nothing goes on the map because of the profile.
-  - For a field in `profile_dig`, Raka asks one question about it, offers two short answers when it can, and returns
+  - For a field in `profile_dig`, Zafdoz asks one question about it, offers two short answers when it can, and returns
     a `note` once it understands. At most two questions per answer (Cloud counts them).
-  - Raka never names a package or a price from the profile. Prices come from `cloud_docs` only (0041), and the
+  - Zafdoz never names a package or a price from the profile. Prices come from `cloud_docs` only (0041), and the
     plan card (§6) is the place for them.
 - The reply and map rules of 0042, 0046 and 0050 are unchanged.
 
@@ -119,7 +119,7 @@ Eight questions. Each has fixed options plus "Lainnya", except `outlets`, which 
 
 - **When.** Cloud adds a message with card kind `profile` after the first consult turn of a project (0054a §5: the
   first reply without a question and without guess or offer buttons), and again whenever the owner opens "Ubah" on
-  the profile in the peta panel. Raka's text above it: "Biar paket dan harganya pas, aku isi dulu profil usahamu dari
+  the profile in the peta panel. Zafdoz's text above it: "Biar paket dan harganya pas, aku isi dulu profil usahamu dari
   cerita tadi. Cek ya: yang bergaris putus-putus itu tebakanku. Simpan dulu ya, habis itu kita lanjut ngobrol."
 - **Layout** (board A and B).
   - Title "Profil usaha", status line, and "Pilih yang paling dekat. Tidak ada yang pas? Pilih Lainnya dan
@@ -128,7 +128,7 @@ Eight questions. Each has fixed options plus "Lainnya", except `outlets`, which 
     " · <k> isian sendiri" when some answers are `other`.
   - One row per question: label, hint, chips, and "+ Lainnya". `outlets` is a number field with − and + buttons.
   - A guessed chip has a dashed border until the owner clicks it; a chosen chip shows ✓.
-  - "Lainnya" opens a text field in its row: "Pakai kata-katamu sendiri. Enter untuk simpan, Raka akan tanya lanjut."
+  - "Lainnya" opens a text field in its row: "Pakai kata-katamu sendiri. Enter untuk simpan, Zafdoz akan tanya lanjut."
   - Footer: primary "Simpan profil", disabled until every row has an answer; and the note "Bisa diubah lagi di Peta
     alur". No "Lewati dulu".
   - Under 600 px: one question per screen, chips wrap downwards, buttons at least 44 px high.
@@ -147,8 +147,8 @@ Cloud computes the suggestion from the confirmed fields, the package values in `
 offer. It is computed on read and never stored. Unconfirmed guesses are not used.
 
 ```json
-{"plan": "pro", "label": "Juragan Pro", "price_per_month": 249000, "offer": "modules_custom",
- "reasons": [{"field": "staff", "text": "21–100 staf: Juragan Pro memuat sampai 30 pengguna."}], "needs_review": false}
+{"plan": "pro", "label": "Zafdoz Pro", "price_per_month": 249000, "offer": "modules_custom",
+ "reasons": [{"field": "staff", "text": "21–100 staf: Zafdoz Pro memuat sampai 30 pengguna."}], "needs_review": false}
 ```
 
 **Plan.** The packages in order are `mulai` < `juragan` < `pro` < `grup` < `enterprise`. Each answer gives a minimum
@@ -172,7 +172,7 @@ package; the plan is the highest minimum.
   follow it.
 - **Reasons.** One reason per field whose minimum equals the plan, in the order of §1, plus the sentence "Harga
   dihitung per usaha, bukan per orang." when `staff` is `to_20` or bigger and did not raise the plan. When
-  `customers` is `over_1000`: "Kalau jatah Raka kurang, bisa tambah paket kredit." At most four reasons.
+  `customers` is `over_1000`: "Kalau jatah Zafdoz kurang, bisa tambah paket kredit." At most four reasons.
 - **Price.** `price_per_month` is the package's `price.per_month`; `enterprise` has none and the card says "Harga
   setelah konsultasi".
 
@@ -218,7 +218,7 @@ is complete (board C). Above it, the 0050 block "Masalah yang terjawab" is the c
   | Profil | "<confirmed>/8", plus " + <k> sendiri" for `other` answers |
 
   The reply also carries the counts per offer kind and per plan for the filter chips ("Semua 42", "Paket aplikasi
-  19", …). Rows are sorted by `revenue` (biggest first), then by when the profile changed. Opening a row shows the owner's words and Raka's `note` for every `other` answer.
+  19", …). Rows are sorted by `revenue` (biggest first), then by when the profile changed. Opening a row shows the owner's words and Zafdoz's `note` for every `other` answer.
 - `GET /api/staf/prospects.csv` exports the same rows for the same filters. Every export is written to the staff audit
   log.
 - **Read only.** Staff never change the owner's answers. Sales notes are out of scope here and will be stored apart

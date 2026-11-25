@@ -1049,7 +1049,8 @@
           h("div", { className: "ap-counter-qty" },
             h("button", { type: "button", "aria-label": "Kurangi " + l.title, onClick: function () { setLine(i, { qty: l.qty - 1 }); } }, "−"),
             h("b", null, l.qty),
-            h("button", { type: "button", "aria-label": "Tambah " + l.title, onClick: function () { setLine(i, { qty: l.qty + 1 }); } }, "+")),
+            // a saved table line may already be in the kitchen, which never gets a raised quantity: "+" adds a new line instead
+            h("button", { type: "button", "aria-label": "Tambah " + l.title, onClick: function () { if (l.saved) add({ item: l.item, title: l.title, price: l.price }); else setLine(i, { qty: l.qty + 1 }); } }, "+")),
           amountView(l, i)),
         // the switch shows on a line the cashier opened (tap its name, like the note) or one already switched on
         flagField && (l.flag || noteLine === i) ? h("button", { type: "button", className: "ap-counter-flag", "aria-pressed": l.flag ? "true" : "false",

@@ -24,10 +24,10 @@ counter:
     line: {item: menu, qty: qty, price: rate, note: note, amount: amount, flag: is_gift}
     total: grand_total
     change: change_amount
-    summary: [grand_total]
-    checkout: [member, promo, {field: promo_menu, filter: "active == true"}]
+    summary: [subtotal, service_charge, pbjt, rounding, grand_total]
+    checkout: [order_type, member, promo, {field: promo_menu, filter: "active == true"}]
     set: {date: "today()", sold_at: "now()"}
-  payments: {table: payments, method: method, amount: amount, methods: [cash, qris]}
+  payments: {table: payments, method: method, amount: amount, party: party, parties: parties, methods: [cash, qris]}
   session:
     model: sesi_kasir
     link: shift

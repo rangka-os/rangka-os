@@ -3524,6 +3524,8 @@ def check_screen_counter(rep, p, b, visible, prints):
             method = slot_field(rep, p, "counter/payments/method", pn, pf, pay.get("method"))
             slot_field(rep, p, "counter/payments/amount", pn, pf, pay.get("amount"), NUMERIC_KINDS)
             slot_field(rep, p, "counter/payments/ref", pn, pf, pay.get("ref"))
+            slot_field(rep, p, "counter/payments/party", pn, pf, pay.get("party"), NUMERIC_KINDS)
+            slot_field(rep, p, "counter/payments/parties", dn, df, pay.get("parties"), NUMERIC_KINDS)
             if method is not None and method.get("type") == "select":
                 opts = option_values(method)
                 for i, x in enumerate(pay.get("methods") if isinstance(pay.get("methods"), list) else []):

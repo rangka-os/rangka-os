@@ -476,6 +476,22 @@
      "type": "currency"
     },
     {
+     "name": "service_pct",
+     "type": "float"
+    },
+    {
+     "name": "pbjt_pct",
+     "type": "float"
+    },
+    {
+     "name": "rounding_unit",
+     "type": "select"
+    },
+    {
+     "name": "rounding_mode",
+     "type": "select"
+    },
+    {
      "name": "wa_orders",
      "type": "check"
     },
@@ -536,6 +552,11 @@
     {
      "name": "ref",
      "type": "data"
+    },
+    {
+     "default": "1",
+     "name": "party",
+     "type": "int"
     }
    ],
    "is_child": true,
@@ -612,6 +633,60 @@
      "type": "data"
     },
     {
+     "default": "'takeaway'",
+     "name": "order_type",
+     "options": [
+      {
+       "value": "dine_in"
+      },
+      {
+       "value": "takeaway"
+      },
+      {
+       "value": "online"
+      }
+     ],
+     "type": "select"
+    },
+    {
+     "compute": "outlet.service_pct",
+     "name": "service_pct",
+     "type": "float"
+    },
+    {
+     "compute": "outlet.pbjt_pct",
+     "name": "pbjt_pct",
+     "type": "float"
+    },
+    {
+     "compute": "int(outlet.rounding_unit)",
+     "name": "rounding_unit",
+     "type": "int"
+    },
+    {
+     "compute": "outlet.rounding_mode",
+     "name": "rounding_mode",
+     "type": "data"
+    },
+    {
+     "default": "1",
+     "name": "parties",
+     "type": "int"
+    },
+    {
+     "default": "'equal'",
+     "name": "split_mode",
+     "options": [
+      {
+       "value": "equal"
+      },
+      {
+       "value": "amount"
+      }
+     ],
+     "type": "select"
+    },
+    {
      "name": "items",
      "of": "pos_sale_item",
      "type": "table"
@@ -672,7 +747,7 @@
      "type": "currency"
     },
     {
-     "compute": "!app_installed('loyalty') || member == '' || member.earn_spend \u003c= 0 || grand_total \u003c= 0 ? 0 : int(grand_total * member.earn_multiplier_pct / (member.earn_spend * 100))",
+     "compute": "!app_installed('loyalty') || member == '' || member.earn_spend \u003c= 0 || grand_total - service_charge - pbjt - rounding \u003c= 0 ? 0 : int((grand_total - service_charge - pbjt - rounding) * member.earn_multiplier_pct / (member.earn_spend * 100))",
      "name": "points_earned",
      "type": "int"
     },
@@ -713,6 +788,31 @@
     },
     {
      "compute": "subtotal - bill_promo - member_discount - points_discount - discount_amount",
+     "name": "net_before_charges",
+     "type": "currency"
+    },
+    {
+     "compute": "order_type == 'dine_in' ? round(net_before_charges * service_pct / 100) : 0",
+     "name": "service_charge",
+     "type": "currency"
+    },
+    {
+     "compute": "round((net_before_charges + service_charge) * pbjt_pct / 100)",
+     "name": "pbjt",
+     "type": "currency"
+    },
+    {
+     "compute": "net_before_charges + service_charge + pbjt",
+     "name": "raw_total",
+     "type": "currency"
+    },
+    {
+     "compute": "rounding_unit \u003c= 0 ? 0 : (rounding_mode == 'down' ? int(raw_total / rounding_unit) * rounding_unit : round(raw_total * 1.0 / rounding_unit) * rounding_unit) - raw_total",
+     "name": "rounding",
+     "type": "currency"
+    },
+    {
+     "compute": "raw_total + rounding",
      "name": "grand_total",
      "type": "currency"
     },
@@ -747,6 +847,16 @@
      "type": "currency"
     },
     {
+     "compute": "parties \u003c= 1 ? amount_due : int(amount_due / parties)",
+     "name": "party_share",
+     "type": "currency"
+    },
+    {
+     "compute": "parties \u003c= 1 ? amount_due : amount_due - (parties - 1) * party_share",
+     "name": "party_first_share",
+     "type": "currency"
+    },
+    {
      "compute": "amount_due == 0 \u0026\u0026 deposit_used \u003e 0 ? 'deposit' : (qris_amount == 0 ? 'cash' : (qris_amount \u003e= amount_due ? 'qris' : 'split'))",
      "name": "method",
      "options": [
@@ -775,12 +885,12 @@
      "type": "currency"
     },
     {
-     "compute": "tax.pkp ? round(grand_total * tax.ppn_rate * tax.dpp_num / (100 * tax.dpp_den + tax.ppn_rate * tax.dpp_num)) : 0",
+     "compute": "tax.pkp \u0026\u0026 pbjt_pct \u003c= 0 ? round(grand_total * tax.ppn_rate * tax.dpp_num / (100 * tax.dpp_den + tax.ppn_rate * tax.dpp_num)) : 0",
      "name": "ppn_in_sales",
      "type": "currency"
     },
     {
-     "compute": "round((grand_total - ppn_in_sales) * 5 / 1000)",
+     "compute": "round((grand_total - pbjt - ppn_in_sales) * 5 / 1000)",
      "name": "pph_final",
      "type": "currency"
     }
@@ -984,6 +1094,18 @@
     },
     {
      "name": "qris_total",
+     "type": "currency"
+    },
+    {
+     "name": "service_total",
+     "type": "currency"
+    },
+    {
+     "name": "pbjt_total",
+     "type": "currency"
+    },
+    {
+     "name": "rounding_total",
      "type": "currency"
     },
     {
@@ -1256,6 +1378,20 @@
     "name": "GULA",
     "rate": 17250,
     "stock_uom": "Kg"
+   },
+   {
+    "category": "MAKANAN",
+    "item_name": "Paket nasi",
+    "name": "PAKET",
+    "rate": 100000,
+    "stock_uom": "Porsi"
+   },
+   {
+    "category": "MAKANAN",
+    "item_name": "Paket ganjil",
+    "name": "GANJIL",
+    "rate": 100001,
+    "stock_uom": "Porsi"
    }
   ],
   "loyalty_account": [
@@ -1290,7 +1426,47 @@
    {
     "code": "BTR",
     "location_type": "store",
-    "name": "OUT-01"
+    "name": "OUT-01",
+    "pbjt_pct": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": "100",
+    "service_pct": 0
+   },
+   {
+    "code": "RST",
+    "location_type": "store",
+    "name": "OUT-02",
+    "pbjt_pct": 10,
+    "rounding_mode": "nearest",
+    "rounding_unit": "100",
+    "service_pct": 5
+   },
+   {
+    "code": "RDN",
+    "location_type": "store",
+    "name": "OUT-03",
+    "pbjt_pct": 10,
+    "rounding_mode": "down",
+    "rounding_unit": "500",
+    "service_pct": 5
+   },
+   {
+    "code": "RK",
+    "location_type": "store",
+    "name": "OUT-04",
+    "pbjt_pct": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": "1000",
+    "service_pct": 0
+   },
+   {
+    "code": "RZ",
+    "location_type": "store",
+    "name": "OUT-05",
+    "pbjt_pct": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": "0",
+    "service_pct": 0
    }
   ],
   "pos_shift": [
@@ -1298,6 +1474,30 @@
     "cashier": "kasir@contoh.id",
     "name": "SESI-BTR-K1-2611-0001",
     "outlet": "OUT-01",
+    "state": "open"
+   },
+   {
+    "cashier": "kasir@contoh.id",
+    "name": "SESI-RST-K1-2611-0001",
+    "outlet": "OUT-02",
+    "state": "open"
+   },
+   {
+    "cashier": "kasir@contoh.id",
+    "name": "SESI-RDN-K1-2611-0001",
+    "outlet": "OUT-03",
+    "state": "open"
+   },
+   {
+    "cashier": "kasir@contoh.id",
+    "name": "SESI-RK-K1-2611-0001",
+    "outlet": "OUT-04",
+    "state": "open"
+   },
+   {
+    "cashier": "kasir@contoh.id",
+    "name": "SESI-RZ-K1-2611-0001",
+    "outlet": "OUT-05",
     "state": "open"
    }
   ],
@@ -1425,16 +1625,16 @@
     "shift": "SESI-BTR-K1-2611-0001"
    },
    "want": {
-    "amount_due": 39333,
+    "amount_due": 39300,
     "bill_promo": 0,
     "bill_promo_offer": 0,
-    "cash_amount": 39333,
-    "cash_received": 39333,
+    "cash_amount": 39300,
+    "cash_received": 39300,
     "change_amount": 0,
     "deposit_left": 0,
     "discount_total": 0,
     "gift_value": 0,
-    "grand_total": 39333,
+    "grand_total": 39300,
     "gross_total": 39333,
     "items": [
      {
@@ -1480,20 +1680,31 @@
     ],
     "line_promo_total": 0,
     "manual_discount_total": 0,
-    "margin": 39333,
+    "margin": 39300,
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 39333,
+    "party_first_share": 39300,
+    "party_share": 39300,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
     "points_left": 0,
     "pph_final": 177,
-    "ppn_in_sales": 3898,
+    "ppn_in_sales": 3895,
     "promo_name": "",
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 39333,
+    "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 39333,
     "wa_number": ""
    }
@@ -1576,6 +1787,11 @@
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 48400,
+    "party_first_share": 48400,
+    "party_share": 48400,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -1586,6 +1802,12 @@
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 48400,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 50900,
     "wa_number": ""
    }
@@ -1614,16 +1836,16 @@
     "shift": "SESI-BTR-K1-2611-0001"
    },
    "want": {
-    "amount_due": 269367,
+    "amount_due": 269400,
     "bill_promo": 0,
     "bill_promo_offer": 0,
-    "cash_amount": 269367,
-    "cash_received": 269367,
+    "cash_amount": 269400,
+    "cash_received": 269400,
     "change_amount": 0,
     "deposit_left": 0,
     "discount_total": 12000,
     "gift_value": 0,
-    "grand_total": 269367,
+    "grand_total": 269400,
     "gross_total": 281367,
     "items": [
      {
@@ -1689,20 +1911,31 @@
     ],
     "line_promo_total": 12000,
     "manual_discount_total": 0,
-    "margin": 269367,
+    "margin": 269400,
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 269367,
+    "party_first_share": 269400,
+    "party_share": 269400,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
     "points_left": 0,
-    "pph_final": 1213,
-    "ppn_in_sales": 26694,
+    "pph_final": 1214,
+    "ppn_in_sales": 26697,
     "promo_name": "",
     "promo_shortfall": 0,
     "promo_total": 12000,
     "qris_amount": 0,
+    "raw_total": 269367,
+    "rounding": 33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 269367,
     "wa_number": ""
    }
@@ -1831,6 +2064,11 @@
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 141700,
+    "party_first_share": 141700,
+    "party_share": 141700,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -1841,6 +2079,12 @@
     "promo_shortfall": 0,
     "promo_total": 70800,
     "qris_amount": 0,
+    "raw_total": 141700,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 141700,
     "wa_number": ""
    }
@@ -1898,6 +2142,11 @@
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 165000,
+    "party_first_share": 165000,
+    "party_share": 165000,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -1908,6 +2157,12 @@
     "promo_shortfall": 0,
     "promo_total": 15000,
     "qris_amount": 0,
+    "raw_total": 165000,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 180000,
     "wa_number": ""
    }
@@ -1965,6 +2220,11 @@
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 36000,
+    "party_first_share": 36000,
+    "party_share": 36000,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -1975,6 +2235,12 @@
     "promo_shortfall": 14000,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 36000,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 36000,
     "wa_number": ""
    }
@@ -1998,16 +2264,16 @@
     "shift": "SESI-BTR-K1-2611-0001"
    },
    "want": {
-    "amount_due": 19733,
+    "amount_due": 19700,
     "bill_promo": 1600,
     "bill_promo_offer": 1600,
-    "cash_amount": 19733,
-    "cash_received": 19733,
+    "cash_amount": 19700,
+    "cash_received": 19700,
     "change_amount": 0,
     "deposit_left": 0,
     "discount_total": 1600,
     "gift_value": 0,
-    "grand_total": 19733,
+    "grand_total": 19700,
     "gross_total": 21333,
     "items": [
      {
@@ -2053,20 +2319,31 @@
     ],
     "line_promo_total": 0,
     "manual_discount_total": 0,
-    "margin": 19733,
+    "margin": 19700,
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 19733,
+    "party_first_share": 19700,
+    "party_share": 19700,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
     "points_left": 0,
     "pph_final": 89,
-    "ppn_in_sales": 1956,
+    "ppn_in_sales": 1952,
     "promo_name": "Voucher 7.5%",
     "promo_shortfall": 0,
     "promo_total": 1600,
     "qris_amount": 0,
+    "raw_total": 19733,
+    "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 21333,
     "wa_number": ""
    }
@@ -2125,6 +2402,11 @@
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 18000,
+    "party_first_share": 18000,
+    "party_share": 18000,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2135,6 +2417,12 @@
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 18000,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 18000,
     "wa_number": ""
    }
@@ -2192,6 +2480,11 @@
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 88000,
+    "party_first_share": 88000,
+    "party_share": 88000,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2202,6 +2495,12 @@
     "promo_shortfall": 0,
     "promo_total": 20000,
     "qris_amount": 0,
+    "raw_total": 88000,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 108000,
     "wa_number": ""
    }
@@ -2259,6 +2558,11 @@
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 18000,
+    "party_first_share": 18000,
+    "party_share": 18000,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2269,6 +2573,12 @@
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 18000,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 18000,
     "wa_number": ""
    }
@@ -2351,6 +2661,11 @@
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 54000,
+    "party_first_share": 54000,
+    "party_share": 54000,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -2361,6 +2676,12 @@
     "promo_shortfall": 0,
     "promo_total": 8000,
     "qris_amount": 0,
+    "raw_total": 54000,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 54000,
     "wa_number": ""
    }
@@ -2419,6 +2740,11 @@
     "member_discount": 9000,
     "member_discount_offer": 9000,
     "method": "cash",
+    "net_before_charges": 63000,
+    "party_first_share": 63000,
+    "party_share": 63000,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 12600,
     "points_discount": 0,
     "points_earned": 0,
@@ -2429,6 +2755,12 @@
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 63000,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 72000,
     "wa_number": ""
    }
@@ -2487,6 +2819,11 @@
     "member_discount": 0,
     "member_discount_offer": 3600,
     "method": "cash",
+    "net_before_charges": 64800,
+    "party_first_share": 64800,
+    "party_share": 64800,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 32400,
     "points_discount": 0,
     "points_earned": 9,
@@ -2497,6 +2834,12 @@
     "promo_shortfall": 0,
     "promo_total": 7200,
     "qris_amount": 0,
+    "raw_total": 64800,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 72000,
     "wa_number": ""
    }
@@ -2531,16 +2874,16 @@
     "shift": "SESI-BTR-K1-2611-0001"
    },
    "want": {
-    "amount_due": 28460,
+    "amount_due": 28500,
     "bill_promo": 0,
     "bill_promo_offer": 0,
-    "cash_amount": 18460,
+    "cash_amount": 18500,
     "cash_received": 50000,
-    "change_amount": 31540,
+    "change_amount": 31500,
     "deposit_left": 55000,
     "discount_total": 21540,
     "gift_value": 0,
-    "grand_total": 48460,
+    "grand_total": 48500,
     "gross_total": 70000,
     "items": [
      {
@@ -2586,24 +2929,35 @@
     ],
     "line_promo_total": 3200,
     "manual_discount_total": 0,
-    "margin": 48460,
+    "margin": 48500,
     "member_discount": 3340,
     "member_discount_offer": 3340,
     "method": "split",
+    "net_before_charges": 48460,
+    "party_first_share": 28500,
+    "party_share": 28500,
     "payments": [
      {},
      {}
     ],
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 31730,
     "points_discount": 15000,
     "points_earned": 7,
     "points_left": 277,
     "pph_final": 218,
-    "ppn_in_sales": 4802,
+    "ppn_in_sales": 4806,
     "promo_name": "",
     "promo_shortfall": 0,
     "promo_total": 3200,
     "qris_amount": 10000,
+    "raw_total": 48460,
+    "rounding": 40,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 66800,
     "wa_number": ""
    }
@@ -2662,6 +3016,11 @@
     "member_discount": 900,
     "member_discount_offer": 900,
     "method": "deposit",
+    "net_before_charges": 17100,
+    "party_first_share": 0,
+    "party_share": 0,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 8550,
     "points_discount": 0,
     "points_earned": 2,
@@ -2672,6 +3031,12 @@
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 17100,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 18000,
     "wa_number": ""
    }
@@ -2730,6 +3095,11 @@
     "member_discount": 1800,
     "member_discount_offer": 1800,
     "method": "cash",
+    "net_before_charges": -5800,
+    "party_first_share": -5800,
+    "party_share": -5800,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 17100,
     "points_discount": 40000,
     "points_earned": 0,
@@ -2740,6 +3110,12 @@
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": -5800,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 36000,
     "wa_number": ""
    }
@@ -2759,16 +3135,16 @@
     "wa_receipt": true
    },
    "want": {
-    "amount_due": 3333,
+    "amount_due": 3300,
     "bill_promo": 0,
     "bill_promo_offer": 0,
-    "cash_amount": 3333,
-    "cash_received": 3333,
+    "cash_amount": 3300,
+    "cash_received": 3300,
     "change_amount": 0,
     "deposit_left": 0,
     "discount_total": 0,
     "gift_value": 0,
-    "grand_total": 3333,
+    "grand_total": 3300,
     "gross_total": 3333,
     "items": [
      {
@@ -2794,20 +3170,31 @@
     ],
     "line_promo_total": 0,
     "manual_discount_total": 0,
-    "margin": 3333,
+    "margin": 3300,
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 3333,
+    "party_first_share": 3300,
+    "party_share": 3300,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
     "points_left": 0,
     "pph_final": 15,
-    "ppn_in_sales": 330,
+    "ppn_in_sales": 327,
     "promo_name": "",
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 3333,
+    "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 3333,
     "wa_number": "6281234567890"
    }
@@ -2826,16 +3213,16 @@
     "wa_phone": "+62 (812) 3456.7890"
    },
    "want": {
-    "amount_due": 3333,
+    "amount_due": 3300,
     "bill_promo": 0,
     "bill_promo_offer": 0,
-    "cash_amount": 3333,
-    "cash_received": 3333,
+    "cash_amount": 3300,
+    "cash_received": 3300,
     "change_amount": 0,
     "deposit_left": 0,
     "discount_total": 0,
     "gift_value": 0,
-    "grand_total": 3333,
+    "grand_total": 3300,
     "gross_total": 3333,
     "items": [
      {
@@ -2861,20 +3248,31 @@
     ],
     "line_promo_total": 0,
     "manual_discount_total": 0,
-    "margin": 3333,
+    "margin": 3300,
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 3333,
+    "party_first_share": 3300,
+    "party_share": 3300,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
     "points_left": 0,
     "pph_final": 15,
-    "ppn_in_sales": 330,
+    "ppn_in_sales": 327,
     "promo_name": "",
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 3333,
+    "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 3333,
     "wa_number": "6281234567890"
    }
@@ -2893,16 +3291,16 @@
     "wa_phone": "12"
    },
    "want": {
-    "amount_due": 3333,
+    "amount_due": 3300,
     "bill_promo": 0,
     "bill_promo_offer": 0,
-    "cash_amount": 3333,
-    "cash_received": 3333,
+    "cash_amount": 3300,
+    "cash_received": 3300,
     "change_amount": 0,
     "deposit_left": 0,
     "discount_total": 0,
     "gift_value": 0,
-    "grand_total": 3333,
+    "grand_total": 3300,
     "gross_total": 3333,
     "items": [
      {
@@ -2928,20 +3326,31 @@
     ],
     "line_promo_total": 0,
     "manual_discount_total": 0,
-    "margin": 3333,
+    "margin": 3300,
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 3333,
+    "party_first_share": 3300,
+    "party_share": 3300,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
     "points_left": 0,
     "pph_final": 15,
-    "ppn_in_sales": 330,
+    "ppn_in_sales": 327,
     "promo_name": "",
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 3333,
+    "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 3333,
     "wa_number": ""
    }
@@ -3035,9 +3444,14 @@
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 30800,
+    "party_first_share": 30800,
+    "party_share": 30800,
     "payments": [
      {}
     ],
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
@@ -3048,6 +3462,12 @@
     "promo_shortfall": 0,
     "promo_total": 3200,
     "qris_amount": 0,
+    "raw_total": 30800,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 30800,
     "wa_number": ""
    }
@@ -3070,16 +3490,16 @@
     "shift": "SESI-BTR-K1-2611-0001"
    },
    "want": {
-    "amount_due": 7225,
+    "amount_due": 7200,
     "bill_promo": 0,
     "bill_promo_offer": 0,
-    "cash_amount": 7225,
-    "cash_received": 7225,
+    "cash_amount": 7200,
+    "cash_received": 7200,
     "change_amount": 0,
     "deposit_left": 0,
     "discount_total": 2775,
     "gift_value": 0,
-    "grand_total": 7225,
+    "grand_total": 7200,
     "gross_total": 10000,
     "items": [
      {
@@ -3125,21 +3545,626 @@
     ],
     "line_promo_total": 0,
     "manual_discount_total": 2775,
-    "margin": 7225,
+    "margin": 7200,
     "member_discount": 0,
     "member_discount_offer": 0,
     "method": "cash",
+    "net_before_charges": 7225,
+    "party_first_share": 7200,
+    "party_share": 7200,
+    "pbjt": 0,
+    "pbjt_pct": 0,
     "points_cap": 0,
     "points_discount": 0,
     "points_earned": 0,
     "points_left": 0,
-    "pph_final": 33,
-    "ppn_in_sales": 716,
+    "pph_final": 32,
+    "ppn_in_sales": 714,
     "promo_name": "",
     "promo_shortfall": 0,
     "promo_total": 0,
     "qris_amount": 0,
+    "raw_total": 7225,
+    "rounding": -25,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
     "subtotal": 7225,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "dine-in 5% service and 10% PBJT, no PPN (115.500)",
+   "sale": {
+    "date": "2026-11-21",
+    "items": [
+     {
+      "item": "PAKET",
+      "qty": 1
+     }
+    ],
+    "order_type": "dine_in",
+    "outlet": "OUT-02",
+    "shift": "SESI-RST-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": 115500,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": 115500,
+    "cash_received": 115500,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 0,
+    "gift_value": 0,
+    "grand_total": 115500,
+    "gross_total": 100000,
+    "items": [
+     {
+      "amount": 100000,
+      "category": "MAKANAN",
+      "gross": 100000,
+      "packing_item": "PAKET",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 100000,
+      "stock_qty": 1,
+      "uom": "Porsi",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 0,
+    "margin": 115500,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": 100000,
+    "party_first_share": 115500,
+    "party_share": 115500,
+    "pbjt": 10500,
+    "pbjt_pct": 10,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": 525,
+    "ppn_in_sales": 0,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": 115500,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 5000,
+    "service_pct": 5,
+    "subtotal": 100000,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "takeaway: no service charge, PBJT only",
+   "sale": {
+    "date": "2026-11-21",
+    "items": [
+     {
+      "item": "PAKET",
+      "qty": 1
+     }
+    ],
+    "order_type": "takeaway",
+    "outlet": "OUT-02",
+    "shift": "SESI-RST-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": 110000,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": 110000,
+    "cash_received": 110000,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 0,
+    "gift_value": 0,
+    "grand_total": 110000,
+    "gross_total": 100000,
+    "items": [
+     {
+      "amount": 100000,
+      "category": "MAKANAN",
+      "gross": 100000,
+      "packing_item": "PAKET",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 100000,
+      "stock_qty": 1,
+      "uom": "Porsi",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 0,
+    "margin": 110000,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": 100000,
+    "party_first_share": 110000,
+    "party_share": 110000,
+    "pbjt": 10000,
+    "pbjt_pct": 10,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": 500,
+    "ppn_in_sales": 0,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": 110000,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 5,
+    "subtotal": 100000,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "dine-in rounded down at Rp 500",
+   "sale": {
+    "date": "2026-11-21",
+    "items": [
+     {
+      "item": "GANJIL",
+      "qty": 1
+     }
+    ],
+    "order_type": "dine_in",
+    "outlet": "OUT-03",
+    "shift": "SESI-RDN-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": 115500,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": 115500,
+    "cash_received": 115500,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 0,
+    "gift_value": 0,
+    "grand_total": 115500,
+    "gross_total": 100001,
+    "items": [
+     {
+      "amount": 100001,
+      "category": "MAKANAN",
+      "gross": 100001,
+      "packing_item": "GANJIL",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 100001,
+      "stock_qty": 1,
+      "uom": "Porsi",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 0,
+    "margin": 115500,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": 100001,
+    "party_first_share": 115500,
+    "party_share": 115500,
+    "pbjt": 10500,
+    "pbjt_pct": 10,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": 525,
+    "ppn_in_sales": 0,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": 115501,
+    "rounding": -1,
+    "rounding_mode": "down",
+    "rounding_unit": 500,
+    "service_charge": 5000,
+    "service_pct": 5,
+    "subtotal": 100001,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "rounding nearest at Rp 1.000",
+   "sale": {
+    "date": "2026-11-21",
+    "items": [
+     {
+      "item": "PAKET",
+      "qty": 1
+     },
+     {
+      "item": "AIR",
+      "qty": 1
+     }
+    ],
+    "outlet": "OUT-04",
+    "shift": "SESI-RK-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": 103000,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": 103000,
+    "cash_received": 103000,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 0,
+    "gift_value": 0,
+    "grand_total": 103000,
+    "gross_total": 103333,
+    "items": [
+     {
+      "amount": 100000,
+      "category": "MAKANAN",
+      "gross": 100000,
+      "packing_item": "PAKET",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 100000,
+      "stock_qty": 1,
+      "uom": "Porsi",
+      "variant_group": ""
+     },
+     {
+      "amount": 3333,
+      "category": "MINUMAN",
+      "gross": 3333,
+      "packing_item": "AIR",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 3333,
+      "stock_qty": 1,
+      "uom": "Botol",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 0,
+    "margin": 103000,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": 103333,
+    "party_first_share": 103000,
+    "party_share": 103000,
+    "pbjt": 0,
+    "pbjt_pct": 0,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": 464,
+    "ppn_in_sales": 10207,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": 103333,
+    "rounding": -333,
+    "rounding_mode": "nearest",
+    "rounding_unit": 1000,
+    "service_charge": 0,
+    "service_pct": 0,
+    "subtotal": 103333,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "split bill in 3 equal parts of Rp 100.001 (no rounding)",
+   "sale": {
+    "date": "2026-11-21",
+    "items": [
+     {
+      "item": "GANJIL",
+      "qty": 1
+     }
+    ],
+    "outlet": "OUT-05",
+    "parties": 3,
+    "shift": "SESI-RZ-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": 100001,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": 100001,
+    "cash_received": 100001,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 0,
+    "gift_value": 0,
+    "grand_total": 100001,
+    "gross_total": 100001,
+    "items": [
+     {
+      "amount": 100001,
+      "category": "MAKANAN",
+      "gross": 100001,
+      "packing_item": "GANJIL",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 100001,
+      "stock_qty": 1,
+      "uom": "Porsi",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 0,
+    "margin": 100001,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": 100001,
+    "party_first_share": 33335,
+    "party_share": 33333,
+    "pbjt": 0,
+    "pbjt_pct": 0,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": 450,
+    "ppn_in_sales": 9910,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": 100001,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 0,
+    "service_charge": 0,
+    "service_pct": 0,
+    "subtotal": 100001,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "negative half at Rp 100 nearest: -115.5 steps to -115 on both sides (audit F7)",
+   "installed": [],
+   "tax": {
+    "dpp_den": 12,
+    "dpp_num": 11,
+    "pkp": false,
+    "ppn_fee_only": false,
+    "ppn_rate": 12
+   },
+   "sale": {
+    "date": "2026-11-21",
+    "discount_amount": 110500,
+    "items": [
+     {
+      "item": "PAKET",
+      "qty": 1
+     }
+    ],
+    "order_type": "takeaway",
+    "outlet": "OUT-02",
+    "shift": "SESI-RST-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": -11500,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": -11500,
+    "cash_received": -11500,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 110500,
+    "gift_value": 0,
+    "grand_total": -11500,
+    "gross_total": 100000,
+    "items": [
+     {
+      "amount": 100000,
+      "category": "MAKANAN",
+      "gross": 100000,
+      "packing_item": "PAKET",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 100000,
+      "stock_qty": 1,
+      "uom": "Porsi",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 110500,
+    "margin": -11500,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": -10500,
+    "party_first_share": -11500,
+    "party_share": -11500,
+    "pbjt": -1050,
+    "pbjt_pct": 10,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": -52,
+    "ppn_in_sales": 0,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": -11550,
+    "rounding": 50,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 5,
+    "subtotal": 100000,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "negative half PPh final: round(-52.5) is -52 on both sides (audit F7)",
+   "installed": [],
+   "tax": {
+    "dpp_den": 12,
+    "dpp_num": 11,
+    "pkp": false,
+    "ppn_fee_only": false,
+    "ppn_rate": 12
+   },
+   "sale": {
+    "date": "2026-11-21",
+    "discount_amount": 110500,
+    "items": [
+     {
+      "item": "PAKET",
+      "qty": 1
+     }
+    ],
+    "order_type": "takeaway",
+    "outlet": "OUT-05",
+    "shift": "SESI-RZ-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": -10500,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": -10500,
+    "cash_received": -10500,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 110500,
+    "gift_value": 0,
+    "grand_total": -10500,
+    "gross_total": 100000,
+    "items": [
+     {
+      "amount": 100000,
+      "category": "MAKANAN",
+      "gross": 100000,
+      "packing_item": "PAKET",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 100000,
+      "stock_qty": 1,
+      "uom": "Porsi",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 110500,
+    "margin": -10500,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": -10500,
+    "party_first_share": -10500,
+    "party_share": -10500,
+    "pbjt": 0,
+    "pbjt_pct": 0,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": -52,
+    "ppn_in_sales": 0,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": -10500,
+    "rounding": 0,
+    "rounding_mode": "nearest",
+    "rounding_unit": 0,
+    "service_charge": 0,
+    "service_pct": 0,
+    "subtotal": 100000,
     "wa_number": ""
    }
   }

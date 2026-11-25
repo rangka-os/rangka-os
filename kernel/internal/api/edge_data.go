@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -53,6 +54,36 @@ type edgePlan struct {
 	roles   []string
 	screens []string
 	sets    []string
+	// outlet fields the counter documents' defaults and computes read through their outlet link (a sale's
+	// outlet.pbjt_pct): edge config carries them so an offline device computes the kernel's totals
+	outletFields []string
+}
+
+// addOutletFields notes the outlet fields that model (and its child tables) reads in a default or compute through a
+// link to outlet, e.g. outlet.service_pct on a sale (rangka-apps#121 audit F3).
+func (p *edgePlan) addOutletFields(reg *meta.Registry, model string) {
+	m := reg.Model(model)
+	if m == nil {
+		return
+	}
+	links := map[string]bool{}
+	for _, f := range m.Fields {
+		if f.Type == "link" && f.To == "outlet" {
+			links[f.Name] = true
+		}
+	}
+	for _, f := range m.Fields {
+		if f.Type == "table" && f.Of != model {
+			p.addOutletFields(reg, f.Of)
+		}
+		for _, src := range []string{f.Default, f.Compute} {
+			for _, r := range cel.Idents(src) {
+				if r.Kind == "ref" && links[r.Head] && r.Member != "" && !slices.Contains(p.outletFields, r.Member) {
+					p.outletFields = append(p.outletFields, r.Member)
+				}
+			}
+		}
+	}
 }
 
 // edgeStaffRoles lists the roles of the outlet's members that may use a PIN, sorted.
@@ -121,6 +152,8 @@ func (s *Server) edgePlan(ctx context.Context, d *auth.Device) (*edgePlan, error
 		// the records a checkout link field picks (contract 0069 §4: a promotion, a customer), so the device computes
 		// the same totals offline; a data field (a coupon code) needs the connection
 		doc := mapOf(b["document"])
+		p.addOutletFields(reg, str(doc["model"]))
+		p.addOutletFields(reg, str(mapOf(b["session"])["model"]))
 		if dm := reg.Model(str(doc["model"])); dm != nil {
 			for _, x := range asAnyList(doc["checkout"]) {
 				if o := mapOf(x); o != nil {
@@ -176,6 +209,11 @@ func (s *Server) edgeConfig(w http.ResponseWriter, r *http.Request, d *auth.Devi
 			}
 			if t := s.Engine.Title(ctx, sys, "outlet", rec, 0); t != "" {
 				outlet["name"] = t
+			}
+			for _, f := range p.outletFields {
+				if _, set := outlet[f]; !set && rec[f] != nil {
+					outlet[f] = rec[f]
+				}
 			}
 		}
 	}

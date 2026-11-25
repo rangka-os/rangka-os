@@ -9,6 +9,8 @@ fields:
   - {name: shift, type: link, to: sesi_kasir, label: {id: Sesi}, required: true}
   - {name: outlet, type: link, to: outlet, label: {id: Outlet}, required: true, in_list: true}
   - {name: date, type: date, label: {id: Tanggal}, default: today()}
+  # a rate copied from the outlet: edge config carries outlet.service_pct to the device (rangka-apps#121 audit F3)
+  - {name: service_pct, type: float, label: {id: Service charge (%)}, default: outlet.service_pct, hidden: true}
   - {name: sold_at, type: datetime, label: {id: Waktu jual}}
   - {name: buyer, type: data, label: {id: Pembeli}}
   - {name: items, type: table, of: penjualan_baris, label: {id: Barang}, min_rows: 1}

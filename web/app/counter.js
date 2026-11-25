@@ -107,12 +107,39 @@
     });
     if (slots.payments && pay) {
       var rows = [];
-      [["qris", pay.qris], ["cash", pay.cash]].forEach(function (x) {
-        if (Number(x[1]) > 0) { var r = {}; r[slots.payments.method] = x[0]; r[slots.payments.amount] = Number(x[1]); rows.push(r); }
-      });
+      if (pay.parts && slots.payments.party) { // a split bill: one set of rows per part, each row names its part
+        pay.parts.forEach(function (pt, i) {
+          [["qris", pt.qris], ["cash", pt.cash]].forEach(function (x) {
+            if (Number(x[1]) > 0) { var r = {}; r[slots.payments.method] = x[0]; r[slots.payments.amount] = Number(x[1]); r[slots.payments.party] = i + 1; rows.push(r); }
+          });
+        });
+        if (slots.payments.parties) body[slots.payments.parties] = pay.parts.length;
+      } else {
+        [["qris", pay.qris], ["cash", pay.cash]].forEach(function (x) {
+          if (Number(x[1]) > 0) { var r = {}; r[slots.payments.method] = x[0]; r[slots.payments.amount] = Number(x[1]); rows.push(r); }
+        });
+      }
       body[slots.payments.table] = rows;
     }
     return body;
+  }
+
+  /** The label of a select value (the option's own text), so a folded checkout line never shows the raw value. */
+  function selectLabel(f, v) {
+    var o = (f.options || []).filter(function (x) { return x.value === v; })[0];
+    return o ? L(o.label) : String(v);
+  }
+
+  /** The share of part k (0-based) of a bill split between n people: equal, rounded down, the remainder on part 1
+   *  (the same rule as the model's party_share and party_first_share). */
+  function partShare(total, n, k) {
+    var each = Math.floor(total / n);
+    return k === 0 ? total - (n - 1) * each : each;
+  }
+  /** What part k still owes after its QRIS and cash, and its change (cash beyond the share goes back to that part). */
+  function partState(total, n, k, pt) {
+    var share = partShare(total, n, k), paid = (Number(pt.cash) || 0) + (Number(pt.qris) || 0);
+    return { share: share, short: Math.max(0, share - paid), change: Math.max(0, Math.min(Number(pt.cash) || 0, paid - share)) };
   }
 
   /** The list filter for the caller's open session: the slot's filter AND state == open. */
@@ -706,14 +733,21 @@
       sendingRef.current = true;
       send(jobRef.current.job, jobRef.current.est);
     }
-    function finish(cash, qris) {
+    function finish(cash, qris, parts) {
       if (busy || sendingRef.current) return;
       if (jobRef.current) { resend(); return; } // a pending sale goes again exactly as it was
       var change = changeOf(total, cash, qris);
+      if (parts) { // a split bill: every part must cover its share; the change is the sum of the parts' change
+        var n = parts.length, left = 0;
+        change = 0;
+        parts.forEach(function (pt, k) { var st = partState(total, n, k, pt); left += st.short; change += st.change; });
+        if (left > 0) { setErr("Ada bagian yang bayarnya kurang dari bagiannya."); return; }
+      }
       if (change === null) { setErr("Uang tunai kurang dari yang harus dibayar."); return; }
       sendingRef.current = true;
       setBusy(true); setErr("");
-      var payRows = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
+      var payRows = c.payments ? (parts ? { parts: parts.map(function (pt) { return { cash: Math.max(0, Number(pt.cash) || 0), qris: Number(pt.qris) || 0 }; }) }
+        : { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 }) : null;
       if (devOn) { deviceSale(payRows); return; }
       var est = { total: total, change: change };
       // a new sale takes set: values again (contract 0030 §2: today's date after midnight, audit WS3 M2); offline or
@@ -963,7 +997,7 @@
       h("button", { type: "button", className: "ap-counter-ck-h", "aria-expanded": checkoutOpen ? "true" : "false", disabled: stuck, onClick: function () { setCheckoutOpen(!checkoutOpen); } },
         h(R.Icon, { name: "tag" }), h("span", null, checkoutOpen || !ckFilled.length ? ckTitle : ckFilled.map(function (x) {
           var v = checkout[x.f.name];
-          return x.f.type === "link" && ctx.cache && ctx.cache.title ? ctx.cache.title(x.f.to, v) || v : x.f.type === "check" ? L(x.f.label) : String(v);
+          return x.f.type === "link" && ctx.cache && ctx.cache.title ? ctx.cache.title(x.f.to, v) || v : x.f.type === "check" ? L(x.f.label) : x.f.type === "select" ? selectLabel(x.f, v) : String(v);
         }).join(" · ")), ckFilled.length && !checkoutOpen ? h("b", null, ckFilled.length) : null, h(R.Icon, { name: "down" })),
       checkoutOpen ? h("div", { className: "ap-work-fields ap-counter-ck-f" }, ckFields.map(function (x) {
         return h(RA.FieldEditor, { key: x.f.name, ctx: ctx, model: doc.model, field: x.f, rec: checkout, linkFilter: x.slot.filter, readOnly: stuck,
@@ -983,27 +1017,60 @@
       }) : h("div", { className: "ap-counter-sum-total" }, h("dt", null, isEstimate ? "Total (perkiraan)" : "Total"), h("dd", null, rp(total))),
       fresh && fresh.errors.length ? h("p", { className: "ap-counter-sum-err" }, fresh.errors.filter(function (x) { return x.field !== doc.lines; }).map(function (x) { return x.message; }).join(" · ")) : null) : null;
 
+    // "Bayar terpisah" (rangka-apps#121): one tab per person, each with its own share, QRIS or cash
+    var splitView = function () {
+      var sp = pay.parts, n = sp.length, tab = Math.min(pay.tab || 0, n - 1), pt = sp[tab], st = partState(total, n, tab, pt);
+      var setParts = function (parts, t) { setPay({ parts: parts, tab: t === undefined ? tab : t, cash: 0, qris: 0 }); };
+      var edit = function (k, v) { setParts(sp.map(function (x, i) { return i === tab ? Object.assign({}, x, k) : x; })); };
+      var resize = function (m) { m = Math.max(2, Math.min(20, m)); var parts = []; for (var i = 0; i < m; i++) parts.push(sp[i] || { cash: 0, qris: 0 }); setParts(parts, Math.min(tab, m - 1)); };
+      var left = 0; sp.forEach(function (x, k) { left += partState(total, n, k, x).short; });
+      return h("div", { className: "ap-counter-split" },
+        h("div", { className: "ap-counter-row" },
+          h(R.Button, { disabled: busy || n <= 2, onClick: function () { resize(n - 1); }, "aria-label": "Kurangi orang" }, "-"),
+          h("span", { className: "ap-counter-splitn" }, n + " orang"),
+          h(R.Button, { disabled: busy || n >= 20, onClick: function () { resize(n + 1); }, "aria-label": "Tambah orang" }, "+")),
+        h("div", { className: "ap-counter-tabs", role: "tablist", "aria-label": "Bagian pembayaran" }, sp.map(function (x, k) {
+          return h(R.Button, { key: k, role: "tab", "aria-selected": k === tab ? "true" : "false", variant: k === tab ? "primary" : undefined, disabled: busy,
+            onClick: function () { setParts(sp, k); } }, partState(total, n, k, x).short === 0 ? "Orang " + (k + 1) + " ✓" : "Orang " + (k + 1));
+        })),
+        h("div", { className: "ap-counter-due" }, h("span", null, "Bagian orang " + (tab + 1)), h("b", null, rp(st.share))),
+        h("div", { className: "ap-counter-row" },
+          h(R.Button, { disabled: busy, onClick: function () { edit({ cash: st.share, qris: 0 }); } }, "Uang pas"),
+          c.payments && (c.payments.methods || []).indexOf("qris") >= 0 ? h(R.Button, { icon: "qris", disabled: busy, onClick: function () { edit({ cash: 0, qris: st.share }); } }, "QRIS") : null),
+        h("label", { className: "ap-counter-part" }, "Tunai diterima",
+          h("input", { inputMode: "numeric", "aria-label": "Tunai diterima orang " + (tab + 1), value: pt.cash ? String(pt.cash) : "",
+            onChange: function (e) { edit({ cash: RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0 }); } })),
+        h("div", { className: "ap-counter-due change" }, h("span", null, st.short > 0 ? "Kurang" : "Kembalian"), h("b", null, rp(st.short > 0 ? st.short : st.change))),
+        // shares from an estimate (no service, PBJT or rounding) would undershoot the kernel's party_share (audit F8)
+        h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy || left > 0 || isEstimate, onClick: function () { finish(0, 0, sp); } },
+          isEstimate ? "Menunggu total pasti" : left > 0 ? "Belum lunas: kurang " + rp(left) : "Selesai"));
+    };
+    var splitOn = pay && pay.parts, canSplit = !!(c.payments && c.payments.party && c.payments.parties);
     var tender = stuck ? h("div", { className: "ap-counter-pay", role: "alertdialog", "aria-label": "Belum terkirim" },
       h("div", { className: "ap-work-err" }, "Transaksi ini belum pasti terkirim (koneksi atau server). Keranjang dan pembayaran dikunci; kirim ulang apa adanya, tidak akan tercatat dua kali."),
       h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy, onClick: resend }, "Kirim ulang")) : pay ? h("div", { className: "ap-counter-pay", role: "dialog", "aria-label": "Bayar" },
       h("div", { className: "ap-counter-paytop" },
         h(R.Button, { variant: "quiet", icon: "left", disabled: busy, onClick: function () { setPay(null); } }, "Kembali"),
         h("div", { className: "ap-counter-due big" }, h("span", null, "Yang harus dibayar"), h("b", null, rp(total)))),
-      (c.payments && (c.payments.methods || ["cash"]).indexOf("cash") >= 0) || !c.payments ? h("div", { className: "ap-counter-cash" },
+      canSplit ? h("div", { className: "ap-counter-row" }, h(R.Button, { variant: splitOn ? "primary" : undefined, disabled: busy || (!splitOn && isEstimate),
+        onClick: function () { setPay(splitOn ? { cash: 0, qris: 0 } : { parts: [{ cash: 0, qris: 0 }, { cash: 0, qris: 0 }], tab: 0, cash: 0, qris: 0 }); } }, "Bayar terpisah")) : null,
+      canSplit && isEstimate ? h("p", { className: "ap-counter-hint", role: "note" }, "Total masih perkiraan. Bayar terpisah bisa dipakai setelah total pasti dihitung.") : null,
+      splitOn ? splitView() : null,
+      splitOn ? null : (c.payments && (c.payments.methods || ["cash"]).indexOf("cash") >= 0) || !c.payments ? h("div", { className: "ap-counter-cash" },
         quickCash(Math.max(0, total - (pay.qris || 0))).map(function (a, i) {
           return h(R.Button, { key: a, variant: i === 0 ? "primary" : undefined, disabled: busy, onClick: function () { finish(a, pay.qris); } }, i === 0 ? "Uang pas" : rp(a));
         })) : null,
-      c.payments && (c.payments.methods || []).indexOf("qris") >= 0 ? h("div", { className: "ap-counter-row" },
+      splitOn ? null : c.payments && (c.payments.methods || []).indexOf("qris") >= 0 ? h("div", { className: "ap-counter-row" },
         h(R.Button, { icon: "qris", disabled: busy, onClick: function () { finish(0, total); } }, "QRIS penuh"),
         h("label", { className: "ap-counter-part" }, "QRIS sebagian",
           h("input", { inputMode: "numeric", value: pay.qris ? String(pay.qris) : "", placeholder: "0",
             onChange: function (e) { setPay({ cash: pay.cash, qris: Math.min(total, RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0) }); } }))) : null,
-      h("label", { className: "ap-counter-part" }, "Tunai diterima",
+      splitOn ? null : h("label", { className: "ap-counter-part" }, "Tunai diterima",
         h("input", { inputMode: "numeric", "aria-label": "Tunai diterima", value: pay.cash ? String(pay.cash) : "",
           onChange: function (e) { setPay({ cash: RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0, qris: pay.qris }); } })),
       // the first press replaces the prefilled amount (uang pas), later presses type on
-      h(MoneyPad, { label: "Ketik uang diterima", value: pay.typed ? pay.cash : 0, disabled: busy, onChange: function (v) { setPay({ cash: v, qris: pay.qris, typed: true }); } }),
-      h("div", { className: "ap-counter-paydone" },
+      splitOn ? null : h(MoneyPad, { label: "Ketik uang diterima", value: pay.typed ? pay.cash : 0, disabled: busy, onChange: function (v) { setPay({ cash: v, qris: pay.qris, typed: true }); } }),
+      splitOn ? null : h("div", { className: "ap-counter-paydone" },
         h("div", { className: "ap-counter-due change" }, h("span", null, "Kembalian"),
           h("b", null, changeOf(total, pay.cash, pay.qris) === null ? "kurang " + rp(total - (pay.qris || 0) - pay.cash) : rp(changeOf(total, pay.cash, pay.qris)))),
         h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy, onClick: function () { finish(pay.cash, pay.qris); } }, "Selesai"))) : null;

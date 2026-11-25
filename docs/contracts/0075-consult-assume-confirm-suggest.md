@@ -1,8 +1,9 @@
 # 0075 Consult: assume, confirm, suggest
 
-Status: proposed (24 Nov 2026, Dede: "never like doing some assumptions, asking confirmation, and also suggestions")
+Status: proposed (24 Nov 2026, Dede: "never like doing some assumptions, asking confirmation, and also suggestions";
+§5 added the same day: "shorten them")
 · Owner of the change: rangka-os (this contract, skill `rangka-consult`) · Affects: rangka-ai (`answer_kind`, consult
-prompt), rangka-cloud (private: studio message header) · Builds on 0042 (consultant interview), 0059 (interview
+prompt), rangka-cloud (private: studio message header, profile card name, pains card gate) · Builds on 0042 (consultant interview), 0059 (interview
 answers)
 
 ## Context
@@ -45,6 +46,41 @@ answers)
   0042's "keep asking while the owner keeps answering".
 - On `empty` after an open question, turn it into an assumption instead of asking the same thing again (replaces
   0059 §4 `empty`).
+
+### §4 Two beats to the offer (skill `rangka-consult` §6)
+
+- Replaces 0046's three beats (understand → summary and wait for a yes → offer).
+- Reply 1: react, one suggestion, and a summary of the flow so far with assumptions for the gaps, ending in one
+  confirmation ("Ada yang beda?").
+- The next reply carries the offer as soon as the flow runs from first contact to money in: the summary and the
+  problems in the owner's words plus the `offer` field. No turn waits only for a yes to the summary; corrections come
+  through "Ubah sesuatu" or chat, and a new offer follows.
+- A third reply is only for what changes the design and cannot be assumed.
+- Code is unchanged. `dig_first` (0061) still holds an offer until two answers after the "Kesulitan usaha" card, and a
+  yes to the summary's confirmation counts as one (§1).
+- Measured with the conversation evals (`consult-conversation-*.yaml`, a simulated owner): the replies before the
+  offer, against `offer_within: 5`.
+
+### §5 A shorter start: name on the card, pains card only when needed (amends 0054a §5, 0061 §5)
+
+Run locally on 24 Nov 2026 (the PR stack on a throwaway Cloud), a rental story reached the offer after 7 owner
+actions: the story, a chat question for the business name, the 7-question profile card, the "Kesulitan usaha" card,
+then three chat answers, two of them required by `dig_first`. Only the last three were the interview.
+
+- **The business name is on the profile card**, not a chat question. The card gets an optional "Nama usaha" text
+  field (at most 120 characters), pre-filled from the map when the story named the business. `PUT
+  /api/projects/{id}/business-profile` accepts an optional `business_name` string; Cloud stores it as the map's
+  business name and the `business_name` fact, the places Zafdoz's `business` op and the build read.
+- **Request:** `name_on_card`, boolean, absent = `false`. Cloud sends `true`; Zafdoz then never asks the name in chat
+  (a reply that asks is rewritten like the profile questions of 0054a §2). An older Cloud that does not send it keeps
+  0054a §5's name question.
+- **The pains card only when the story named no problem.** After the profile save, Cloud shows the card only when the
+  map has no pain the owner told in chat (a pain whose id is not `n_pick_…`). Zafdoz digs into the story's problems
+  anyway (0050); the "Masalahmu" panel still lets the owner add picks later.
+- **`dig_first` needs one answer after the card, not two** (rangka-ai `DIG_ANSWERS_BEFORE_OFFER`). A yes to Zafdoz's
+  confirmation of its assumptions about the picks counts.
+- Expected path for a story that names its problems: story → save the profile card (name included) → confirm the
+  assumptions → offer: 3 owner actions.
 
 ### §3 Studio header (rangka-cloud)
 

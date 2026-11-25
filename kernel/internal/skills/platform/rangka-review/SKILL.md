@@ -60,6 +60,11 @@ Each item is a question. A "no" is a finding; section 5 says what to do with it.
   invoices in `invoicing`, payments in `payments`, stock in `stock`)? Then extend it with an overlay
   (`custom/<model>.rk`, `x_` fields) or add the app; never a parallel `x_` copy.
 - Does an installed dashboard, approval or action already do this? Point the owner at it instead of adding one.
+- An existing approval covers the same case with another limit (a discount above 20% when the owner wants 10%):
+  change that policy's limit, never add a second policy beside it (both would fire). The new limit is the owner's
+  number: ask it, then present it as a choice they can change later, in one sentence.
+- When you reuse a list, say so in plain words: "penyewa tetap di daftar pelanggan yang sama yang dipakai untuk sewa
+  dan tagihan".
 
 ### 3.3 Data
 - One fact, one place: no field that copies a customer's name, an item's price or a total that can be linked or
@@ -93,10 +98,15 @@ Each item is a question. A "no" is a finding; section 5 says what to do with it.
 - Personal data (UU PDP): collect only what the process needs; NIK, KTP, salary, health and contact fields carry
   `hidden_for` every role that does not need them, and never appear in a notice (`notice_personal_field`). A photo of
   a KTP is rarely needed when the number is enough. See `rangka-compliance-id`.
+- An identity number (NIK, KTP) reuses the field the customer record already has, or is one `x_` field where the
+  process needs it, with a 16-digit check (`size(x) == 16 && x.matches('^[0-9]+$')`). Tell the owner who can see it,
+  even when the field already exists.
 - Roles, `roles/` files and the permissions of an existing model are refused for you (`ai_forbidden_path`). If the fix
   is there, name the setting and who changes it (the owner or an admin in the Console).
 
 ### 3.7 Owner language
+- Give the owner at most two trade-offs, each one sentence in plain words ("foto KTP lebih aman tidak disimpan;
+  cukup dicatat sudah dicek"), before the details.
 - Titles, reasons, labels, help, options, messages and descriptions in Bahasa Indonesia, sentence case, "kamu".
 - No platform words in anything the owner reads: model, field, flow, CEL, change set, module, `x_` (see
   `rangka-consult` section 7 for the replacements).
@@ -121,7 +131,8 @@ Run before each `offer` (contract 0046), against the map:
 - Every stage has a piece or an honest `open` item; no piece answers nothing.
 - `apps`, `modules`, `connectors` are names from `rangka_catalogue`; custom pieces are `custom`.
 - `raka_does` lists only what the option's flows and connectors really do; `needs_approval` names the money and stock
-  steps in the owner's words.
+  steps in the owner's words. A step through a connector that does not run yet (`connectors_run: false`), such as a WA
+  reminder, is done by a person: leave it out of `raka_does`, and the reply says it is sent manually for now.
 - The recommendation is the first of `custom`, `modules`, `bundle` that covers every stage, with its required
   alternative (`rangka-consult` section 6).
 - Each custom piece will pass section 3 once built: no parallel customer list, money stays computed, personal data

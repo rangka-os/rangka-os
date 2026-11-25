@@ -102,6 +102,8 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
 | --- | --- |
 | `profile_card` | boolean, absent = `false`: Cloud shows the profile card after this reply when the reply asks nothing |
 
+- **Amended by 0075 §5:** when Cloud sends `name_on_card: true` the name is asked on the profile card and never in
+  chat; the rule below holds only for a Cloud that does not.
 - **Business name first.** While the map has no business name and no Zafdoz message in the conversation has asked
   for it (not on a `profile_saved` turn), Zafdoz reacts to the owner's message, puts its map ops as usual, and asks
   one question: "Apa nama usahamu? Kalau sudah ada PT, tulis nama PT-nya." with no `answers`. A story that names the

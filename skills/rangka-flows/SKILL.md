@@ -10,6 +10,15 @@ Everything here reaches the site through a change set (`rangka-changesets`): Zaf
 a person approves. Snippets use schema 0.5 (`schema/0.5/flow.json`, `model.json`, `overlay.json`); every one in
 [references/worked-flows.md](references/worked-flows.md) passes `rangka validate`.
 
+## Before you draft: ask or state
+
+- A money threshold: the amount (the owner's number) and whether it includes PPN (`grand_total`) or not
+  (`net_total`). Say which one you use in the reply.
+- A fine, fee or penalty: the rule (per day, per item, a cap), or show the rule a module already applies and ask
+  whether it fits.
+- An existing approval or flow for the same case: change it, never add a second one.
+- Customers to be messaged: notices reach members only; customer phone numbers never go in a notice.
+
 ## 1. Look before you build
 
 Most things owners ask for already run in a shipped module. Writing a second one makes people hear things twice.
@@ -21,7 +30,8 @@ Most things owners ask for already run in a shipped module. Writing a second one
   office, driven by `item.reorder_level`), `procurement/reorder_draft_po` (draft POs from low stock, never
   submitted), `stock/stock_negative_alert`, `users/summary_daily`.
 - If a shipped flow covers it, say where it is and what data drives it ("isi batas minimum di tiap barang"). Data is
-  entered by people in the app; it is not a change set.
+  entered by people in the app; it is not a change set. Say it "sudah ada" (exists), never "sudah jalan" or "sudah
+  aktif": whether it runs for this business depends on that data and the scheduler, which you have not seen.
 - Check the notification capability before promising a channel: MCP `rangka_system_status`
   (`capabilities.notify`, scheduler and queue state).
 
@@ -90,6 +100,10 @@ approvals:
 ```
 
 - The threshold is the owner's number. Ask it; never pick one. Write rupiah as whole numbers in CEL (`5000000`).
+- Ask, or state in the reply, whether the amount includes PPN: `grand_total` includes it, `net_total` does not. Never
+  pick one silently.
+- An approval policy that already covers the case (a discount limit, a PO limit) is changed, not doubled: patch its
+  `when` in the overlay that holds it, or the owner's overlay of that model; never add a second policy beside it.
 - **An approver who submits approves themself** (recorded, contract 0007). For four eyes, list approver roles the
   preparer does not hold. `owner` can always approve. If nobody holds the role, every request waits for the owner:
   say so.
@@ -109,6 +123,9 @@ approvals:
 | WhatsApp, push, SMS | `channel: whatsapp`/`push` only log today | real WhatsApp needs a connector `call:` (check `rangka_catalogue`, `connectors_run`) |
 | Customer messages | a person sends (print "Pesan tagihan WA") or a connector action | never a notice: notices go to members only |
 
+- When the owner wants customers messaged (WA reminders, tagihan), say plainly: a notice reaches the business's own
+  members only, never customers; customers get a message a person sends or a connector, and customer phone numbers
+  never go in a notice's text. Say both even when the WA route itself is not available.
 - Tell **roles**, not addresses: a literal email in a Zafdoz change set is raised to high (`notice_literal_email`).
 - Give a stable `id:` (`"'telat14:' + inv.name"`) so a retry or a rerun tells nobody twice; `record:` (link and read
   check: `notice_role_cannot_read` if a role may not open it); `outlet:` when it is about one outlet.
@@ -140,6 +157,9 @@ approvals:
   pays. Creating drafts in invoicing, payments or stock, or writing a money or stock field, makes the change set
   high risk (owner only).
 - A submitted document is immutable. Record follow-ups (reminders sent, notes) in another record, not on it.
+- A fine, fee or penalty is a rule the owner sets (per day, per item, a cap), in CEL over stored dates. If a module
+  already computes it, show that rule and where the rate is set, then ask whether it fits; otherwise ask the rule
+  before you draft. Never let the agent or a model decide an amount.
 
 ## 8. Propose it
 

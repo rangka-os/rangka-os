@@ -11,5 +11,6 @@ clock:
   in: {field: clock_in, location: in_pos, photo: in_photo}
   out: {field: clock_out, location: out_pos, photo: out_photo}
   site: {model: lokasi, link: site, title: title, location: pos, radius_m: radius_m}
+  shift: {model: jadwal, filter: "worker == user.email && work_date == today()", start: start_at, end: end_at, title: shift_name, outlet: site, link: jadwal}
   reason: reason
   submit: true

@@ -3265,6 +3265,24 @@ def check_screen_handover(rep, p, b, visible, prints):
     screen_print(rep, p, "handover/print", b.get("print"), mn, prints)
 
 
+def check_screen_clock_shift(rep, p, b, mn, fields, visible):
+    """clock.shift (same checks as screenClockShift in validate_screen_ws.go)."""
+    sh = _d(b.get("shift"))
+    if sh is None:
+        return
+    sn, sm, sf = slot_model(rep, p, "clock/shift/model", sh, visible)
+    if not sn:
+        return
+    parens(rep, p, "clock/shift/filter", sh.get("filter"))
+    slot_field(rep, p, "clock/shift/start", sn, sf, sh.get("start"), ["datetime"])
+    slot_field(rep, p, "clock/shift/end", sn, sf, sh.get("end"), ["datetime"])
+    slot_field(rep, p, "clock/shift/title", sn, sf, sh.get("title"), ["data", "text"])
+    slot_field(rep, p, "clock/shift/outlet", sn, sf, sh.get("outlet"), ["link"])
+    l = slot_field(rep, p, "clock/shift/link", mn, fields, sh.get("link"), ["link"])
+    if l is not None and l.get("to") != sn:
+        rep.add("error", p, "clock/shift/link", "screen_slot_type", f'"{pystr(sh.get("link"))}" links to {l.get("to")}; the shift is {sn}')
+
+
 def check_screen_clock(rep, p, b, visible):
     rec = _d(b.get("record"))
     if rec is None:
@@ -3282,6 +3300,7 @@ def check_screen_clock(rep, p, b, visible):
     slot_field(rep, p, "clock/reason", mn, fields, b.get("reason"), ["data", "text"])
     if b.get("submit") is True and m.get("is_submittable") is not True:
         rep.add("error", p, "clock/submit", "screen_not_submittable", f"{mn} is not submittable; drop submit: true")
+    check_screen_clock_shift(rep, p, b, mn, fields, visible)
     site = _d(b.get("site"))
     if site is not None:
         sn, sm, sf = slot_model(rep, p, "clock/site/model", site, visible)

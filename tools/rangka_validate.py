@@ -2940,6 +2940,37 @@ def check_processes(rep, V, allmodels, only, processes):
                     check_expr(sub, p, f"{at}/when", sm["when"], m, fields, allmodels)
                 if sub.items:
                     rep.add("error", p, f"{at}/when", "process_when", sub.items[0][4])
+        starter = raw["starter"] if isinstance(raw.get("starter"), dict) else {}
+        for mn in sorted(starter):
+            check_starter(rep, p, f"starter/{mn}", starter[mn], mn, allmodels[mn][2] if mn in allmodels else None, allmodels)
+
+
+STARTER_TYPES = {"data", "small_text", "text"}
+
+
+def check_starter(rep, p, at, rows, model, m, allmodels):
+    """A process's starter rows of one model (contract 0076 §4), as processStarter in the kernel: the model exists and
+    is master data (not submittable), and each key is a plain text field of it that is not computed, read-only or
+    hidden from a role. m is None when the model is not known."""
+    if m is None:
+        rep.add("error", p, at, "process_starter_model", f'"{model}" is not a model{suggest(model, sorted(allmodels))}')
+        return
+    if m.get("is_submittable") is True:
+        rep.add("error", p, at, "process_starter_document", f'"{model}" is a document; starter holds master data only')
+        return
+    fields = {f["name"]: f for f in m.get("fields", []) if isinstance(f, dict) and isinstance(f.get("name"), str)}
+    for i, r in enumerate(rows if isinstance(rows, list) else []):
+        for k in sorted(r.keys() if isinstance(r, dict) else []):
+            where = f"{at}/{i}/{k}"
+            f = fields.get(k)
+            if f is None:
+                rep.add("error", p, where, "process_starter_field", f'"{k}" is not a field of {model}{suggest(k, sorted(fields))}')
+                continue
+            hidden = f.get("hidden_for")
+            if (f.get("type") not in STARTER_TYPES or f.get("compute") is not None or f.get("read_only") is True
+                    or (isinstance(hidden, list) and len(hidden) > 0)):
+                rep.add("error", p, where, "process_starter_field",
+                        f'field "{k}" of {model} cannot come from the interview: plain text fields only, not computed, read-only or hidden from a role')
 
 
 SCREEN_TYPES = ["counter", "queue", "roll", "route", "handover", "clock", "entry"]
@@ -3440,6 +3471,10 @@ def check_screen_counter(rep, p, b, visible, prints):
             for i, x in enumerate(cat.get("search") if isinstance(cat.get("search"), list) else []):
                 slot_field(rep, p, f"counter/catalogue/search/{i}", cn, cf, x)
             parens(rep, p, "counter/catalogue/filter", cat.get("filter"))
+            vr = cat.get("variants") if isinstance(cat.get("variants"), dict) else None
+            if vr is not None:
+                for k in ("group", "label", "title"):
+                    slot_field(rep, p, f"counter/catalogue/variants/{k}", cn, cf, vr.get(k), ["data"])
     doc = b.get("document") if isinstance(b.get("document"), dict) else None
     dn, dm, df = slot_model(rep, p, "counter/document/model", doc, visible) if doc is not None else (None, None, None)
     if dn:
@@ -3478,6 +3513,8 @@ def check_screen_counter(rep, p, b, visible, prints):
                 parens(rep, p, f"counter/document/checkout/{i}/filter", x.get("filter"))
         if isinstance(b.get("customer"), dict):
             slot_field(rep, p, "counter/customer/field", dn, df, b["customer"].get("field"))
+            if isinstance(b["customer"].get("table"), dict):
+                check_counter_table(rep, p, b, b["customer"]["table"], dn, df, visible)
         if isinstance(b.get("print"), str):
             if not any(st == b["print"] and isinstance(d, dict) and d.get("model") == dn for (_a, _r, st, _p, d) in prints):
                 rep.add("error", p, "counter/print", "unknown_print", f'"{b["print"]}" is not a print format of {dn}')
@@ -3489,6 +3526,8 @@ def check_screen_counter(rep, p, b, visible, prints):
             method = slot_field(rep, p, "counter/payments/method", pn, pf, pay.get("method"))
             slot_field(rep, p, "counter/payments/amount", pn, pf, pay.get("amount"), NUMERIC_KINDS)
             slot_field(rep, p, "counter/payments/ref", pn, pf, pay.get("ref"))
+            slot_field(rep, p, "counter/payments/party", pn, pf, pay.get("party"), NUMERIC_KINDS)
+            slot_field(rep, p, "counter/payments/parties", dn, df, pay.get("parties"), NUMERIC_KINDS)
             if method is not None and method.get("type") == "select":
                 opts = option_values(method)
                 for i, x in enumerate(pay.get("methods") if isinstance(pay.get("methods"), list) else []):
@@ -3546,6 +3585,33 @@ def check_screen_counter(rep, p, b, visible, prints):
                 slot_field(rep, p, f"{where}/match/{k}", an, af, k)
                 if sn2:
                     slot_field(rep, p, f"{where}/match/{k}", sn2, sf2, match[k])
+
+
+def check_counter_table(rep, p, b, t, dn, df, visible):
+    """The customer.table slot (contract 0048 section 2)."""
+    where = "counter/customer/table"
+    tn, tm, tf = slot_model(rep, p, where + "/model", t, visible)
+    lf = slot_field(rep, p, where + "/link", dn, df, t.get("link"), ["link"])
+    if lf is not None and tn and lf.get("to") != tn:
+        rep.add("error", p, where + "/link", "screen_slot_type", f'"{t.get("link")}" links to {lf.get("to")}; the table model is {tn}')
+    slot_field(rep, p, where + "/guests", dn, df, t.get("guests"), NUMERIC_KINDS)
+    slot_field(rep, p, where + "/bill", dn, df, t.get("bill"), ["check"])
+    if not tn:
+        return
+    slot_field(rep, p, where + "/title", tn, tf, t.get("title"))
+    slot_field(rep, p, where + "/area", tn, tf, t.get("area"))
+    slot_field(rep, p, where + "/seats", tn, tf, t.get("seats"), NUMERIC_KINDS)
+    match = t.get("match") if isinstance(t.get("match"), dict) else {}
+    ses = b.get("session") if isinstance(b.get("session"), dict) else None
+    if match and ses is None:
+        rep.add("error", p, where + "/match", "screen_slot_type", "match compares with the open session; add the session slot")
+    sn = sf = None
+    if ses is not None and isinstance(ses.get("model"), str) and ses["model"] in visible:
+        sn, sf = ses["model"], fields_of(visible[ses["model"]][2])
+    for k in sorted(match):
+        slot_field(rep, p, f"{where}/match/{k}", tn, tf, k)
+        if sn:
+            slot_field(rep, p, f"{where}/match/{k}", sn, sf, match[k])
 
 
 def screen_model(rep, p, where, b, visible):

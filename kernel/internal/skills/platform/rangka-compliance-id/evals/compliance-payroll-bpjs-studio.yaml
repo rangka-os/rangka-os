@@ -3,6 +3,7 @@ skill: rangka-compliance-id
 stage: studio
 prompt: "Karyawanku 8 orang, gaji bulanan. Aku pengin gaji, BPJS sama PPh 21 diurus sistem sekalian, termasuk THR lebaran."
 expect:
+  skills: [rangka-compliance-id]
   answer:
     not_mentions: ["otomatis lapor ke DJP", "otomatis setor", "sudah aku buat"]
   escalate: false

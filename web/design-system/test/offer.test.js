@@ -86,7 +86,7 @@ test("recommended first, actions per option, details for the rest", () => {
   assert.ok(texts(secs[0]).join("").includes("Belum tercakup: serah terima dan kondisi alat"));
   const det = nodes(secs[0], "details");
   assert.equal(det.length, 1);
-  assert.ok(texts(det[0]).includes("Lihat rincian") && texts(det[0]).includes("Yang Raka bantu") && texts(det[0]).includes("Butuh persetujuanmu"));
+  assert.ok(texts(det[0]).includes("Lihat rincian") && texts(det[0]).includes("Yang Zafdoz bantu") && texts(det[0]).includes("Butuh persetujuanmu"));
   assert.ok(!texts(det[0]).includes("Yang dicatat"));
   assert.equal(texts(t).filter((x) => /^\d+ \/ \d+$/.test(x)).length, 0, "stacked or side by side: no carousel count");
   assert.equal(nodes(t, ".rk-offer-nav").length, 0);

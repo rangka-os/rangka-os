@@ -7,7 +7,7 @@ a task needs a skill, then loads its instructions.
 
 The same library serves every harness:
 
-- **Raka**, the agent in Juragan and in the app, loads them from the running kernel.
+- **Zafdoz**, the agent in Juragan and in the app, loads them from the running kernel.
 - **Claude Code, Codex, Cursor and other harnesses** install them into the folder they read (see
   [Install](./install)).
 

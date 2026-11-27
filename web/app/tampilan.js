@@ -6,7 +6,7 @@
  * - "Tema usaha", for the owner: the gallery. A click tries the theme on this page only (POST /themes/derive, painted
  *   with RA.paintTheme); "Terapkan" points config.rk theme at it through a change set (api.runChange: low risk, so it
  *   applies when the owner may approve).
- * - "Buat tema sendiri", for the owner when the plan allows it (allowed.custom; else a note about Juragan Pro): name,
+ * - "Buat tema sendiri", for the owner when the plan allows it (allowed.custom; else a note about Zafdoz Pro): name,
  *   one colour (picker, hex, or a colour from the logo via POST /themes/from-image), button style, neutral family and
  *   font. Every change is derived and tried on the page with the contrast checks; "Simpan dan pakai" writes
  *   themes/<name>.rk and points config.rk at it, as one change set.
@@ -247,8 +247,8 @@
           return h(ThemeCard, { key: c.name, card: c, dark: dark, desc: DESC[c.name] || (c.custom ? "Buatan usaha ini" : ""), state: state,
             selected: trying ? trying.name === c.name : c.name === data.current, onClick: function () { tryCard(c); } });
         })),
-        data.allowed && data.allowed.custom === false ? h(R.Alert, { tone: "info", title: "Tema buatan sendiri mulai paket Juragan Pro" },
-          "Warna sendiri, warna dari logo, dan font tersedia di Juragan Pro. Tema bawaan di atas bisa dipakai di semua paket.") : null));
+        data.allowed && data.allowed.custom === false ? h(R.Alert, { tone: "info", title: "Tema buatan sendiri mulai paket Zafdoz Pro" },
+          "Warna sendiri, warna dari logo, dan font tersedia di Zafdoz Pro. Tema bawaan di atas bisa dipakai di semua paket.") : null));
 
     var summary = trying && trying.custom ? checkSummary(trying.checks) : null;
     var editor = !owner || !open ? null : h(R.Card, { title: "Buat tema sendiri", extra: h(R.Button, { size: "sm", onClick: function () { setOpen(false); stopTrying(); } }, "Tutup") },
@@ -273,7 +273,7 @@
           summary.ok ? "Semua " + summary.total + " pasangan warna terbaca, terang dan gelap. Halaman ini sudah memakai tema ini sebagai pratinjau." : summary.failing.join(", ")) : null,
         h("div", { className: "ap-tp-row" },
           h(R.Button, { variant: "primary", disabled: busy || !isHex(ed.accent), onClick: saveCustom }, busy ? "Menyimpan…" : "Simpan dan pakai"),
-          h("span", { className: "ap-tp-desc" }, "Warna status (berhasil, peringatan, bahaya) dan warna Raka tidak ikut berubah."))));
+          h("span", { className: "ap-tp-desc" }, "Warna status (berhasil, peringatan, bahaya) dan warna Zafdoz tidak ikut berubah."))));
 
     return h(React.Fragment, null,
       h(R.PageHeader, { title: "Tampilan", subTitle: owner ? "Tema usaha untuk semua orang, dan pilihanmu sendiri" : "Pilihan tampilanmu sendiri" }),

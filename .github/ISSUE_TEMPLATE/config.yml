@@ -6,6 +6,6 @@ contact_links:
   - name: Documentation
     url: https://rangka-os.github.io/rangka-os/
     about: Guides, the .rk reference and the roadmap.
-  - name: Apps, connectors, Raka or the edge agent
+  - name: Apps, connectors, Zafdoz or the edge agent
     url: https://github.com/rangka-os
-    about: Modules and apps live in rangka-apps, integrations in rangka-connectors, Raka in rangka-ai, the outlet agent in rangka-edge.
+    about: Modules and apps live in rangka-apps, integrations in rangka-connectors, Zafdoz in rangka-ai, the outlet agent in rangka-edge.

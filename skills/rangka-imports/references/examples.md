@@ -1,6 +1,6 @@
 # Three common sources, worked
 
-Made-up businesses and data. Each shows the owner's file, the profile, the mapping and what Raka says.
+Made-up businesses and data. Each shows the owner's file, the profile, the mapping and what Zafdoz says.
 
 ## 1. A messy customer sheet (Toko Bangunan Sinar, Excel)
 
@@ -37,7 +37,7 @@ Mapping to `customer_list`:
 | (Ket "tempo 30") | Tempo (hari) | only where the owner confirms |
 | No, Pemilik, Limit | not imported | Pemilik can become a company field if the owner wants it, filled by hand |
 
-Raka says:
+Zafdoz says:
 
 > Aku cek daftarnya: 140 pelanggan. Sebelum diunggah, ada empat hal: hapus baris TOTAL di bawah; "TB Maju Jaya"
 > muncul dua kali (baris 2 dan 3), mau pakai nama yang mana?; kolom NPWP berubah jadi 1,23457E+15 di Excel, ubah
@@ -81,7 +81,7 @@ Mapping to `item_list` (Jenis derived by the owner, one word per row):
 
 Order: units → items → opening stock (draft goods receipt from "Saldo awal", owner submits).
 
-Raka says:
+Zafdoz says:
 
 > Daftar barangnya bisa langsung dipakai, dengan tiga perbaikan: harga Americano ditulis "18rb", tulis 18000;
 > satuan "cup" dan "Cup" dianggap beda, samakan jadi satu dan pastikan satuannya sudah ada; kolom Stok jangan ikut di
@@ -125,7 +125,7 @@ Re-uploads: the key is Tanggal, No struk, Jenis, SKU. The same file twice is ref
 overlaps one day adds only the new rows. Each day lands as a draft; head office checks and submits it, which is when
 stock moves.
 
-Raka says:
+Zafdoz says:
 
 > File majoo ini bisa masuk lewat template penjualan dari file POS, tapi harus dipisah per outlet: satu file Dago,
 > satu file Braga. Tambahkan kolom "Jenis" isi "Jual", dan ganti judul kolom sesuai template (No. Transaksi jadi

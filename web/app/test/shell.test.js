@@ -289,11 +289,11 @@ test("commandGroups: every nav item once under Halaman, Buat baru per layout.nav
   assert.deepStrictEqual(data.items.map((i) => [i.label, i.sub, i.hash]), [["CV Maju Jaya", "Pelanggan · CUST-1", "#/r/customer/CUST-1"]], "the record name follows the model when the title differs");
   const plainName = plain(A.commandGroups(meta, {}, nav, [{ model: "lead", name: "L-1", title: "L-1" }])).find((x) => x.label === "Data");
   assert.strictEqual(plainName.items[0].sub, "Lead");
-  // no create list: no Buat baru group; Tanya Raka only with features.ai in meta
+  // no create list: no Buat baru group; Tanya Zafdoz only with features.ai in meta
   assert.deepStrictEqual(plain(A.commandGroups(META, {}, A.sideNav(META, {}))).map((x) => x.label), ["Halaman"]);
   const ai = plain(A.commandGroups({ ...META, features: { ai: true } }, {}, A.sideNav(META, {})));
-  assert.deepStrictEqual(ai.map((x) => x.label), ["Halaman", "Tanya Raka"]);
-  assert.strictEqual(ai[1].filter, false, "Tanya Raka stays whatever is typed (the query becomes the question)");
+  assert.deepStrictEqual(ai.map((x) => x.label), ["Halaman", "Tanya Zafdoz"]);
+  assert.strictEqual(ai[1].filter, false, "Tanya Zafdoz stays whatever is typed (the query becomes the question)");
 });
 
 // contract 0030: work screens

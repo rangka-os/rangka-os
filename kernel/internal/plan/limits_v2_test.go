@@ -16,7 +16,7 @@ func TestEffectiveGrantsAndCaps(t *testing.T) {
 		{ID: "g3", Limit: DBMB, Amount: 999, Until: ptime(now.Add(-time.Hour))}, // ended
 		{ID: "g4", Limit: Apps, Amount: 1},
 	}, Caps: map[string]Cap{}}
-	c := &Current{Name: "grup", Def: &Def{Name: "grup", Label: "Juragan Grup", Limits: map[string]int64{DBMB: 20480, Apps: 15}}, Stored: st, At: now}
+	c := &Current{Name: "grup", Def: &Def{Name: "grup", Label: "Zafdoz Grup", Limits: map[string]int64{DBMB: 20480, Apps: 15}}, Stored: st, At: now}
 	if v, ok := c.Limit(DBMB); !ok || v != 20480+1024+512 {
 		t.Fatalf("db_mb = %d %v", v, ok)
 	}
@@ -50,7 +50,7 @@ func TestEffectiveGrantsAndCaps(t *testing.T) {
 }
 
 func TestCheckAppsChange(t *testing.T) {
-	c := &Current{Name: "juragan", Def: &Def{Name: "juragan", Label: "Juragan", Limits: map[string]int64{Apps: 3}}}
+	c := &Current{Name: "juragan", Def: &Def{Name: "juragan", Label: "Zafdoz Lite", Limits: map[string]int64{Apps: 3}}}
 	for _, x := range []struct {
 		before, after int
 		refused       bool

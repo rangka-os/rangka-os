@@ -389,15 +389,15 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 }
 .ap-ubah-card { border-color: var(--line-strong); border-radius: 12px; }
 
-/* ---- Raka: the ⌘J ask bar and the chat drawer as the pen's Studio chat (I5s1gq): a white composer card with a soft
-   drop shadow, the context as an outlined chip, an Ink send key; your messages in a warm bubble, Raka's as plain text ---- */
+/* ---- Zafdoz: the ⌘J ask bar and the chat drawer as the pen's Studio chat (I5s1gq): a white composer card with a soft
+   drop shadow, the context as an outlined chip, an Ink send key; your messages in a warm bubble, Zafdoz's as plain text ---- */
 .rk-askbar { padding: 9px; gap: 6px; border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 6px 18px rgba(28, 25, 23, .07), 0 1px 2px rgba(28, 25, 23, .04); }
 .rk-askbar-input { font: 13.5px/20px var(--font-sans); padding: 4px; min-height: 36px; }
 .rk-askbar-chip { height: 26px; padding: 0 2px 0 6px; border-radius: var(--r-btn); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); font: 500 12px/18px var(--font-sans); }
 .rk-askbar-chip .rk-icon { color: var(--raka); }
 .rk-askbar-chat { height: 26px; font-size: 12px; color: var(--muted); border-radius: var(--r-btn); }
 .rk-askbar .rk-btn-primary { height: 26px; }
-/* the chat panel itself (rangka.pen "Raka Chat · Komponen bersama") lives in design-system/bundle.css */
+/* the chat panel itself (rangka.pen "Zafdoz Chat · Komponen bersama") lives in design-system/bundle.css */
 .rk-chat-comp .rk-send:disabled:not(.busy) { background: var(--neutral-hover); color: var(--faint); cursor: not-allowed; }
 :root[data-theme="dark"] .rk-askbar, :root[data-theme="dark"] .rk-chat-comp, :root[data-theme="dark"] .rk-fab-btn { box-shadow: none; }
 .ap-shell:has(.ap-tabbar) .rk-fab { bottom: calc(80px + env(safe-area-inset-bottom)); }
@@ -445,12 +445,12 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
   .ap-ubah-mode button { min-height: var(--touch); line-height: var(--touch); }
 }
 
-/* riset desain K-A4/A4: the sidebar keeps its footer (Tanya Raka) in view; only the nav list scrolls */
+/* riset desain K-A4/A4: the sidebar keeps its footer (Tanya Zafdoz) in view; only the nav list scrolls */
 @media (min-width: 768px) {
   .ap-shell > .rk-side { position: sticky; top: 48px; height: calc(100vh - 48px); height: calc(100dvh - 48px); display: flex; flex-direction: column; }
   .ap-shell:not(.ap-top) > .rk-side { top: 0; height: 100vh; height: 100dvh; }
   .ap-shell > .rk-side > nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-  /* Raka docked: the page is a card with an 8px gutter, so the sticky sidebar sits inside it */
+  /* Zafdoz docked: the page is a card with an 8px gutter, so the sticky sidebar sits inside it */
   html[data-raka="dock"] .ap-shell:not(.ap-top) > .rk-side { top: 8px; height: calc(100vh - 18px); height: calc(100dvh - 18px); }
   html[data-raka="dock"] .ap-shell.ap-top > .rk-side { top: 56px; height: calc(100vh - 66px); height: calc(100dvh - 66px); }
 }
@@ -638,6 +638,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-counter-sum .ap-counter-sum-total { margin-top: 4px; color: var(--ink); font: 700 20px/28px var(--font-sans); }
 .ap-counter-sum[aria-busy="true"] dd { opacity: .55; }
 .ap-counter-sum-err { margin: 4px 0 0; color: var(--bad); font-size: 13px; }
+.ap-counter-hint { margin: 0; color: var(--muted); font-size: 13px; }
 .ap-counter-foot, .ap-counter-pay, .ap-counter-done { display: grid; gap: 10px; }
 .ap-counter-due { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .ap-counter-due b { font: 700 22px/28px var(--font-sans); font-variant-numeric: tabular-nums; }
@@ -648,6 +649,10 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-counter-paytop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ap-counter-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .ap-counter-row > .rk-btn { flex: 1; min-height: 44px; justify-content: center; }
+.ap-counter-split { display: flex; flex-direction: column; gap: 10px; }
+.ap-counter-splitn { flex: 2; align-self: center; text-align: center; font-weight: 600; }
+.ap-counter-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.ap-counter-tabs > .rk-btn { flex: 0 0 auto; min-height: 44px; }
 .ap-counter-foot .rk-btn-primary, .ap-counter-pay > .rk-btn, .ap-counter-paydone .rk-btn { min-height: 52px; font-size: 16px; }
 .ap-counter-pay .ap-pad button { min-height: 44px; }
 .ap-counter-paydone .rk-btn, .ap-counter-pay > .rk-btn { width: 100%; justify-content: center; }
@@ -1011,6 +1016,21 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-counter-left { position: static; padding: 1px 8px; border-radius: 6px; font: 500 12px/18px var(--font-sans); }
 .ap-counter-left.out { background: var(--bad-tint); color: var(--bad); }
 .ap-counter-item.out .ap-counter-item-p > span { opacity: .5; }
+.ap-counter-more { padding: 1px 8px; border-radius: 6px; background: var(--neutral); color: var(--muted); font: 500 12px/18px var(--font-sans); font-style: normal; white-space: nowrap; }
+/* the choice sheet (counter.js ChoiceSheet): bottom sheet on a phone, centred card from tablet width */
+.ap-counter-choice-bg { position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center; background: rgba(20, 20, 20, .4); }
+.ap-counter-choice { width: 100%; max-height: 80vh; display: flex; flex-direction: column; box-sizing: border-box; padding: 16px 16px 20px; border-radius: 16px 16px 0 0; background: var(--surface); color: var(--ink); box-shadow: 0 -8px 32px rgba(0, 0, 0, .18); }
+.ap-counter-choice-h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.ap-counter-choice-h h2 { margin: 0; font: 600 20px/26px var(--font-sans); }
+.ap-counter-choice-h p { margin: 2px 0 0; color: var(--muted); font: 400 14px/20px var(--font-sans); }
+.ap-counter-choice-rows { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 8px; }
+.ap-counter-choice-rows button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: var(--touch); box-sizing: border-box; padding: 8px 14px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); cursor: pointer; font: 500 16px/22px var(--font-sans); }
+.ap-counter-choice-rows button:active { transform: scale(.99); }
+.ap-counter-choice-rows button.out .ap-counter-choice-t { opacity: .55; }
+.ap-counter-choice-t { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.ap-counter-choice-t strong { min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 11px; background: var(--ink); color: var(--surface); font: 600 12px/22px var(--font-sans); text-align: center; }
+.ap-counter-choice-rows b { font: 600 16px/22px var(--font-sans); white-space: nowrap; }
+@media (min-width: 700px) { .ap-counter-choice-bg { align-items: center; } .ap-counter-choice { width: 440px; border-radius: 16px; } }
 .ap-counter-nocat { display: grid; justify-items: center; gap: 6px; margin: 48px auto; max-width: 340px; text-align: center; color: var(--muted); }
 .ap-counter-nocat-i { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 6px; border-radius: 14px; background: var(--neutral); color: var(--ink-2); }
 .ap-counter-nocat-i .rk-icon { width: 26px; height: 26px; }
@@ -1062,7 +1082,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 
 /* ---------------------------------------------------------------- Mulai di sini, arah A1 "Jalan cerita" (mulai.js)
  * Riset desain 24 D1-D9: system sans, sentence case, 1px line and 8px corners without shadow
- * (shadows only on what floats: the tour card), Raka's offer in discovery, status with words, 44px taps on a phone.
+ * (shadows only on what floats: the tour card), Zafdoz's offer in discovery, status with words, 44px taps on a phone.
  * Roles keep one tint everywhere (field-*, mulai.js roleTone); gold (warn) is only for the chapter's reward. */
 .ap-mu { max-width: 1120px; }
 .ap-mu-eye { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
@@ -1109,6 +1129,9 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-mu-chip .ap-mu-faint { display: inline; }
 .ap-mu-cur-t { margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; color: var(--ink); }
 .ap-mu-ans { margin: 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+/* contract 0076 §4: "Dari ceritamu" — what the owner named, one prefilled form each */
+.ap-mu-starter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.ap-mu-starter > .ap-mu-faint { font-size: 12px; line-height: 16px; margin-right: 2px; }
 .ap-mu-raka { border-radius: var(--r-lg); background: var(--discovery-tint); padding: 12px; display: grid; gap: 8px; }
 .ap-mu-raka-h { display: flex; align-items: center; gap: 8px; color: var(--discovery); font-size: 12px; }
 .ap-mu-raka p { margin: 0; color: var(--ink); }
@@ -1406,3 +1429,42 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 
 /* contract 0074 §4: an empty dashboard list is one muted sentence in a compact card */
 .ap-dash-empty { margin: 0; padding: 12px 16px 16px; color: var(--muted); font-size: 14px; }
+
+/* table map of the counter (tables.js, contract 0048 section 2): free = plain, occupied = ok tint, bill asked = warn tint */
+.ap-counter-tables { display: block; padding-bottom: 16px; }
+.ap-tbl { display: grid; gap: 14px; }
+.ap-tbl-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.ap-tbl-h > b { font: 600 18px/24px var(--font-sans); color: var(--ink); margin-right: auto; }
+.ap-tbl-legend { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.ap-tbl-chip { padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); font: 500 12px/18px var(--font-sans); color: var(--ink-2); background: var(--surface); }
+.ap-tbl-chip[data-state="busy"] { background: var(--ok-tint); color: var(--ok); border-color: transparent; }
+.ap-tbl-chip[data-state="asked"] { background: var(--warn-tint); color: var(--on-warn); border-color: var(--warn-line); }
+.ap-tbl-stale { margin: 0; padding: 8px 12px; border-radius: 10px; background: var(--warn-tint); color: var(--on-warn); border: 1px solid var(--warn-line); font-size: 14px; }
+.ap-tbl-empty { margin: 0; color: var(--muted); font-size: 14px; }
+.ap-tbl-area h3 { margin: 0 0 8px; font: 600 14px/20px var(--font-sans); color: var(--ink-2); }
+.ap-tbl-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+.ap-tbl-card { display: grid; gap: 2px; align-content: center; justify-items: start; min-height: 88px; padding: 10px 12px; text-align: left; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); color: var(--ink); font-family: var(--font-sans); }
+.ap-tbl-card b { font: 700 20px/24px var(--font-sans); }
+.ap-tbl-card .ap-tbl-state { font: 600 12px/16px var(--font-sans); color: var(--ink-2); }
+.ap-tbl-card small { font: 400 12px/16px var(--font-sans); color: var(--muted); }
+.ap-tbl-count { padding: 0 6px; border-radius: 999px; background: var(--surface); color: var(--ink-2); font: 600 11px/16px var(--font-sans); white-space: nowrap; }
+.ap-tbl-card[data-state="busy"] { background: var(--ok-tint); border-color: transparent; }
+.ap-tbl-card[data-state="busy"] .ap-tbl-state { color: var(--ok); }
+.ap-tbl-card[data-state="asked"] { background: var(--warn-tint); border-color: var(--warn-line); }
+.ap-tbl-card[data-state="asked"] .ap-tbl-state { color: var(--on-warn); }
+.ap-tbl-card:disabled { opacity: .55; cursor: not-allowed; }
+.ap-tbl-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ap-tbl-bar { display: grid; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+.ap-tbl-bar-t { display: flex; align-items: baseline; gap: 8px; }
+.ap-tbl-bar-t b { font: 600 16px/22px var(--font-sans); color: var(--ink); }
+.ap-tbl-bar-t small { color: var(--muted); font-size: 13px; }
+.ap-tbl-bar-a { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-tbl-split { display: grid; gap: 12px; max-width: 520px; }
+.ap-tbl-split ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ap-tbl-split label { display: flex; align-items: center; gap: 10px; min-height: var(--touch); padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.ap-tbl-split label span { flex: 1; }
+.ap-tbl-split small { color: var(--muted); }
+.ap-tbl-guests { display: grid; gap: 12px; justify-items: start; max-width: 360px; margin-top: 16px; padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--r-dialog); background: var(--surface); }
+.ap-tbl-stepper { display: flex; align-items: center; gap: 16px; }
+.ap-tbl-stepper output { min-width: 32px; text-align: center; font: 700 24px/28px var(--font-sans); color: var(--ink); }

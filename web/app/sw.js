@@ -80,6 +80,7 @@
     "syncpill.js",
     "screens.js",
     "counter.js",
+    "tables.js",
     "queue.js",
     "media.js",
     "map.js",

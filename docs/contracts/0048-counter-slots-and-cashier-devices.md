@@ -34,6 +34,29 @@ Perangkat, §5) · Builds on 0006, 0010, 0021, 0025, 0027, 0030, 0034, 0038, 003
 Rules of 0030 §2 hold for every slot below: slots name fields, the screen never prices, taxes or totals; the model's
 computes do, and the screen shows them through `POST /api/v1/compute` (0034). Money and stock never depend on an LLM.
 
+### 1a. `catalogue.variants`: one tile per product, variants in a sheet (as built, issue #267)
+
+Variants stay separate items (retail SKUs, one barcode and one price each). The counter only changes how they show.
+```yaml
+counter:
+  catalogue:
+    model: item
+    variants: {group: variant_group, label: variant_label, title: variant_title}   # title is optional
+```
+- `group`, `label`, `title` are `data` fields of the catalogue model (`screen_slot_type` otherwise; `unknown_field`
+  when missing). `group` and `label` are required by the schema.
+- Rows with the same non-empty `group` collapse into one tile. A group with a single row stays a normal tile.
+- Tile title: the `title` field of the first variant that has one, else the shortest common prefix of the variants'
+  titles cut at a word boundary, else the group code. The tile price is the lowest variant price ("mulai Rp X" when
+  prices differ). The stock badge is the sum of the variants' balances (0039), or nothing when no variant has a figure.
+- Tapping the tile opens the choice sheet: one row per variant with its label (the `label` field, else the title minus
+  the product title), price and stock badge ("sisa N" at 5 or less, "Habis" at 0 or less; a sale is never blocked).
+  Picking a row adds that exact item and closes the sheet. A barcode scan or Enter on the search box still adds the
+  exact variant and never opens the sheet.
+- The sheet is the shared `ChoiceSheet` component of the web app; the options of §1 below plug in as another kind of
+  row list in the same sheet. Variants first, options later.
+- Roll-ups per product use a hidden `variant_group` compute on stock and sales rows (rangka-apps), not this slot.
+
 ### 1. `catalogue.options`: options chosen before the line enters the cart
 
 **Where options live (rangka-apps `modules/catalogue`).** Groups are shared across items (one "Gula" group for 30
@@ -134,6 +157,20 @@ pulang" that goes straight to the catalogue without a table. Offline, the map sh
 **Validator.** `unknown_model`, `unknown_field` as above; `link` links to `table.model`; `guests` is a number, `bill` a
 check, `seats` a number (`screen_slot_type`); `match` keys are fields of the table model and values fields of
 `session.model`, and `match` without `session` is `screen_slot_type` (same as 0039).
+
+**Status: accepted (22 Nov 2026), as built in rangka-os and rangka-apps#122.**
+- *Slot and renderer.* `customer.table` as above, validated by both validators; the renderer is `web/app/tables.js` plus
+  the counter's table mode. The map lists tables (`filter` AND `match`) and the drafts that link one; offline it shows the
+  last loaded copy labelled "data terakhir <jam>" and busy tables are disabled (another device's bill needs the connection).
+- *Conditional writes.* `_if` compares declared model fields only, so `pos_sale` carries a hidden int `rev`; the counter
+  sends `rev + 1` with `_if: {rev}` on every write of an open bill. Two devices on one bill: the later write gets 409.
+- *Merge and split* are rangka-apps flows (`pos_sale_merge`, `pos_sale_split`), atomic inside the PATCH: the counter sets
+  `merge_into` or `split_lines`. Merge needed the flow `find` step to return child rows; the kernel now loads them for
+  matched records. A merged bill keeps its lines as a record, frees its table and cannot be paid. Stock moves only when a
+  bill is paid, so merge and split never move stock twice. Totals: the merged bill's total is the sum of both; the two bills of
+  a split add up to the original (lines move whole). A bill with promo, member or deposit is not split.
+- *Split bills* are the only case of two drafts on one table (`split_of` set); a hand-made second bill is refused (`table_busy`).
+- *Not in v1:* split by seat, equal split, table sitting-time colours.
 
 ### 3. `session.moves`: cash in and cash out during a shift
 

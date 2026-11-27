@@ -45,7 +45,7 @@ func (s *Server) mayManageSecrets(c *caller) bool {
 func (s *Server) connectorAuthGuard(w http.ResponseWriter, c *caller, write bool) bool {
 	switch c.p.Via {
 	case "ai", "oidc": // agents and helpers never reach connector secrets (§3, §4)
-		writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa membaca atau mengatur kunci penghubung; minta pemilik usaha.")
+		writeError(w, 403, "ai_forbidden", "Zafdoz dan helper tidak bisa membaca atau mengatur kunci penghubung; minta pemilik usaha.")
 		return false
 	}
 	if write && !c.p.Human() && !(c.p.Via == "token" && (c.p.HasScope(auth.ScopeSecretsWrite) || c.p.HasScope(auth.ScopeSecretsHost))) { // an API token needs secrets:write or secrets:host

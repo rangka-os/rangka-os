@@ -3,6 +3,7 @@ skill: rangka-modelling
 stage: studio
 prompt: "Aku punya laundry kiloan dua cabang. Aku mau catat pelanggan langganan, berat cucian per order, dan bulan ini berapa omzet tiap cabang."
 expect:
+  skills: [rangka-modelling]
   answer:
     mentions: ["pelanggan", "cabang"]
     not_mentions: ["sudah aku buat", "tabel per bulan"]

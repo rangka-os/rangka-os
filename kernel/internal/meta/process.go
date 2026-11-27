@@ -24,9 +24,11 @@ type Process struct {
 	Name, App string // App is "" for a site process; Name is the file stem
 	Label     Label
 	Stages    []Stage
-	Doc       *rk.Doc
-	File      string // the registry Docs key: <unit prefix>/processes/<name>.rk or processes/<name>.rk
-	Raw       map[string]any
+	// Starter is contract 0076 §4: master data the owner named in the interview, by model, plain text fields per row
+	Starter map[string][]map[string]string
+	Doc     *rk.Doc
+	File    string // the registry Docs key: <unit prefix>/processes/<name>.rk or processes/<name>.rk
+	Raw     map[string]any
 }
 
 func parseProcess(app, stem, file string, doc *rk.Doc) *Process {
@@ -35,6 +37,14 @@ func parseProcess(app, stem, file string, doc *rk.Doc) *Process {
 		raw = map[string]any{}
 	}
 	p := &Process{Name: stem, App: app, Label: label(raw["label"]), Doc: doc, File: file, Raw: raw}
+	for model, rows := range asMap(raw["starter"]) {
+		if r := starterRows(rows); len(r) > 0 {
+			if p.Starter == nil {
+				p.Starter = map[string][]map[string]string{}
+			}
+			p.Starter[model] = r
+		}
+	}
 	for i, sv := range asList(raw["stages"]) {
 		sm := asMap(sv)
 		if sm == nil {
@@ -96,6 +106,23 @@ func labels(v any) []Label {
 	for _, x := range asList(v) {
 		if l := label(x); l != nil {
 			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// starterRows reads a stage's starter (contract 0076 §4): each row's string values, rows without one left out.
+func starterRows(v any) []map[string]string {
+	var out []map[string]string
+	for _, r := range asList(v) {
+		row := map[string]string{}
+		for k, x := range asMap(r) {
+			if s, ok := x.(string); ok && s != "" {
+				row[k] = s
+			}
+		}
+		if len(row) > 0 {
+			out = append(out, row)
 		}
 	}
 	return out

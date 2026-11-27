@@ -3,8 +3,8 @@
  * Boot: api.me() (401 → sign-in screen) → api.meta() → RangkaEngine.create(meta, cache.lookup) → api.features().
  * Then the shell layout.shell names (shellKind: the Frappe Sidebar for side-only, the default, with the TopNav above the
  * page from 768px up (contract 0065); TopNav + Sidebar for
- * top-nav), ⌘K (CommandPalette over commandGroups), Raka (ai.js RA.AssistantRoot: ⌘J, the ⌘K "Tanya Raka" item and the
- * sidebar footer's "Tanya Raka", only when meta.features.ai === true), data-density from the theme, and a hash
+ * top-nav), ⌘K (CommandPalette over commandGroups), Zafdoz (ai.js RA.AssistantRoot: ⌘J, the ⌘K "Tanya Zafdoz" item and the
+ * sidebar footer's "Tanya Zafdoz", only when meta.features.ai === true), data-density from the theme, and a hash
  * router (#/d/<dashboard>, #/r/<model>, #/r/<model>/new, #/r/<model>/<name>, #/approvals, #/import/<name>, #/proses, #/proses/<name>).
  * Views are looked up on window.RangkaApp at render time (ListView, FormView, DashboardView, ApprovalInbox,
  * ImportWizard), so later files add them without touching the shell; a missing view shows "Halaman ini belum tersedia".
@@ -462,7 +462,7 @@
 
   /** ⌘K groups: Halaman (every sidebar entry once, nav = sideNav(…)), Buat baru (layout.nav.create models the user may
    *  create; none while readOnly, i.e. a preview), Data (found: [{model, name, title}] from the record search, already
-   *  matched by the server so filter: false), and Tanya Raka when meta.features.ai (filter: false; hash null: the shell
+   *  matched by the server so filter: false), and Tanya Zafdoz when meta.features.ai (filter: false; hash null: the shell
    *  opens the ask bar with the query). Items: {id, label, sub, icon, hash}. */
   function commandGroups(meta, features, nav, found, readOnly) {
     meta = meta || {};
@@ -493,7 +493,7 @@
       }) });
     }
     // unfiltered: whatever is typed stays visible here and becomes the question in the ask bar
-    if (meta.features && meta.features.ai === true) out.push({ label: "Tanya Raka", filter: false, items: [{ id: "ask", label: "Tanya Raka", sub: "AI", icon: "spark", hash: null }] });
+    if (meta.features && meta.features.ai === true) out.push({ label: "Tanya Zafdoz", filter: false, items: [{ id: "ask", label: "Tanya Zafdoz", sub: "AI", icon: "spark", hash: null }] });
     return out;
   }
 
@@ -1418,7 +1418,7 @@
     function toggleCollapsed() { if (rail) { setRailOpen(!railOpen); return; } var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
     // offline: Ubah writes change sets, so it waits for the connection like every other write
 
-    /* ---------------------------------------------------------------- Raka (ai.js, contract 0020) */
+    /* ---------------------------------------------------------------- Zafdoz (ai.js, contract 0020) */
     var aiKey = RA.aiStorageKey ? RA.aiStorageKey(me && me.org, me && me.email) : null; // one conversation per person
     var aiOn = !!(meta.features && meta.features.ai === true && RA.AssistantRoot && aiKey);
     var aiRef = useRef(null);
@@ -1439,10 +1439,10 @@
     }
     function askButton(iconOnly) {
       if (!aiOn) return null;
-      return iconOnly ? h(R.IconButton, { key: "ask", icon: "spark", label: "Tanya Raka", className: "ap-ask", onClick: function () { askRaka(); } })
-        : h(R.Button, { key: "ask", variant: "quiet", icon: "spark", className: "ap-ask", onClick: function () { askRaka(); } }, "Tanya Raka");
+      return iconOnly ? h(R.IconButton, { key: "ask", icon: "spark", label: "Tanya Zafdoz", className: "ap-ask", onClick: function () { askRaka(); } })
+        : h(R.Button, { key: "ask", variant: "quiet", icon: "spark", className: "ap-ask", onClick: function () { askRaka(); } }, "Tanya Zafdoz");
     }
-    /** The sidebar footer: Tanya Raka, then the Pakai / Ubah toggle (not on a phone, where it sits in the top bar). */
+    /** The sidebar footer: Tanya Zafdoz, then the Pakai / Ubah toggle (not on a phone, where it sits in the top bar). */
     function sideFooter(iconOnly, toggle) {
       var items = [askButton(iconOnly), phone ? null : toggle].filter(Boolean);
       if (!items.length) return null;
@@ -1756,7 +1756,7 @@
     if (phase === "error") return h(BootError, { err: err, onRetry: start });
     if (phase !== "ready") return h("div", { className: "ap-splash" }, h(R.Spinner, { size: "lg", label: "Memuat" }), h("span", null, "Memuat…"));
     return h(App, { boot: boot, me: me, setMe: setMe, onSignedOut: function () {
-      if (RA.clearAiStorage) RA.clearAiStorage(); // Raka's conversations stay with the person who signed out
+      if (RA.clearAiStorage) RA.clearAiStorage(); // Zafdoz's conversations stay with the person who signed out
       setBoot(null); setMe(null); setPhase("signin");
     } });
   }

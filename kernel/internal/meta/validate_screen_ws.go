@@ -153,6 +153,7 @@ func (v *validator) screenClock(p string, b map[string]any, visible map[string]v
 	if b["submit"] == true && !boolean(m.Raw, "is_submittable") {
 		v.rep.extra("error", p, "clock/submit", "screen_not_submittable", fmt.Sprintf(`%s is not submittable; drop submit: true`, m.Name))
 	}
+	v.screenClockShift(p, b, m, fields, visible)
 	if site := asMap(b["site"]); site != nil {
 		sm, sf := v.slotModel(p, "clock/site/model", site, visible)
 		if sm != nil {
@@ -164,6 +165,26 @@ func (v *validator) screenClock(p string, b map[string]any, visible map[string]v
 			v.slotField(p, "clock/site/location", sm, sf, site["location"], geoKind)
 			v.slotField(p, "clock/site/radius_m", sm, sf, site["radius_m"], numericKinds)
 		}
+	}
+}
+
+// screenClockShift checks clock.shift (same checks as the shift part of check_screen_clock in rangka_validate.py).
+func (v *validator) screenClockShift(p string, b map[string]any, m *Model, fields map[string]map[string]any, visible map[string]vis) {
+	sh := asMap(b["shift"])
+	if sh == nil {
+		return
+	}
+	sm, sf := v.slotModel(p, "clock/shift/model", sh, visible)
+	if sm == nil {
+		return
+	}
+	v.parens(p, "clock/shift/filter", sh["filter"])
+	v.slotField(p, "clock/shift/start", sm, sf, sh["start"], datetimeKind)
+	v.slotField(p, "clock/shift/end", sm, sf, sh["end"], datetimeKind)
+	v.slotField(p, "clock/shift/title", sm, sf, sh["title"], textKinds)
+	v.slotField(p, "clock/shift/outlet", sm, sf, sh["outlet"], linkKind)
+	if l := v.slotField(p, "clock/shift/link", m, fields, sh["link"], linkKind); l != nil && str(l, "to") != sm.Name {
+		v.rep.extra("error", p, "clock/shift/link", "screen_slot_type", fmt.Sprintf(`"%s" links to %s; the shift is %s`, pyStr(sh["link"]), str(l, "to"), sm.Name))
 	}
 }
 

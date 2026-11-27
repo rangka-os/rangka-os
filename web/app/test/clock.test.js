@@ -24,3 +24,20 @@ test("siteCheck: inside, outside, unknown (no position), nosite", () => {
   assert.strictEqual(A.siteCheck(null, site, "pos", "radius_m").state, "unknown");
   assert.strictEqual(A.siteCheck({ lat: 1, lng: 1 }, { radius_m: 10 }, "pos", "radius_m").state, "nosite");
 });
+
+test("pickShift: the earliest start of the day, rows without a start ignored", () => {
+  const rows = [{ name: "S2", start_at: "2026-11-22T08:00:00Z" }, { name: "S0", start_at: "" }, { name: "S1", start_at: "2026-11-22T00:00:00Z" }];
+  assert.strictEqual(A.pickShift(rows, "start_at").name, "S1");
+  assert.strictEqual(A.pickShift([], "start_at"), null);
+});
+
+test("shiftStatus: upcoming, late minutes, working, early leave, done", () => {
+  const s = "2026-11-22T00:00:00Z", e = "2026-11-22T08:00:00Z";
+  assert.deepStrictEqual(plain(A.shiftStatus(s, e, "2026-11-21T23:30:00Z", false)), { state: "upcoming", min: 30 });
+  assert.deepStrictEqual(plain(A.shiftStatus(s, e, "2026-11-22T00:10:30Z", false)), { state: "late", min: 10 });
+  assert.deepStrictEqual(plain(A.shiftStatus(s, e, "2026-11-22T00:00:20Z", false)), { state: "working", min: 0 });
+  assert.deepStrictEqual(plain(A.shiftStatus(s, e, "2026-11-22T07:45:00Z", true)), { state: "early", min: 15 });
+  assert.deepStrictEqual(plain(A.shiftStatus(s, e, "2026-11-22T08:05:00Z", true)), { state: "working", min: 0 });
+  assert.deepStrictEqual(plain(A.shiftStatus(s, e, "2026-11-22T09:00:00Z", false)), { state: "done", min: 0 });
+  assert.strictEqual(A.shiftStatus("", e, "2026-11-22T00:00:00Z", false).state, "none");
+});

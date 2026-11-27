@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: jadwal
+label: {id: Jadwal kerja}
+naming: JDW-{#####}
+title_field: shift_name
+fields:
+  - {name: worker, type: data, label: {id: Pekerja}, in_list: true}
+  - {name: shift_name, type: data, label: {id: Shift}, in_list: true}
+  - {name: site, type: link, to: lokasi, label: {id: Lokasi}, in_list: true}
+  - {name: work_date, type: date, label: {id: Tanggal}, in_list: true}
+  - {name: start_at, type: datetime, label: {id: Mulai}}
+  - {name: end_at, type: datetime, label: {id: Selesai}}
+permissions:
+  - {role: pekerja, read: true}

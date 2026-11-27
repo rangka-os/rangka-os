@@ -2678,7 +2678,7 @@ def test_cancel_needs_approval(page, ctx):
 
 def test_action_needs_approval(page, ctx):
     """A held action is a waiting request, not a background job."""
-    approvals_mocked(page, ctx)
+    mocked = approvals_mocked(page, ctx)
     sales = Http(ctx.base).login(*SALES)
     # sales_rep may create only a lead they own (permissions: if owner == user.name)
     st, lead = sales.call("POST", "/api/v1/r/lead", {"lead_name": "Rina Tahan", "company_name": "Kedai Tahan", "owner": RECORDS[SALES[0]], "phone": "0812" + str(int(time.time() * 1000))[-8:]})
@@ -2695,6 +2695,12 @@ def test_action_needs_approval(page, ctx):
     close_more(page)
     _, after = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/lead/" + lead["name"])
     assert not after.get("converted_deal"), f"not converted yet: {after.get('converted_deal')!r}"
+    if not mocked:  # leave no waiting request behind: later scenarios count the approval queue
+        mgr = Http(ctx.base).login(*MANAGER)
+        _, body = mgr.call("GET", "/api/v1/approvals?state=pending&model=lead&name=" + urllib.parse.quote(lead["name"]))
+        for ap in body.get("data") or []:
+            st, out = mgr.call("POST", f"/api/v1/approvals/{ap['id']}/reject", {"reason": "Uji selesai"})
+            assert st == 200, f"clean up the held convert: {st} {out}"
 
 
 # ---------------------------------------------------------------------------------------------- print and attachments
@@ -3942,7 +3948,11 @@ def test_ubah_add_table_medium_with_dry_run(page, ctx):
     close_nav(page)
     page.get_by_role("button", name="Keluar pratinjau").click()
     page.get_by_role("button", name="Keluar pratinjau").wait_for(state="detached", timeout=10000)
-    assert Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/changesets/" + pending[0]["id"])[1]["status"] == "previewed"
+    owner = Http(ctx.base).login(*ctx.owner)
+    assert owner.call("GET", "/api/v1/changesets/" + pending[0]["id"])[1]["status"] == "previewed"
+    # leave nothing waiting: later scenarios count the change sets that wait for the owner
+    st, out = owner.call("POST", f"/api/v1/changesets/{pending[0]['id']}/reject", {})
+    assert st == 200, f"clean up the previewed change set: {st} {out}"
     ctx.live.add("ubah")
 
 

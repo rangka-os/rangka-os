@@ -13,7 +13,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
 
-// Grants and caps (contract 0057 §2): an operator adds capacity on top of the plan (a Grup add-on, bought Raka
+// Grants and caps (contract 0057 §2): an operator adds capacity on top of the plan (a Grup add-on, bought Zafdoz
 // credits) or sets a ceiling below it (the Grup pool, enforced by Rangka Cloud). The effective limit is
 //
 //	min(plan limit + active grants, cap)

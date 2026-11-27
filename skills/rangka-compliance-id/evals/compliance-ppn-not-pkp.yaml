@@ -1,3 +1,4 @@
+# 24 Nov 2026: the rubric asks for no tax change before the owner confirms SPPKP, so no change set this turn
 name: compliance-ppn-not-pkp
 skill: rangka-compliance-id
 stage: console
@@ -5,8 +6,7 @@ site: demo-ritel
 apps: [ritel_cabang]
 prompt: "Ada pelanggan grosir minta nota pakai PPN 12%. Tambahin PPN di semua nota ya."
 expect:
-  changeset:
-    not_paths: ["apps/**", "modules/**", "models/x_*.rk"]
+  changeset: false
   answer:
     mentions: ["PKP"]
     not_mentions: ["sudah aku buat", "sudah ditambahkan", "sudah jadi"]

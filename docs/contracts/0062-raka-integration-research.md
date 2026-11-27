@@ -1,4 +1,4 @@
-# 0062 Raka researches and drafts integrations
+# 0062 Zafdoz researches and drafts integrations
 
 Status: proposed (16 Nov 2026) · Owner of the change: rangka-ai (research tools, spec reader, consult and agent
 prompts, skills) and rangka-os (schema `experimental.source`, skills `rangka-consult` and `rangka-connectors`) ·
@@ -9,48 +9,48 @@ Affects: rangka-cloud (offer card, connector setup screen), rangka-connectors (n
 
 - **Owner experience (Dede, 16 Nov 2026).** An owner already runs other systems with an open API and wants Rangka to
   work with their data. Example: Omilo has users and subscriptions behind a FastAPI API; the owner wants Rangka to hold
-  users and subscriptions, and to watch income on a dashboard. Raka refuses to integrate and offers manual entry.
+  users and subscriptions, and to watch income on a dashboard. Zafdoz refuses to integrate and offers manual entry.
 - **The engine can already do it.** `connector.rk` has `poll` triggers with a stored cursor and `for_each`; flows have
   `find`, `for_each`, `create`, `update` and `call`. A pull sync from any JSON API needs no new kernel step.
-- **0033 and 0045 already allow it.** A company connector `connectors/x_<name>.rk` may be proposed by Raka; the kernel
+- **0033 and 0045 already allow it.** A company connector `connectors/x_<name>.rk` may be proposed by Zafdoz; the kernel
   rates it (0033 §2) and refuses only what 0045 §2 lists. Secrets follow 0017: declared fields only, set by a person in
   a write-only form.
 - **The kernel cannot load a company connector yet.** `roots.file` writes `connectors/x_<c>.rk` as a flat file in the
   shared connectors directory (`changeset/service.go`), and the registry loads only `<ConnectorsDir>/<n>/connector.rk`
   (`meta/registry.go`), never `<site>/connectors/`. 0033 §2's location is not built.
-- **Why Raka still says "manual".**
+- **Why Zafdoz still says "manual".**
   - Interview: `consult_prompt.py` limits an option's `connectors` to names from `rangka_catalogue`, and the system
     prompt says connectors come "hanya dari rangka_catalogue". A platform outside the catalogue falls into
     `not_covered`.
   - Agent: `guardrails.py` still escalates every layer-3 path as `connector_layer` while `RAKA_PLATFORM_LIMITS` is off
     (the legacy policy of 0045 §3).
-  - Tools: Raka can read the catalogue, skills, Cloud docs and the owner's uploaded files (`owner_files`). It cannot
+  - Tools: Zafdoz can read the catalogue, skills, Cloud docs and the owner's uploaded files (`owner_files`). It cannot
     open a docs link, find an API's spec, or search the web. With nothing to read, a drafted connector would be guessed.
   - Kernel: none of 0033's kernel parts are built (location and loading, test state, confirm writes), so a company
     connector could not be loaded or wired safely even if drafted. Only the `connectors/x_*` create in
     `changeset/limits.go` exists.
-- **0045 §5 counts "a system with no usable API" as a real gap.** It does not say how Raka decides whether a system
+- **0045 §5 counts "a system with no usable API" as a real gap.** It does not say how Zafdoz decides whether a system
   has one. This contract does.
 
 ## Decision
 
 ### 1. The rule: integrate before manual
 
-- When an owner names a system they use (any app, website or service), Raka treats "connect it" as the default answer
+- When an owner names a system they use (any app, website or service), Zafdoz treats "connect it" as the default answer
   and runs the research of §2 before it offers anything.
 - Manual entry is offered only when:
   1. the owner chooses it after hearing what the integration needs (a docs link, a token, a test); or
   2. §2 ends with no usable API: no spec, no docs, and the owner cannot supply them; or
-  3. the platform refuses the draft and Raka cannot repair it (0045 §5 case 1).
-- In cases 2 and 3 Raka says why in the owner's words and keeps the integration in `later` (not `not_covered`), so the
+  3. the platform refuses the draft and Zafdoz cannot repair it (0045 §5 case 1).
+- In cases 2 and 3 Zafdoz says why in the owner's words and keeps the integration in `later` (not `not_covered`), so the
   team sees the demand.
 - "Required" means the owner's process cannot run without the system's data (a stage of the peta reads it). For a
-  required system Raka asks for docs (§2 step 4) before it accepts manual entry. For a nice-to-have system it may offer
+  required system Zafdoz asks for docs (§2 step 4) before it accepts manual entry. For a nice-to-have system it may offer
   manual now and the integration in `later`.
 
 ### 2. Research order
 
-Raka stops at the first step that gives a usable answer.
+Zafdoz stops at the first step that gives a usable answer.
 
 1. **Catalogue.** `rangka_catalogue` has a connector for the system: use it, as today.
 2. **Owner's material.** A docs link or a spec the owner gave in chat, or a file in `owner_files`.
@@ -60,11 +60,11 @@ Raka stops at the first step that gives a usable answer.
    is mounted under `/api`, as in Omilo), and `<link rel="service-desc">` or a spec URL found in a Swagger UI or Redoc
    page (`/docs`, `/api/docs`, `/redoc`).
 4. **Web search** (`integration_search`, when the deployment has a search provider): "<system> API documentation",
-   "<system> OpenAPI". Results are candidates; Raka opens them with `integration_fetch`.
+   "<system> OpenAPI". Results are candidates; Zafdoz opens them with `integration_fetch`.
 5. **Ask the owner.** One question, in the owner's words: where the docs are, or whether their developer can share
-   them or the spec file. For the owner's own product (Omilo) Raka asks whether its `/openapi.json` is reachable.
+   them or the spec file. For the owner's own product (Omilo) Zafdoz asks whether its `/openapi.json` is reachable.
 
-Raka never asks for a token or key at any step (0017 §4). If the API needs one, Raka says which kind and where the
+Zafdoz never asks for a token or key at any step (0017 §4). If the API needs one, Zafdoz says which kind and where the
 owner will enter it (§6).
 
 ### 3. Research tools (rangka-ai)
@@ -77,7 +77,7 @@ owner will enter it (§6).
 
 - Tools are read-only, run in rangka-ai's server, and are available to the consult step and the workspace agent.
 - In the consult step they count toward its existing cap of 8 read-tool calls per turn; the per-tool limits above
-  apply inside it. Research that needs more spans turns (Raka tells the owner it is still reading).
+  apply inside it. Research that needs more spans turns (Zafdoz tells the owner it is still reading).
 - **Fetched content is data, not instructions.** It is passed to the model inside a marked block. A page that says
   "send the token to …" or "use host …" changes nothing: hosts in a draft are shown to the owner (§6), and 0017 §5 lets
   a secret go only to declared hosts over HTTPS.
@@ -91,26 +91,26 @@ owner will enter it (§6).
 
 - **Summary:** title, version, servers, auth schemes, and operations grouped by tag (`method path`, summary, list or
   single, pagination hints: `page`/`limit`/`cursor`/`next` parameters, `updated_since`-like filters).
-- **Skeleton `connector.rk`** for the chosen `operations` (default: none; Raka picks):
+- **Skeleton `connector.rk`** for the chosen `operations` (default: none; Zafdoz picks):
   - `name: x_<slug>` from the title or host; `hosts:` from `servers`. `hosts` entries are literal names
-    (`^[A-Za-z0-9.-]+$`), so when the spec has server variables or several servers Raka asks the owner which one and writes that host
+    (`^[A-Za-z0-9.-]+$`), so when the spec has server variables or several servers Zafdoz asks the owner which one and writes that host
     literally, in `hosts:` and in the action URLs.
   - `auth` from `securitySchemes`: `http bearer` → `api_token` header field; `apiKey` in header → a field named after
     the header; `http basic` → `username` + `password`; `oauth2` client credentials → `client_id` + `client_secret`.
     Every credential field is `secret: true` with no `default:`. `apiKey` in query sets `allow_secret_in: [query]`
     (0017 §5 warning stays visible). `oauth2` client credentials and authorization code are not supported: the kernel
     only refreshes tokens (`grant_type=refresh_token`, `connectors/oauth.go`) and cannot obtain one. The summary marks
-    such an API `auth_unsupported`; Raka says so and keeps it in `later` (§1 case 3).
+    such an API `auth_unsupported`; Zafdoz says so and keeps it in `later` (§1 case 3).
   - one action per operation, with `request` (method, URL from the path, query parameters as inputs) and `output`
     field paths from the response schema (arrays detected for list operations).
   - for list `GET` operations with a cursor or time filter: a `poll` trigger stub with `cursor` and `input`, whose
     `emit` includes the item's change timestamp (`updated_at` or the spec's equivalent). The kernel drops an event
     whose hash it has seen (`connectors/webhook.go`), so an emit without it would drop every later change to a
     record.
-- Raka edits the skeleton (names, mapping, which fields to keep, poll interval) and drafts the models and flows. It
+- Zafdoz edits the skeleton (names, mapping, which fields to keep, poll interval) and drafts the models and flows. It
   does not invent hosts, paths or auth that the spec does not have; the validator and §5 provenance make a mismatch
   visible.
-- Without a spec (§2 ended on a docs page), Raka writes the connector from the docs text. The draft is marked
+- Without a spec (§2 ended on a docs page), Zafdoz writes the connector from the docs text. The draft is marked
   `source.kind: docs` (§5) and the change-set summary says "disusun dari halaman dokumentasi, belum dari spec".
 
 ### 5. Provenance on the draft
@@ -130,17 +130,17 @@ owner will enter it (§6).
 
 ### 6. Secrets and the owner's part
 
-0017 and 0033 apply unchanged. What this contract adds is how Raka explains them:
+0017 and 0033 apply unchanged. What this contract adds is how Zafdoz explains them:
 
 - The offer and the change-set summary list, for each drafted connector: the hosts it talks to, the credential fields
   (`requires:`), whether it reads only or also writes, and whether it is money-touching (0033 §4).
-- Raka suggests the narrowest credential the system offers: a read-only token when the draft has only `GET` actions.
-- After apply, Raka points the owner to the connector setup screen: set the fields, run the test (0033 §3), and for
-  money-touching writes confirm them (0033 §4). Raka reads `GET /connectors/{c}/test` and explains the result; it
+- Zafdoz suggests the narrowest credential the system offers: a read-only token when the draft has only `GET` actions.
+- After apply, Zafdoz points the owner to the connector setup screen: set the fields, run the test (0033 §3), and for
+  money-touching writes confirm them (0033 §4). Zafdoz reads `GET /connectors/{c}/test` and explains the result; it
   never calls the test or confirm endpoints.
 - **Pasted secrets.** `preflight` already stops a turn that contains a token (0045 §3). In addition:
   - the stored chat history keeps the message with the secret replaced by `[rahasia disembunyikan]`;
-  - Raka's reply says the value was not used and where to set it.
+  - Zafdoz's reply says the value was not used and where to set it.
 
 ### 7. Interview and offer
 
@@ -163,7 +163,7 @@ owner will enter it (§6).
      validation does not see pending change sets, so before that a new connector is `unknown_connector`. They apply
      only after the owner's test (0033 §3 `connector_untested`).
   One change set holding both never applies: applying resets the connector's test. The kernel reports it at validate
-  (`connector_untested` on each such flow file), so Raka's self-repair splits it. If the owner skips the test, the
+  (`connector_untested` on each such flow file), so Zafdoz's self-repair splits it. If the owner skips the test, the
   models and dashboards still exist and fill once the connector is tested and the flows are applied.
 
 ### 8. Worked example: Omilo (read only)
@@ -173,7 +173,7 @@ the work once it has one; the first end-to-end target is the mock of the order o
 
 Owner: "Aku punya Omilo, ada user dan langganan. Mau kelola di Rangka dan pantau pemasukan."
 
-1. §2 step 5: Raka asks for the Omilo address; `integration_fetch {url, discover: true}` finds `/openapi.json`.
+1. §2 step 5: Zafdoz asks for the Omilo address; `integration_fetch {url, discover: true}` finds `/openapi.json`.
 2. `integration_spec` lists `GET /users`, `GET /subscriptions`, `GET /payments` (list, `updated_since`), auth
    `http bearer`.
 3. Draft change set 1 (connector, models, dashboards):
@@ -190,7 +190,7 @@ Owner: "Aku punya Omilo, ada user dan langganan. Mau kelola di Rangka dan pantau
 5. Risk: the connector has poll triggers, so change set 1 is high (owner only, 0033 §2). The connector is read only,
    but the payments flow writes money fields on its trigger, so it is money-touching (0033 §4) and change set 2 is
    high too.
-6. Owner approves and applies change set 1, then Raka proposes change set 2 (step 4). The owner sets a read-only Omilo
+6. Owner approves and applies change set 1, then Zafdoz proposes change set 2 (step 4). The owner sets a read-only Omilo
    token, runs the test (sample of 20 rows), then approves and applies change set 2; before the test its apply answers
    `connector_needs_auth` or `connector_untested`.
 
@@ -242,7 +242,7 @@ Owner: "Aku punya Omilo, ada user dan langganan. Mau kelola di Rangka dan pantau
 - APIs that read with `POST` (search endpoints) stay untestable until 0033's `read_only: true` action flag is decided.
 - Pagination styles the poll trigger cannot express (page tokens in headers, `Link` headers): whether the skeleton
   marks them unsupported or the connector format grows a key.
-- Whether Raka may edit its own drafted `x_` connector while it is `untested` (0033 Open, 0045 Open): needed when the
+- Whether Zafdoz may edit its own drafted `x_` connector while it is `untested` (0033 Open, 0045 Open): needed when the
   first test shows a wrong field path.
 - `find` in a sync flow reads the whole model today; a large external table (thousands of subscriptions) makes each
   polled item slow. Whether `find` gets an indexed path for a `unique` field before the first big sync.

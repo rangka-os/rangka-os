@@ -1,7 +1,7 @@
 /* Rangka end-user app: the counter work screen (contract 0030 §2, type counter): sell at a counter.
  *
  * RangkaApp.workRenderers.counter({ctx, screen, set, sets, reload}). Slots (screen.counter):
- *   catalogue {model, filter, title, search, group_by, price, barcode, image, limit}: the items to tap, loaded once
+ *   catalogue {model, filter, title, search, group_by, price, barcode, image, variants {group, label, title}, limit}: the items to tap, loaded once
  *     (GET /r/<model>?filter=…&limit=…) and kept in the device cache for offline use; searched on the device; a barcode
  *     typed or scanned into the search box and ended with Enter adds that item.
  *   document {model, lines, line {item, qty, price, note, amount, flag}, total, change, summary, checkout, set}: one sale. Prices, discounts,
@@ -20,7 +20,9 @@
  *     fields and creates it. Closing creates the close document with close.fields and submits it; the expected amount
  *     never shows (blind count: the model hides it, contract 0027).
  *   hold: park the cart ("Tahan") and pick it up later (kept on this device per user).
- *   customer {field, required}: a name, table or queue number on the sale.
+ *   customer {field, required, table}: a name, table or queue number on the sale. With table (contract 0048 section 2,
+ *     tables.js) the counter opens on a table map: a free table starts an open bill (a server draft), a busy one loads it;
+ *     Simpan, Kirim ke dapur, Minta tagihan, Pindah, Gabung and Pisah work on the draft; Bayar patches it and submits.
  *   print: the print format of the receipt ("Cetak struk" prints it through the browser dialog, 80 mm).
  * A sale is one outbox job (outbox.js): created and submitted with Idempotency-Keys, queued when offline.
  * On a paired device with an unlocked cashier (contract 0058) whose pulled config names the document model's number
@@ -44,7 +46,7 @@
   function cartAdd(cart, item) {
     var out = (cart || []).map(function (l) { return Object.assign({}, l); });
     for (var i = 0; i < out.length; i++) {
-      if (out[i].item === item.item && !out[i].note && !out[i].flag) { out[i].qty += 1; return out; }
+      if (out[i].item === item.item && !out[i].note && !out[i].flag && !out[i].saved) { out[i].qty += 1; return out; }
     }
     out.push({ key: item.item + "#" + out.length + "#" + Date.now(), item: item.item, title: item.title, price: Number(item.price) || 0, qty: 1, note: "" });
     return out;
@@ -107,12 +109,39 @@
     });
     if (slots.payments && pay) {
       var rows = [];
-      [["qris", pay.qris], ["cash", pay.cash]].forEach(function (x) {
-        if (Number(x[1]) > 0) { var r = {}; r[slots.payments.method] = x[0]; r[slots.payments.amount] = Number(x[1]); rows.push(r); }
-      });
+      if (pay.parts && slots.payments.party) { // a split bill: one set of rows per part, each row names its part
+        pay.parts.forEach(function (pt, i) {
+          [["qris", pt.qris], ["cash", pt.cash]].forEach(function (x) {
+            if (Number(x[1]) > 0) { var r = {}; r[slots.payments.method] = x[0]; r[slots.payments.amount] = Number(x[1]); r[slots.payments.party] = i + 1; rows.push(r); }
+          });
+        });
+        if (slots.payments.parties) body[slots.payments.parties] = pay.parts.length;
+      } else {
+        [["qris", pay.qris], ["cash", pay.cash]].forEach(function (x) {
+          if (Number(x[1]) > 0) { var r = {}; r[slots.payments.method] = x[0]; r[slots.payments.amount] = Number(x[1]); rows.push(r); }
+        });
+      }
       body[slots.payments.table] = rows;
     }
     return body;
+  }
+
+  /** The label of a select value (the option's own text), so a folded checkout line never shows the raw value. */
+  function selectLabel(f, v) {
+    var o = (f.options || []).filter(function (x) { return x.value === v; })[0];
+    return o ? L(o.label) : String(v);
+  }
+
+  /** The share of part k (0-based) of a bill split between n people: equal, rounded down, the remainder on part 1
+   *  (the same rule as the model's party_share and party_first_share). */
+  function partShare(total, n, k) {
+    var each = Math.floor(total / n);
+    return k === 0 ? total - (n - 1) * each : each;
+  }
+  /** What part k still owes after its QRIS and cash, and its change (cash beyond the share goes back to that part). */
+  function partState(total, n, k, pt) {
+    var share = partShare(total, n, k), paid = (Number(pt.cash) || 0) + (Number(pt.qris) || 0);
+    return { share: share, short: Math.max(0, share - paid), change: Math.max(0, Math.min(Number(pt.cash) || 0, paid - share)) };
   }
 
   /** The list filter for the caller's open session: the slot's filter AND state == open. */
@@ -135,6 +164,56 @@
       var hay = (it.title + " " + (it.search || "")).toLowerCase();
       return words.every(function (w) { return hay.indexOf(w) >= 0; });
     });
+  }
+
+  /** The shortest common prefix of the titles, cut back to a whole word and stripped of trailing separators
+   *  ("Kaos Polos - M" and "Kaos Polos - L" give "Kaos Polos"); "" when they share none. */
+  function commonTitle(titles) {
+    var list = (titles || []).map(String).filter(Boolean);
+    if (!list.length) return "";
+    var p = list[0];
+    list.forEach(function (t) { while (p && t.indexOf(p) !== 0) p = p.slice(0, -1); });
+    if (p.length && !list.every(function (t) { return t.length === p.length || /[\s\-\/,:(]/.test(t.charAt(p.length)); })) {
+      var cut = p.search(/[\s\-\/,:(][^\s\-\/,:(]*$/);
+      p = cut > 0 ? p.slice(0, cut) : "";
+    }
+    return p.replace(/[\s\-\/,:(]+$/, "");
+  }
+
+  /** The tiles to show (variants slot): rows sharing a non-empty group collapse into one tile {variants: [rows]} with the
+   *  product title (the optional title field, else the shortest common prefix, else the group code), the lowest price and
+   *  the summed stock (left(it) per row, null when no row has a figure); a group of one row stays a plain tile. Tiles keep
+   *  the order of their first row. */
+  function variantTiles(rows, left) {
+    var seen = {}, out = [];
+    (rows || []).forEach(function (it) {
+      if (!it.vgroup) { out.push(it); return; }
+      var g = seen[it.vgroup];
+      if (!g) { g = seen[it.vgroup] = { vgroup: it.vgroup, variants: [], key: "group:" + it.vgroup }; out.push(g); }
+      g.variants.push(it);
+    });
+    return out.map(function (t) {
+      if (!t.variants) return t;
+      if (t.variants.length === 1) return t.variants[0];
+      var named = t.variants.filter(function (v) { return v.vtitle; })[0];
+      var prices = t.variants.map(function (v) { return Number(v.price) || 0; });
+      var stock = null;
+      t.variants.forEach(function (v) { var n = left ? left(v) : v.left; if (n != null) stock = (stock || 0) + n; });
+      t.title = named ? named.vtitle : commonTitle(t.variants.map(function (v) { return v.title; })) || t.vgroup;
+      t.price = Math.min.apply(null, prices);
+      t.from = Math.max.apply(null, prices) > t.price;
+      t.image = (t.variants.filter(function (v) { return v.image; })[0] || {}).image || "";
+      t.left = stock;
+      t.group = t.variants[0].group;
+      return t;
+    });
+  }
+
+  /** The sheet's label of a variant: its label field, else its title without the product's title, else the title. */
+  function variantLabel(v, product) {
+    if (v.vlabel) return v.vlabel;
+    var t = String(v.title || ""), p = String(product || "");
+    return p && t.indexOf(p) === 0 && t.length > p.length ? t.slice(p.length).replace(/^[\s\-\/,:(]+|[)\s]+$/g, "") || t : t;
   }
 
   /** The summary slot's fields as rows {name, label, value} from a computed record; fields the record lacks (hidden
@@ -217,6 +296,9 @@
   RA.openFilter = openFilter;
   RA.findByBarcode = findByBarcode;
   RA.catalogueMatch = catalogueMatch;
+  RA.commonTitle = commonTitle;
+  RA.variantTiles = variantTiles;
+  RA.variantLabel = variantLabel;
 
   /* ================================================================ views */
   var React = global.React, R = global.Rangka;
@@ -336,14 +418,41 @@
     return /^(https?:)?\/|^data:image\//.test(v) ? v : "/api/v1/attachments/" + encodeURIComponent(v);
   }
 
+  /** The choice sheet (contract 0048 §1): a dialog over the catalogue listing what to pick for one tile. Variants use it
+   *  now; the options of a made-to-order item plug in as more row kinds. rows: [{key, label, price, badge, out, n}];
+   *  onPick(row) adds it. Escape, the backdrop and the close button dismiss it. */
+  function ChoiceSheet(p) {
+    var ref = useRef(null);
+    useEffect(function () {
+      var prev = global.document.activeElement;
+      if (ref.current) { var b = ref.current.querySelector("button[data-row]") || ref.current.querySelector("button"); if (b) b.focus(); }
+      function key(e) { if (e.key === "Escape") p.onClose(); }
+      global.document.addEventListener("keydown", key);
+      return function () { global.document.removeEventListener("keydown", key); if (prev && prev.focus) prev.focus(); };
+    }, []);
+    return h("div", { className: "ap-counter-choice-bg", onClick: function (e) { if (e.target === e.currentTarget) p.onClose(); } },
+      h("div", { className: "ap-counter-choice", role: "dialog", "aria-modal": "true", "aria-label": p.title, ref: ref },
+        h("div", { className: "ap-counter-choice-h" },
+          h("div", null, h("h2", null, p.title), p.subtitle ? h("p", null, p.subtitle) : null),
+          h("button", { type: "button", className: "ap-counter-sheet-x", "aria-label": "Tutup", onClick: p.onClose }, h(R.Icon, { name: "close" }))),
+        h("ul", { className: "ap-counter-choice-rows" }, p.rows.map(function (r) {
+          return h("li", { key: r.key }, h("button", { type: "button", "data-row": "1", className: r.out ? "out" : "", onClick: function () { p.onPick(r); },
+            "aria-label": r.label + ", " + rp(r.price) + (r.out ? ", habis" : r.badge ? ", " + r.badge : "") + (r.n ? ", " + r.n + " di pesanan" : "") },
+            h("span", { className: "ap-counter-choice-t" }, r.label, r.n ? h("strong", null, r.n) : null),
+            r.badge || r.out ? h("em", { className: "ap-counter-left" + (r.out ? " out" : "") }, r.out ? "Habis" : r.badge) : null,
+            h("b", null, rp(r.price))));
+        }))));
+  }
+
   /* ---------------------------------------------------------------- the counter */
   function CounterScreen(p) {
     var ctx = p.ctx, s = p.screen, c = s.counter || {}, sets = p.sets || {}, scope = RA.outboxScope(ctx.me);
-    var cat = c.catalogue || {}, ses = c.session || null, doc = c.document || {};
+    var cat = c.catalogue || {}, ses = c.session || null, doc = c.document || {}, vr = cat.variants || null;
     var docMeta = (ctx.meta.models || {})[doc.model] || {};
     var online = useOnline(), wide = useWide();
     var ss = useState(ses ? "loading" : "none"), session = ss[0], setSession = ss[1]; // "loading" | null | record | "none"
     var is = useState(null), items = is[0], setItems = is[1];
+    var vs = useState(null), vsheet = vs[0], setVsheet = vs[1]; // the tile whose variant sheet is open
     var ce = useState(null), catErr = ce[0], setCatErr = ce[1];
     var cs = useState([]), cart = cs[0], setCart = cs[1];
     var qs = useState(""), q = qs[0], setQ = qs[1];
@@ -370,6 +479,13 @@
     var cas = useState(null), calc = cas[0], setCalc = cas[1]; // {key, rec, errors} | {key, failed}
     var bls = useState(null), bal = bls[0], setBal = bls[1]; // contract 0039: {item: qty} for the open session, or null
     var jobRef = useRef(null), searchRef = useRef(null), calcSeq = useRef(0);
+    // tables (contract 0048 section 2): the open bill {table, title, guests, name, modified_at, asked} and the map mode
+    var tbl = c.customer && c.customer.table || null;
+    var bis = useState(null), bill = bis[0], setBill = bis[1];
+    var tms = useState(tbl ? "pick" : null), tmode = tms[0], setTmode = tms[1]; // pick | move | merge | split | null
+    var tks = useState(0), tmKey = tks[0], setTmKey = tks[1];
+    var guestAsk = useState(null), guestFor = guestAsk[0], setGuestFor = guestAsk[1]; // a free table waiting for its guest count
+    var billKey = useRef(null);
     // a paired device (contract 0058): {device, actor, data} once the device, its unlocked cashier and pulled data are known
     var dvs = useState(null), dev = dvs[0], setDev = dvs[1];
     useEffect(function () {
@@ -412,7 +528,9 @@
         var rows = ((r && r.data) || []).map(function (x) {
           return { item: x.name, title: String(x[cat.title] || x.title || x.name), price: x[cat.price], group: cat.group_by ? String(x[cat.group_by] || "") : "",
             barcode: cat.barcode ? x[cat.barcode] : "", search: (cat.search || []).map(function (f) { return x[f] || ""; }).join(" "),
-            image: cat.image ? x[cat.image] || "" : "", left: typeof cat.available === "string" && x[cat.available] != null ? Number(x[cat.available]) : null };
+            image: cat.image ? x[cat.image] || "" : "",
+            vgroup: vr ? String(x[vr.group] || "") : "", vlabel: vr ? String(x[vr.label] || "") : "", vtitle: vr && vr.title ? String(x[vr.title] || "") : "",
+            left: typeof cat.available === "string" && x[cat.available] != null ? Number(x[cat.available]) : null };
         });
         setItems(rows);
         RA.outbox.cache.put(key, rows);
@@ -440,7 +558,22 @@
     var shiftName = session && typeof session === "object" ? session.name : null;
 
     /* ----- the model's numbers for this cart (contract 0034) */
-    function computeBody() { return saleBody(c, cart, null, shiftName, sets.document, customer, checkout); }
+    /* The preview of an open table bill computes what the server will: the table (a bill on a table defaults to
+       dine-in, so it takes service charge) and the checkout values the bill already stores, under this device's own
+       picks (rangka-apps#122 with #121's charges). */
+    function computeBody() {
+      if (!bill || !tbl) return saleBody(c, cart, null, shiftName, sets.document, customer, checkout);
+      var body = saleBody(c, cart, null, shiftName, sets.document, customer, Object.assign({}, bill.kept || {}, checkout));
+      body[tbl.link] = bill.table;
+      if (tbl.guests) body[tbl.guests] = bill.guests;
+      return body;
+    }
+    /* the checkout values a bill record stores (the order type the server gave it, a member picked earlier) */
+    function billKept(rec) {
+      var o = {};
+      checkoutSlots(doc).forEach(function (sl) { var v = rec[sl.field]; if (v !== undefined && v !== null && v !== "" && v !== false) o[sl.field] = v; });
+      return o;
+    }
     var calcKey = (doc.summary || devOn) && cart.length ? JSON.stringify(computeBody()) : "";
     /* The device's own computation of the sale (contract 0058 §10): engine.js over the pulled records, the open
        session and the outlet; the rules whose check needs what only the kernel holds (the cashier's email, records
@@ -561,6 +694,113 @@
       setCart(h0.cart); setCustomer(h0.customer || ""); setCheckout(h0.checkout || {}); setHeldOpen(false);
     }
 
+    /* ---- tables: an open bill is a server draft (contract 0048 section 2) ---- */
+    function billBody(extra) {
+      var body = saleBody(c, cart, null, shiftName, sets.document, customer, checkout);
+      body[doc.lines] = RA.tables.billLines(doc, cart, body[doc.lines]);
+      body[tbl.link] = bill.table;
+      if (tbl.guests) body[tbl.guests] = bill.guests;
+      return Object.assign(body, extra || {});
+    }
+    function billErr(e) {
+      if (e && e.status === 409) return "Tagihan ini sudah diubah di perangkat lain. Buka lagi dari peta meja.";
+      return errText(e);
+    }
+    /* Create the draft (one Idempotency-Key per bill, so a retry never makes two) or patch it conditionally on the
+       version this device read, so two devices on one bill get a conflict, not a lost update. */
+    function saveBill(extra) {
+      var body = billBody(extra), r0;
+      if (!bill.name) {
+        if (!billKey.current) billKey.current = RA.newKey();
+        body.rev = 1;
+        r0 = ctx.api.create(doc.model, body, { key: billKey.current });
+      } else {
+        body._if = { rev: bill.rev }; body.rev = bill.rev + 1;
+        r0 = ctx.api.update(doc.model, bill.name, body);
+      }
+      return r0.then(function (r) {
+        var rec = r && r.record ? r.record : r;
+        setBill(Object.assign({}, bill, { name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill], kept: billKept(rec) }));
+        setCart(RA.tables.cartFromBill(doc, rec));
+        return rec;
+      });
+    }
+    function billAct(extra, okMsg, then) {
+      if (busy || !bill) return;
+      setBusy(true); setErr("");
+      saveBill(extra).then(function (rec) { if (okMsg) ctx.toast("ok", okMsg, "Meja " + bill.title); if (then) then(rec); },
+        function (e) { setErr(billErr(e)); }).then(function () { setBusy(false); });
+    }
+    function backToMap() { setTmode("pick"); setBill(null); billKey.current = null; setCart([]); setCheckout({}); setSheet(false); setPay(null); setTmKey(tmKey + 1); }
+    function pickTable(x) {
+      if (tmode === "move") {
+        setBusy(true); setErr("");
+        ctx.api.update(doc.model, bill.name, (function () { var b = {}; b[tbl.link] = x.name; b.rev = bill.rev + 1; b._if = { rev: bill.rev }; b._if[tbl.link] = bill.table; return b; })())
+          .then(function (rec) { ctx.toast("ok", "Pindah meja", "Meja " + bill.title + " ke meja " + x.title); setBill(Object.assign({}, bill, { table: x.name, title: x.title, rev: bill.rev + 1 })); setTmode(null); },
+            function (e) { setErr(billErr(e)); setTmode(null); }).then(function () { setBusy(false); });
+        return;
+      }
+      if (tmode === "merge") {
+        var target = x.drafts[0];
+        setBusy(true); setErr("");
+        saveBill().then(function (rec) {
+          var b = { merge_into: target.name, rev: Number(rec.rev) + 1 }; b._if = { rev: Number(rec.rev) };
+          return ctx.api.update(doc.model, rec.name, b);
+        }).then(function () { ctx.toast("ok", "Tagihan digabung", "Meja " + bill.title + " ke meja " + x.title); backToMap(); },
+          function (e) { setErr(billErr(e)); setTmode(null); }).then(function () { setBusy(false); });
+        return;
+      }
+      if (x.state === "free") { setGuestFor({ table: x, guests: 1 }); return; }
+      // a busy table: its draft (the first one of a split) with its lines
+      setBusy(true); setErr("");
+      ctx.api.list(doc.model, { filter: "name == '" + x.drafts[0].name + "'", children: true, limit: 1 }).then(function (r) {
+        var rec = r && r.data && r.data[0];
+        if (!rec) throw new Error("Tagihan tidak ditemukan");
+        billKey.current = null;
+        setBill({ table: x.name, title: x.title, guests: Number(rec[tbl.guests]) || 1, name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill], kept: billKept(rec) });
+        setCart(RA.tables.cartFromBill(doc, rec)); setCustomer(rec[c.customer.field] || ""); setTmode(null);
+      }, function (e) { setErr(errText(e)); }).then(function () { setBusy(false); });
+    }
+    function startBill() {
+      var x = guestFor.table;
+      billKey.current = null;
+      setBill({ table: x.name, title: x.title, guests: Math.max(1, Number(guestFor.guests) || 1), name: null, rev: 0, asked: false });
+      setCart([]); setCustomer(""); setGuestFor(null); setTmode(null);
+    }
+    function splitBill(keys) {
+      setBusy(true); setErr("");
+      saveBill().then(function (rec) {
+        var b = { split_lines: keys, rev: Number(rec.rev) + 1 }; b._if = { rev: Number(rec.rev) };
+        return ctx.api.update(doc.model, rec.name, b);
+      }).then(function () { ctx.toast("ok", "Tagihan dipisah", "Meja " + bill.title); backToMap(); },
+        function (e) { setErr(billErr(e)); setTmode(null); }).then(function () { setBusy(false); });
+    }
+    /* Bayar on an open bill: patch the lines and the payments, then submit the same draft. */
+    function billPay(payRows, est) {
+      var extra = {};
+      if (c.payments && payRows) {
+        var rows = [], put = function (x, part) {
+          if (Number(x[1]) > 0) { var r = {}; r[c.payments.method] = x[0]; r[c.payments.amount] = Number(x[1]); if (part) r[c.payments.party] = part; rows.push(r); }
+        };
+        if (payRows.parts && c.payments.party) { // "Bayar terpisah" on a table bill: rows per part, like a counter sale
+          payRows.parts.forEach(function (pt, i) { [["qris", pt.qris], ["cash", pt.cash]].forEach(function (x) { put(x, i + 1); }); });
+          if (c.payments.parties) extra[c.payments.parties] = payRows.parts.length;
+        } else {
+          [["qris", payRows.qris], ["cash", payRows.cash]].forEach(function (x) { put(x, 0); });
+        }
+        extra[c.payments.table] = rows;
+      }
+      setBusy(true); setErr("");
+      saveBill(extra).then(function (rec) { return ctx.api.submit(doc.model, rec.name, { key: RA.newKey() }); }).then(function (res) {
+        sendingRef.current = false;
+        var rec = (res && res.record) || {}, dt = doc.total, dc = doc.change;
+        setDone({ name: rec.name || null, total: dt && rec[dt] != null ? Number(rec[dt]) : est.total, change: dc && rec[dc] != null ? Number(rec[dc]) : est.change,
+          estimate: false, queued: false, approval: !!(res && res.approval) });
+        loadBalances();
+        setCart([]); setCustomer(""); setCheckout({}); setCheckoutOpen(false); setPay(null); setBill(null); billKey.current = null;
+      }, function (e) { sendingRef.current = false; setErr(billErr(e)); }).then(function () { setBusy(false); });
+    }
+
     function openPay() {
       if (!cart.length) return;
       if (c.customer && c.customer.required && !customer.trim()) { setErr("Isi nama pembeli atau nomor meja dulu."); return; }
@@ -624,14 +864,22 @@
       sendingRef.current = true;
       send(jobRef.current.job, jobRef.current.est);
     }
-    function finish(cash, qris) {
+    function finish(cash, qris, parts) {
       if (busy || sendingRef.current) return;
       if (jobRef.current) { resend(); return; } // a pending sale goes again exactly as it was
       var change = changeOf(total, cash, qris);
+      if (parts) { // a split bill: every part must cover its share; the change is the sum of the parts' change
+        var n = parts.length, left = 0;
+        change = 0;
+        parts.forEach(function (pt, k) { var st = partState(total, n, k, pt); left += st.short; change += st.change; });
+        if (left > 0) { setErr("Ada bagian yang bayarnya kurang dari bagiannya."); return; }
+      }
       if (change === null) { setErr("Uang tunai kurang dari yang harus dibayar."); return; }
       sendingRef.current = true;
       setBusy(true); setErr("");
-      var payRows = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
+      var payRows = c.payments ? (parts ? { parts: parts.map(function (pt) { return { cash: Math.max(0, Number(pt.cash) || 0), qris: Number(pt.qris) || 0 }; }) }
+        : { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 }) : null;
+      if (bill) { billPay(payRows, { total: total, change: change }); return; } // an open table bill is a server draft, also on a paired device
       if (devOn) { deviceSale(payRows); return; }
       var est = { total: total, change: change };
       // a new sale takes set: values again (contract 0030 §2: today's date after midnight, audit WS3 M2); offline or
@@ -684,7 +932,7 @@
       RA.printer.print({ doc: rec, model: doc.model, outlet_name: (cfg.outlet && cfg.outlet.name) || "" }, { actor: dev && dev.actor && dev.actor.user })
         .then(null, function (e) { ctx.toast("bad", "Struk belum tercetak", (e && e.message) || ""); });
     }
-    function newSale() { setDone(null); setSheet(false); if (searchRef.current) searchRef.current.focus(); }
+    function newSale() { setDone(null); setSheet(false); if (tbl) { backToMap(); return; } if (searchRef.current) searchRef.current.focus(); }
 
     function openSession() {
       if (busy) return;
@@ -788,6 +1036,8 @@
     var groups = [];
     (items || []).forEach(function (it) { if (it.group && groups.indexOf(it.group) < 0) groups.push(it.group); });
     var shown = catalogueMatch(items, q, group);
+    function leftOf(it) { return avSlot ? (bal && bal[it.item] != null ? bal[it.item] : null) : it.left; }
+    var tiles = vr ? variantTiles(shown, leftOf) : shown;
     var inCart = {};
     cart.forEach(function (l) { inCart[l.item] = (inCart[l.item] || 0) + l.qty; });
 
@@ -811,16 +1061,20 @@
           return h("button", { key: g || "*", type: "button", role: "tab", "aria-selected": group === g ? "true" : "false", onClick: function () { setGroup(g); } }, g ? groupLabel(g) : "Semua");
         })) : null,
       catErr ? h("div", { className: "ap-work-err" }, catErr) : !items ? h("p", { className: "ap-work-loading" }, "Memuat katalog…") :
-        h("div", { className: "ap-counter-grid" }, shown.map(function (it) {
-          var left = avSlot ? (bal && bal[it.item] != null ? bal[it.item] : null) : it.left;
-          var out = left != null && left <= 0, low = left != null && left > 0 && left <= 5, n = inCart[it.item] || 0;
-          return h("button", { key: it.item, type: "button", className: "ap-counter-item" + (out ? " out" : "") + (n ? " picked" : ""), onClick: function () { add(it); },
-            "aria-label": it.title + ", " + rp(it.price) + (out ? ", habis" : low ? ", sisa " + left : "") + (n ? ", " + n + " di pesanan" : "") },
+        h("div", { className: "ap-counter-grid" }, tiles.map(function (it) {
+          var vs0 = it.variants || null;
+          var left = vs0 ? it.left : leftOf(it);
+          var out = left != null && left <= 0, low = left != null && left > 0 && left <= 5;
+          var n = vs0 ? vs0.reduce(function (s, v) { return s + (inCart[v.item] || 0); }, 0) : inCart[it.item] || 0;
+          return h("button", { key: it.key || it.item, type: "button", className: "ap-counter-item" + (vs0 ? " variants" : "") + (out ? " out" : "") + (n ? " picked" : ""),
+            "aria-haspopup": vs0 ? "dialog" : undefined, onClick: function () { if (vs0) setVsheet(it); else add(it); },
+            "aria-label": it.title + ", " + (vs0 ? vs0.length + " varian, " + (it.from ? "mulai " : "") : "") + rp(it.price) + (out ? ", habis" : low ? ", sisa " + left : "") + (n ? ", " + n + " di pesanan" : "") },
             h("span", { className: "ap-counter-pic " + tintOf(it.title), "aria-hidden": "true" },
               it.image ? h(TileImage, { src: imageSrc(it.image), initials: initials(it.title) }) : h("i", null, initials(it.title)),
               n ? h("strong", { className: "ap-counter-n" }, n) : null),
             h("span", { className: "ap-counter-item-t" }, it.title),
-            h("span", { className: "ap-counter-item-p" }, h("span", null, rp(it.price)),
+            h("span", { className: "ap-counter-item-p" }, h("span", null, (it.from ? "mulai " : "") + rp(it.price)),
+              vs0 ? h("em", { className: "ap-counter-more" }, vs0.length + " varian") : null,
               out ? h("em", { className: "ap-counter-left out" }, "Habis") : low ? h("em", { className: "ap-counter-left" }, "sisa " + left) : null));
         }), !shown.length && (q || group) ? h("p", { className: "ap-work-loading" }, "Tidak ada yang cocok.") : null),
       items && !items.length && !catErr ? h("div", { className: "ap-counter-nocat", role: "status" },
@@ -849,7 +1103,8 @@
           h("div", { className: "ap-counter-qty" },
             h("button", { type: "button", "aria-label": "Kurangi " + l.title, onClick: function () { setLine(i, { qty: l.qty - 1 }); } }, "−"),
             h("b", null, l.qty),
-            h("button", { type: "button", "aria-label": "Tambah " + l.title, onClick: function () { setLine(i, { qty: l.qty + 1 }); } }, "+")),
+            // a saved table line may already be in the kitchen, which never gets a raised quantity: "+" adds a new line instead
+            h("button", { type: "button", "aria-label": "Tambah " + l.title, onClick: function () { if (l.saved) add({ item: l.item, title: l.title, price: l.price }); else setLine(i, { qty: l.qty + 1 }); } }, "+")),
           amountView(l, i)),
         // the switch shows on a line the cashier opened (tap its name, like the note) or one already switched on
         flagField && (l.flag || noteLine === i) ? h("button", { type: "button", className: "ap-counter-flag", "aria-pressed": l.flag ? "true" : "false",
@@ -875,7 +1130,7 @@
       h("button", { type: "button", className: "ap-counter-ck-h", "aria-expanded": checkoutOpen ? "true" : "false", disabled: stuck, onClick: function () { setCheckoutOpen(!checkoutOpen); } },
         h(R.Icon, { name: "tag" }), h("span", null, checkoutOpen || !ckFilled.length ? ckTitle : ckFilled.map(function (x) {
           var v = checkout[x.f.name];
-          return x.f.type === "link" && ctx.cache && ctx.cache.title ? ctx.cache.title(x.f.to, v) || v : x.f.type === "check" ? L(x.f.label) : String(v);
+          return x.f.type === "link" && ctx.cache && ctx.cache.title ? ctx.cache.title(x.f.to, v) || v : x.f.type === "check" ? L(x.f.label) : x.f.type === "select" ? selectLabel(x.f, v) : String(v);
         }).join(" · ")), ckFilled.length && !checkoutOpen ? h("b", null, ckFilled.length) : null, h(R.Icon, { name: "down" })),
       checkoutOpen ? h("div", { className: "ap-work-fields ap-counter-ck-f" }, ckFields.map(function (x) {
         return h(RA.FieldEditor, { key: x.f.name, ctx: ctx, model: doc.model, field: x.f, rec: checkout, linkFilter: x.slot.filter, readOnly: stuck,
@@ -895,27 +1150,60 @@
       }) : h("div", { className: "ap-counter-sum-total" }, h("dt", null, isEstimate ? "Total (perkiraan)" : "Total"), h("dd", null, rp(total))),
       fresh && fresh.errors.length ? h("p", { className: "ap-counter-sum-err" }, fresh.errors.filter(function (x) { return x.field !== doc.lines; }).map(function (x) { return x.message; }).join(" · ")) : null) : null;
 
+    // "Bayar terpisah" (rangka-apps#121): one tab per person, each with its own share, QRIS or cash
+    var splitView = function () {
+      var sp = pay.parts, n = sp.length, tab = Math.min(pay.tab || 0, n - 1), pt = sp[tab], st = partState(total, n, tab, pt);
+      var setParts = function (parts, t) { setPay({ parts: parts, tab: t === undefined ? tab : t, cash: 0, qris: 0 }); };
+      var edit = function (k, v) { setParts(sp.map(function (x, i) { return i === tab ? Object.assign({}, x, k) : x; })); };
+      var resize = function (m) { m = Math.max(2, Math.min(20, m)); var parts = []; for (var i = 0; i < m; i++) parts.push(sp[i] || { cash: 0, qris: 0 }); setParts(parts, Math.min(tab, m - 1)); };
+      var left = 0; sp.forEach(function (x, k) { left += partState(total, n, k, x).short; });
+      return h("div", { className: "ap-counter-split" },
+        h("div", { className: "ap-counter-row" },
+          h(R.Button, { disabled: busy || n <= 2, onClick: function () { resize(n - 1); }, "aria-label": "Kurangi orang" }, "-"),
+          h("span", { className: "ap-counter-splitn" }, n + " orang"),
+          h(R.Button, { disabled: busy || n >= 20, onClick: function () { resize(n + 1); }, "aria-label": "Tambah orang" }, "+")),
+        h("div", { className: "ap-counter-tabs", role: "tablist", "aria-label": "Bagian pembayaran" }, sp.map(function (x, k) {
+          return h(R.Button, { key: k, role: "tab", "aria-selected": k === tab ? "true" : "false", variant: k === tab ? "primary" : undefined, disabled: busy,
+            onClick: function () { setParts(sp, k); } }, partState(total, n, k, x).short === 0 ? "Orang " + (k + 1) + " ✓" : "Orang " + (k + 1));
+        })),
+        h("div", { className: "ap-counter-due" }, h("span", null, "Bagian orang " + (tab + 1)), h("b", null, rp(st.share))),
+        h("div", { className: "ap-counter-row" },
+          h(R.Button, { disabled: busy, onClick: function () { edit({ cash: st.share, qris: 0 }); } }, "Uang pas"),
+          c.payments && (c.payments.methods || []).indexOf("qris") >= 0 ? h(R.Button, { icon: "qris", disabled: busy, onClick: function () { edit({ cash: 0, qris: st.share }); } }, "QRIS") : null),
+        h("label", { className: "ap-counter-part" }, "Tunai diterima",
+          h("input", { inputMode: "numeric", "aria-label": "Tunai diterima orang " + (tab + 1), value: pt.cash ? String(pt.cash) : "",
+            onChange: function (e) { edit({ cash: RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0 }); } })),
+        h("div", { className: "ap-counter-due change" }, h("span", null, st.short > 0 ? "Kurang" : "Kembalian"), h("b", null, rp(st.short > 0 ? st.short : st.change))),
+        // shares from an estimate (no service, PBJT or rounding) would undershoot the kernel's party_share (audit F8)
+        h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy || left > 0 || isEstimate, onClick: function () { finish(0, 0, sp); } },
+          isEstimate ? "Menunggu total pasti" : left > 0 ? "Belum lunas: kurang " + rp(left) : "Selesai"));
+    };
+    var splitOn = pay && pay.parts, canSplit = !!(c.payments && c.payments.party && c.payments.parties);
     var tender = stuck ? h("div", { className: "ap-counter-pay", role: "alertdialog", "aria-label": "Belum terkirim" },
       h("div", { className: "ap-work-err" }, "Transaksi ini belum pasti terkirim (koneksi atau server). Keranjang dan pembayaran dikunci; kirim ulang apa adanya, tidak akan tercatat dua kali."),
       h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy, onClick: resend }, "Kirim ulang")) : pay ? h("div", { className: "ap-counter-pay", role: "dialog", "aria-label": "Bayar" },
       h("div", { className: "ap-counter-paytop" },
         h(R.Button, { variant: "quiet", icon: "left", disabled: busy, onClick: function () { setPay(null); } }, "Kembali"),
         h("div", { className: "ap-counter-due big" }, h("span", null, "Yang harus dibayar"), h("b", null, rp(total)))),
-      (c.payments && (c.payments.methods || ["cash"]).indexOf("cash") >= 0) || !c.payments ? h("div", { className: "ap-counter-cash" },
+      canSplit ? h("div", { className: "ap-counter-row" }, h(R.Button, { variant: splitOn ? "primary" : undefined, disabled: busy || (!splitOn && isEstimate),
+        onClick: function () { setPay(splitOn ? { cash: 0, qris: 0 } : { parts: [{ cash: 0, qris: 0 }, { cash: 0, qris: 0 }], tab: 0, cash: 0, qris: 0 }); } }, "Bayar terpisah")) : null,
+      canSplit && isEstimate ? h("p", { className: "ap-counter-hint", role: "note" }, "Total masih perkiraan. Bayar terpisah bisa dipakai setelah total pasti dihitung.") : null,
+      splitOn ? splitView() : null,
+      splitOn ? null : (c.payments && (c.payments.methods || ["cash"]).indexOf("cash") >= 0) || !c.payments ? h("div", { className: "ap-counter-cash" },
         quickCash(Math.max(0, total - (pay.qris || 0))).map(function (a, i) {
           return h(R.Button, { key: a, variant: i === 0 ? "primary" : undefined, disabled: busy, onClick: function () { finish(a, pay.qris); } }, i === 0 ? "Uang pas" : rp(a));
         })) : null,
-      c.payments && (c.payments.methods || []).indexOf("qris") >= 0 ? h("div", { className: "ap-counter-row" },
+      splitOn ? null : c.payments && (c.payments.methods || []).indexOf("qris") >= 0 ? h("div", { className: "ap-counter-row" },
         h(R.Button, { icon: "qris", disabled: busy, onClick: function () { finish(0, total); } }, "QRIS penuh"),
         h("label", { className: "ap-counter-part" }, "QRIS sebagian",
           h("input", { inputMode: "numeric", value: pay.qris ? String(pay.qris) : "", placeholder: "0",
             onChange: function (e) { setPay({ cash: pay.cash, qris: Math.min(total, RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0) }); } }))) : null,
-      h("label", { className: "ap-counter-part" }, "Tunai diterima",
+      splitOn ? null : h("label", { className: "ap-counter-part" }, "Tunai diterima",
         h("input", { inputMode: "numeric", "aria-label": "Tunai diterima", value: pay.cash ? String(pay.cash) : "",
           onChange: function (e) { setPay({ cash: RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0, qris: pay.qris }); } })),
       // the first press replaces the prefilled amount (uang pas), later presses type on
-      h(MoneyPad, { label: "Ketik uang diterima", value: pay.typed ? pay.cash : 0, disabled: busy, onChange: function (v) { setPay({ cash: v, qris: pay.qris, typed: true }); } }),
-      h("div", { className: "ap-counter-paydone" },
+      splitOn ? null : h(MoneyPad, { label: "Ketik uang diterima", value: pay.typed ? pay.cash : 0, disabled: busy, onChange: function (v) { setPay({ cash: v, qris: pay.qris, typed: true }); } }),
+      splitOn ? null : h("div", { className: "ap-counter-paydone" },
         h("div", { className: "ap-counter-due change" }, h("span", null, "Kembalian"),
           h("b", null, changeOf(total, pay.cash, pay.qris) === null ? "kurang " + rp(total - (pay.qris || 0) - pay.cash) : rp(changeOf(total, pay.cash, pay.qris)))),
         h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy, onClick: function () { finish(pay.cash, pay.qris); } }, "Selesai"))) : null;
@@ -955,8 +1243,14 @@
       // the paired device's sync pill, on a row of its own under the header when the order is a sheet over the
       // catalogue (phone), so it never covers the header's menu (syncpill.js picks the dock on top)
       h("div", { className: "ap-sync-dock ap-counter-cart-sync", "data-sync-dock": "cart" }),
+      bill && !pay && !(done && !cart.length) ? h(RA.TableBar, { bill: bill, busy: busy, locked: stuck, hasLines: cart.length > 0, lineCount: cart.length,
+        onMap: function () { if (!cart.length && !bill.name) backToMap(); else if (!bill.name) { billAct(null, "Tagihan tersimpan", backToMap); } else { billAct(null, null, backToMap); } },
+        onSave: function () { billAct(null, "Tagihan tersimpan"); },
+        onKitchen: function () { var b = {}; b.send_kitchen = true; billAct(b, "Dikirim ke dapur"); },
+        onAsk: function () { var b = {}; b[tbl.bill] = true; billAct(b, "Tagihan diminta"); },
+        onMove: function () { setTmode("move"); }, onMerge: function () { setTmode("merge"); }, onSplit: function () { setTmode("split"); } }) : null,
       heldList,
-      c.customer && !(pay && !stuck) ? h("label", { className: "ap-counter-custbox" }, h(R.Icon, { name: "user" }),
+      c.customer && !tbl && !(pay && !stuck) ? h("label", { className: "ap-counter-custbox" }, h(R.Icon, { name: "user" }),
         h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
           value: customer, readOnly: stuck, onChange: function (e) { if (!stuck) setCustomer(e.target.value); } })) : null,
       pay && !stuck ? (paying ? h("div", { className: "ap-counter-body" }, h("ul", { className: "ap-counter-lines ap-counter-paidlines", "aria-label": "Pesanan dibayar" },
@@ -967,7 +1261,7 @@
       err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
       paying ? h("div", { className: "ap-counter-foot" }, summary) : tender || (cart.length ? h("div", { className: "ap-counter-foot" }, summary,
         h("div", { className: "ap-counter-row" },
-          c.hold ? h(R.Button, { onClick: hold }, "Tahan") : null,
+          c.hold && !tbl ? h(R.Button, { onClick: hold }, "Tahan") : null,
           h(R.Button, { variant: "primary", size: "lg", className: "ap-counter-paybtn", loading: busy && !pay, onClick: openPay, "aria-label": "Bayar " + rp(total) },
             h("span", null, "Bayar"), h("span", null, rp(total))))) : null));
 
@@ -975,8 +1269,30 @@
       "aria-label": cartCount(cart) + " item, " + rp(total) + ". Lihat pesanan" },
       h("span", null, cartCount(cart) + " item · Lihat pesanan", customer ? " · " + customer : ""), h("b", null, rp(total))) : null;
 
+    // the table map (or the split picker, the guest count of a free table) takes the whole screen until a bill is open
+    if (tbl && (tmode || guestFor)) {
+      var view = tmode === "split" ? h(RA.SplitPanel, { cart: cart, busy: busy, onCancel: function () { setTmode(null); }, onConfirm: splitBill })
+        : h(RA.TableMap, { ctx: ctx, spec: tbl, doc: doc, scope: scope, session: session, mode: tmode, exclude: bill && bill.table, reloadKey: tmKey, onPick: pickTable,
+            onTakeaway: tmode === "pick" ? function () { setTmode(null); setBill(null); } : null, onClose: function () { setTmode(null); } });
+      return h("div", { className: "ap-counter ap-counter-tables" }, view,
+        guestFor ? h("div", { className: "ap-tbl-guests", role: "dialog", "aria-label": "Jumlah tamu" },
+          h("b", null, "Meja " + guestFor.table.title + " · berapa tamu?"),
+          h("div", { className: "ap-tbl-stepper" },
+            h(R.Button, { onClick: function () { setGuestFor({ table: guestFor.table, guests: Math.max(1, guestFor.guests - 1) }); }, "aria-label": "Kurangi tamu" }, "−"),
+            h("output", null, String(guestFor.guests)),
+            h(R.Button, { onClick: function () { setGuestFor({ table: guestFor.table, guests: guestFor.guests + 1 }); }, "aria-label": "Tambah tamu" }, "+")),
+          h("div", { className: "ap-tbl-bar-a" }, h(R.Button, { onClick: function () { setGuestFor(null); } }, "Batal"),
+            h(R.Button, { variant: "primary", onClick: startBill }, "Buka tagihan"))) : null,
+        err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null);
+    }
+    var variantSheet = vsheet && vsheet.variants ? h(ChoiceSheet, { title: vsheet.title, subtitle: vsheet.variants.length + " varian",
+      rows: vsheet.variants.map(function (v) {
+        var l = leftOf(v);
+        return { key: v.item, label: variantLabel(v, vsheet.title), price: v.price, out: l != null && l <= 0, badge: l != null && l > 0 && l <= 5 ? "sisa " + l : "", n: inCart[v.item] || 0, it: v };
+      }),
+      onPick: function (r) { add(r.it); setVsheet(null); }, onClose: function () { setVsheet(null); } }) : null;
     return h("div", { className: "ap-counter" + (sheet || pay || stuck || (done && !cart.length) ? " sheet" : "") + (paying ? " paying" : "") },
-      paying ? h("section", { className: "ap-counter-tender", "aria-label": "Pembayaran" }, tender) : catalogue, side, bar);
+      paying ? h("section", { className: "ap-counter-tender", "aria-label": "Pembayaran" }, tender) : catalogue, side, bar, variantSheet);
   }
   RA.workRenderers = RA.workRenderers || {};
   RA.workRenderers.counter = CounterScreen;

@@ -1,4 +1,4 @@
-# 0035 Rangka skills: one Agent Skills library for Raka and any other harness
+# 0035 Rangka skills: one Agent Skills library for Zafdoz and any other harness
 
 Status: accepted (8 Nov 2026) · Owner of the change: rangka-os (skills, CLI, kernel tools, docs site) · Affects:
 rangka-ai (loads skills instead of a big knowledge pack), rangka-apps and rangka-connectors (ship skills for their
@@ -8,22 +8,22 @@ apps and connectors), rangka-edge (one skill), rangka-cloud (private interview s
 ## Context
 
 - **An example that exposed it (8 Nov 2026).** In a test onboarding, an owner described a small F&B business: one
-  outlet plus GoFood, GrabFood and ShopeeFood orders, all recorded by hand. Raka recommended Rangka F&B Cabang. The
-  owner then asked for a POS. Raka said it had made one. Nothing had changed.
+  outlet plus GoFood, GrabFood and ShopeeFood orders, all recorded by hand. Zafdoz recommended Rangka F&B Cabang. The
+  owner then asked for a POS. Zafdoz said it had made one. Nothing had changed.
 
-  The business is only an example. The same gap shows for any owner, any business type and any capability Raka has
+  The business is only an example. The same gap shows for any owner, any business type and any capability Zafdoz has
   not been taught: a rental owner asking for deposits, a course asking for attendance, a shop asking about Tokopedia.
 - **The POS exists.** rangka-apps ships `kasir`: module `pos` plus the cashier work screen (0030). Five of its six
   modules (`users`, `contacts`, `catalogue`, `outlets`, `stock`) are already in `fnb_cabang`. Adding it would add
   only `pos`, and the items, outlets, stock and people would stay one set of data across both apps.
-- **Raka did not know how.**
-  - Everything Raka knows about Rangka is one generated prompt, `rangka-ai/knowledge/rangka.md`, plus `apps.json`. Both
+- **Zafdoz did not know how.**
+  - Everything Zafdoz knows about Rangka is one generated prompt, `rangka-ai/knowledge/rangka.md`, plus `apps.json`. Both
     are built from pinned sibling commits.
   - `apps.json` lists 6 of 17 apps; `kasir` is not one of them.
-  - Nothing tells Raka how to add an app (a `config.apps` or `config.modules` change, 0032) or how to explain what it
+  - Nothing tells Zafdoz how to add an app (a `config.apps` or `config.modules` change, 0032) or how to explain what it
     shares.
   - Nothing tells it that only a change set makes anything happen, so "sudah aku buatkan" went out with nothing behind it.
-- **Raka is not the only agent.**
+- **Zafdoz is not the only agent.**
   - Developers and partners build on Rangka with Claude Code, Codex, Cursor and other harnesses. They hit the same
     gaps: `.rk` strict YAML rules, change-set lifecycle, which module owns what, connector format.
   - Each harness today gets that knowledge from `CLAUDE.md` files and luck.
@@ -55,23 +55,23 @@ apps and connectors), rangka-edge (one skill), rangka-cloud (private interview s
     - `rangka.writes`: which layers its actions may change, for example `[config, site/custom]`.
 - **Written for any harness.** Each action is given two ways:
   - the MCP tool (`rangka_meta`, `rangka_changeset_propose`, …), for an agent connected to a kernel, which is how
-    Raka runs;
+    Zafdoz runs;
   - the CLI or file equivalent (`rangka validate`, editing `site/config.rk`, `rangka apply`), for an agent in a
     checkout.
 
   A skill never assumes one harness's tool names.
-- **Scripts are optional helpers.** A skill must work without running them: Raka runs no code, and some harnesses
+- **Scripts are optional helpers.** A skill must work without running them: Zafdoz runs no code, and some harnesses
   cannot either. Skills never contain secrets, keys or customer data.
 
 ### 2. Who writes which skills (ownership as in 0000)
 
 | Repo | Skills (v1) |
 | --- | --- |
-| rangka-os (`skills/`) | `rangka-concepts` (layers, apps vs modules, data shared across apps, what Raka may never do) · `rangka-rk-files` (strict YAML rules, schema header, validator codes) · `rangka-changesets` (propose → validate → preview, risk, never approve or apply, how to tell the owner) · `rangka-compose` (add or remove an app or module, read the catalogue, explain `shares`/`adds`) · `rangka-overlays` (`x_` fields, options, views) · `rangka-flows` · `rangka-dashboards` · `rangka-work-screens` (0030) · `rangka-theme-and-layout` · `rangka-imports` |
+| rangka-os (`skills/`) | `rangka-concepts` (layers, apps vs modules, data shared across apps, what Zafdoz may never do) · `rangka-rk-files` (strict YAML rules, schema header, validator codes) · `rangka-changesets` (propose → validate → preview, risk, never approve or apply, how to tell the owner) · `rangka-compose` (add or remove an app or module, read the catalogue, explain `shares`/`adds`) · `rangka-overlays` (`x_` fields, options, views) · `rangka-flows` · `rangka-dashboards` · `rangka-work-screens` (0030) · `rangka-theme-and-layout` · `rangka-imports` |
 | rangka-apps (`apps/<app>/skill/`, `skills/`) | one per app, for example `rangka-app-kasir`: who it is for, what it shares and adds, its onboarding questions, roles and screens, and how to set it up on an existing site. Plus `rangka-app-authoring` for writing modules and apps. |
 | rangka-connectors (`skills/`) | `rangka-connectors` (what exists, install, secrets form, test) · `rangka-connector-authoring` (the format, 0017 secrets rules, 0033 company drafts) |
 | rangka-edge (`skills/`) | `rangka-edge-devices` (what works offline today, pairing, device connectors) |
-| rangka-cloud (private) | `juragan-interview` and other Cloud-only skills. They are loaded by Raka in the Cloud and never published. |
+| rangka-cloud (private) | `juragan-interview` and other Cloud-only skills. They are loaded by Zafdoz in the Cloud and never published. |
 
 Each skill lives next to the code it describes and changes in the same PR as that code. A PR that changes a
 capability without its skill fails review, the same rule as docs.
@@ -98,9 +98,9 @@ capability without its skill fails review, the same rule as docs.
   - an install page per harness (Claude Code, Claude API and apps, Codex, Cursor, others);
   - a page on writing a Rangka skill (this contract's rules).
 
-### 4. Raka is one consumer
+### 4. Zafdoz is one consumer
 
-- **Prompt.** Raka's system prompt lists the available skills by name and description (the kernel's `rangka_skills`,
+- **Prompt.** Zafdoz's system prompt lists the available skills by name and description (the kernel's `rangka_skills`,
   or the zip in the Cloud before any kernel runs). A tool `load_skill {name}` reads one when needed.
   `rangka-concepts` and `rangka-changesets` are always loaded. This works the same with every provider (Anthropic,
   OpenAI-compatible, DeepSeek), because rangka-ai does the loading itself.
@@ -124,7 +124,7 @@ Skills are instructions. They cannot know what exists on a site, and they cannot
   - Skills that write tell the agent never to say something is done. They say what was proposed and what the owner
     does next.
   - The studio and web app show completion from the change set's status, with a link to what changed.
-  - rangka-ai enforces this too. A Raka turn that claims completion with no change set in that turn is repaired once,
+  - rangka-ai enforces this too. A Zafdoz turn that claims completion with no change set in that turn is repaired once,
     then replaced by a fixed line ("Aku belum mengubah apa pun. Ini usulanku: …"). The phrase list and tests live in
     rangka-ai.
 
@@ -181,7 +181,7 @@ Skills are instructions. They cannot know what exists on a site, and they cannot
 1. **Composition first** (the example's gap, and the most common request):
    - `rangka-concepts`, `rangka-changesets`, `rangka-compose`, `rangka-app-kasir`;
    - `rangka catalogue --json` and `rangka_catalogue`;
-   - Raka's `load_skill` and the claim guardrail;
+   - Zafdoz's `load_skill` and the claim guardrail;
    - the POS eval.
 2. Install paths (`rangka skills install`, zip, plugin manifest) and the docs Skills section.
 3. The rest of the rangka-os skills, connector skills and app skills for every app.
@@ -192,4 +192,4 @@ Skills are instructions. They cannot know what exists on a site, and they cannot
 - Whether rangka-apps keeps one skill per app or one per module plus app summaries.
 - Whether the kernel should also expose skills as MCP prompts, beside the tools.
 - Translations: skills are written in English (code and docs rule), and examples carry the Bahasa Indonesia owners
-  type. Is that enough for Raka's replies?
+  type. Is that enough for Zafdoz's replies?

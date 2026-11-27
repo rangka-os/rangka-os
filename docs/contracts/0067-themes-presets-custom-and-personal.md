@@ -45,7 +45,7 @@ Every theme has a light and a dark version.
   `color` still wins for the designer who wants one token different.
 - `font.sans` and `font.display` take a name from the bundled list (§5); `font.mono` stays as is.
 - **Locked tokens.** `color` may not set `ok*`, `warn*`, `bad*`, `on-bad`, `on-warn`, `info*`, `discovery*`, `raka*`,
-  `spark`, `helmet`, `scrim`, `mascot-ink`: status colours keep their meaning and Raka keeps the look its base gives it.
+  `spark`, `helmet`, `scrim`, `mascot-ink`: status colours keep their meaning and Zafdoz keeps the look its base gives it.
   The validator reports `locked_token` (error). Danger buttons stay `bad-solid`.
 
 ### 2. Derivation (code, not an LLM)
@@ -86,7 +86,7 @@ Every theme has a light and a dark version.
 - **Business.** `config.theme` names the business theme, as today. One per business (per kernel); outlets have none.
   It changes through a change set on `themes/<t>.rk` and/or `config.rk` (`theme:` key): low risk (contracts.md
   decision 3), approved from previewed by `config.ai.approvers` (default the owner). Cloud Konsol › Tampilan is for the
-  owner. Raka may propose, never approve or apply.
+  owner. Zafdoz may propose, never approve or apply.
 - **Saved themes.** A business may keep several `themes/*.rk` (e.g. its own "Kopi Senja" next to the presets); only
   `config.theme` is the default.
 - **Person.** Each member may pick, for themselves only, a theme from the list (§6: bundled + the site's saved themes)
@@ -109,7 +109,7 @@ the list: validator error `unknown_font`.
 | Method | Path | Body / result |
 | --- | --- | --- |
 | GET | `/api/v1/themes` | `{themes: [{name, label, source: bundled\|site, accent, button, neutral, swatches: {light: {...}, dark: {...}}, custom: bool}], current, fonts: [names], allowed: {custom: bool}}`. `swatches` holds `brand primary selected selected-ink link chart-1 app soft surface ink line-strong` |
-| POST | `/api/v1/themes/derive` | `{accent, button?, neutral?, color?}` → `{light, dark, checks: [{pair, light, dark, floor, ok}]}`. Nothing is stored. Used by the editor and by Raka |
+| POST | `/api/v1/themes/derive` | `{accent, button?, neutral?, color?}` → `{light, dark, checks: [{pair, light, dark, floor, ok}]}`. Nothing is stored. Used by the editor and by Zafdoz |
 | POST | `/api/v1/themes/from-image` | multipart image (logo, ≤ 2 MB) → `{colours: [#rrggbb × up to 5], suggested}`: k-means in Lab space on opaque pixels, near-white/near-black dropped unless they are all there is |
 | GET | `/api/v1/me/appearance` | `{theme: name\|null, mode}` |
 | PUT | `/api/v1/me/appearance` | same shape; `theme` must be in `/themes` or null. 400 `unknown_theme` |
@@ -128,11 +128,11 @@ the list: validator error `unknown_font`.
 `accent`, `color`, or a font other than `system` (the "Buat tema sendiri" editor, logo colours, per-token edits).
 Only a plan whose resolved flags say `custom_theme: false` refuses it; a site without `features.rk`, without a chosen
 plan, or whose plans never name the flag allows it (self-host and existing sites keep working). Refused at validate:
-`plan_limit` on the theme file, message "Tema buatan sendiri … mulai paket Juragan Pro". Pointing `config.theme` at
+`plan_limit` on the theme file, message "Tema buatan sendiri … mulai paket Zafdoz Pro". Pointing `config.theme` at
 any theme, a theme that only `extends` a bundled one, and `neutral`, `button`, `mode`, `radius`, `density`, `logo`
 are always allowed. Downgrade never deletes: an existing custom theme keeps working and can be switched away from,
 not edited. Personal picks are never gated. Cloud writes `custom_theme: false` on `cloud_mulai` and `cloud_juragan`;
-`cloud_pro` ("Juragan Pro") and Grup leave it on. `GET /api/v1/plan` reports the plan's `flags`.
+`cloud_pro` ("Zafdoz Pro") and Grup leave it on. `GET /api/v1/plan` reports the plan's `flags`.
 
 ### 8. Web app and Console
 
@@ -151,7 +151,7 @@ not edited. Personal picks are never gated. Cloud writes `custom_theme: false` o
   `PUT {theme}` switches, `PUT {custom: {label, accent, button, neutral, font}}` writes `themes/<slug>.rk`; both are
   one change set, approved and applied with the owner's session, kept in the business's Riwayat. A kernel without
   this contract answers 404: the Konsol says the business needs an update. Cloud stores no copy of a theme.
-- Package tiers gain `custom_theme` (true from Juragan Pro, like `custom_domain`); without it the `cloud_<tier>` plan in
+- Package tiers gain `custom_theme` (true from Zafdoz Pro, like `custom_domain`); without it the `cloud_<tier>` plan in
   `features.rk` carries `flags: {custom_theme: false}`.
 - Cloud's own screens keep the Juragan look; the account's light/dark pick (`users.theme`) stays as it is. A person's
   own colour theme lives in each business kernel (§4). Business tiles in Bisnismu taking the business `brand` is left
@@ -159,15 +159,15 @@ not edited. Personal picks are never gated. Cloud writes `custom_theme: false` o
 
 ### 10. Rangka AI
 
-No new tool. Raka changes a theme with `draft_changeset` like any other layer-6 change, guided by the platform skill
+No new tool. Zafdoz changes a theme with `draft_changeset` like any other layer-6 change, guided by the platform skill
 `rangka-themes` (bundled themes, `accent`/`button`/`neutral`/`font`, locked tokens, the plan note). The kernel does the
 colour work and the checks: `locked_token`, `unknown_font`, `low_contrast` and `plan_limit` come back as validator
-errors Raka already repairs from or explains. Raka never approves or applies.
+errors Zafdoz already repairs from or explains. Zafdoz never approves or applies.
 
 ## Consequences
 
-- The colours an owner picks finally reach the screen; every page and Raka's panel follow one set of tokens.
-- Owners on any plan get six readable themes and a personal pick; Juragan Pro and up can match their own brand
+- The colours an owner picks finally reach the screen; every page and Zafdoz's panel follow one set of tokens.
+- Owners on any plan get six readable themes and a personal pick; Zafdoz Pro and up can match their own brand
   without knowing token names, and contrast stays guaranteed by code.
 - New kernel table and endpoints; Go/Python parity for `Derive`.
 - rangka-apps renames two template references (aliases keep old sites loading meanwhile).

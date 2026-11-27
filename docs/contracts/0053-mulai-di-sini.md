@@ -13,9 +13,9 @@ Dede tested a business that Rangka Cloud built (14 Nov 2026). He found four prob
   which only the canvas reads.
 - **A menu that cannot be used yet gives no reason.** A list whose model needs another model's records (attendance
   needs staff) shows an empty page with a disabled "Tambah". Nothing tells the owner to add staff first.
-- **Raka's button is missing on Cloud businesses.**
+- **Zafdoz's button is missing on Cloud businesses.**
   - The web app shows it only when `meta.features.ai` is true (0020).
-  - On AWS the kernel never gets `RANGKA_AI_URL`: the central Raka service for running businesses is not built
+  - On AWS the kernel never gets `RANGKA_AI_URL`: the central Zafdoz service for running businesses is not built
     (rangka-cloud runbook `aws-hosting.md`).
   - The fix is infrastructure in rangka-cloud. This contract only makes the reason visible.
 - **System settings sit among business menus.** "Modul dan sambungan" and "Impor data" are entries in the sidebar
@@ -98,7 +98,7 @@ stages:
 - Body: `{hidden: true|false}`. Answers `{hidden}`.
 - Only the owner may call it; anyone else gets `403 permission_denied` (model `onboarding`, action `hide`).
 - The flag is stored per org in the kernel's own store. It is not metadata and not a change set, like the canvas
-  layout (0014 §6). Raka never calls it.
+  layout (0014 §6). Zafdoz never calls it.
 
 ### 4. `meta.features.ai_off`
 
@@ -157,26 +157,26 @@ stages:
     business sidebar, with "Kembali ke usaha" at the top.
   - Sections:
     - Usaha: Profil usaha.
-    - Sistem: Modul, Sambungan (the 0036 catalogue split in two), Pengguna & peran, Tampilan, Impor data, Raka.
+    - Sistem: Modul, Sambungan (the 0036 catalogue split in two), Pengguna & peran, Tampilan, Impor data, Zafdoz.
     - Riwayat: Perubahan (Ubah), Audit.
   - A section shows only when the caller may use it, by the same checks as today: catalogue `200`, `features.imports`,
     owner for users and theme.
   - The gear shows when at least one section does.
   - The business sidebar no longer has "Modul dan sambungan" or "Impor data". "Proses bisnis" and "Persetujuan" stay:
     they are business work.
-  - Section Raka shows on or off. When off, it shows the reason from `features.ai_off`:
-    - `not_configured`: "Raka belum dipasang untuk usaha ini";
-    - `disabled`: "Raka dimatikan di pengaturan";
-    - `unreachable`: "Raka sedang tidak bisa dihubungi".
+  - Section Zafdoz shows on or off. When off, it shows the reason from `features.ai_off`:
+    - `not_configured`: "Zafdoz belum dipasang untuk usaha ini";
+    - `disabled`: "Zafdoz dimatikan di pengaturan";
+    - `unreachable`: "Zafdoz sedang tidak bisa dihubungi".
 
-    The floating Raka button stays hidden while Raka is off.
+    The floating Zafdoz button stays hidden while Zafdoz is off.
 
-### 6. Raka
+### 6. Zafdoz
 
-- Raka reads `GET /api/v1/onboarding` through MCP as `rangka_onboarding` (read only).
-- Raka may suggest the `current` step in chat and prepare data for it: a draft, or an import preview. Saving stays the
+- Zafdoz reads `GET /api/v1/onboarding` through MCP as `rangka_onboarding` (read only).
+- Zafdoz may suggest the `current` step in chat and prepare data for it: a draft, or an import preview. Saving stays the
   owner's action.
-- Raka never calls §3.
+- Zafdoz never calls §3.
 
 ### 7. Tour state per person (added 15 Nov 2026)
 
@@ -193,7 +193,7 @@ Lewati and "x dari y". A first tour shows once per person, so its state is kept 
   - Any other state, or no state: `400 bad_json`.
   - At most 100 tours per person per org; one more answers `409 too_many_tours`. Changing a kept one is fine. Writes
     of one person are serialised, so parallel PUTs cannot pass the cap together.
-  - Raka cannot write it: the assistant guard refuses every non-GET (`403 ai_forbidden`).
+  - Zafdoz cannot write it: the assistant guard refuses every non-GET (`403 ai_forbidden`).
 - Every signed-in member reads and writes their own; nobody reads another person's.
 - Removing a member deletes their tour states in that org; changing a member's email moves their states to it.
 - With an older kernel the web app keeps tour states in localStorage.
@@ -202,16 +202,16 @@ Lewati and "x dari y". A first tour shows once per person, so its state is kept 
 
 The welcome tour (`kenalan`) still starts once per person, on the page they first land on (a home dashboard, a work
 screen, or a form a Mulai di sini step opened). What it shows is composed from what that person can do, by fixed rules
-(no Raka, no LLM), from `GET /api/v1/meta` and the sidebar as drawn:
+(no Zafdoz, no LLM), from `GET /api/v1/meta` and the sidebar as drawn:
 
 - **Owner** (`owner` role): the tour of the whole business, unchanged: welcome, Mulai di sini, Persetujuan, the business
-  menu, Tanya Raka, Bantuan.
+  menu, Tanya Zafdoz, Bantuan.
 - **Everyone else:** welcome, then at most three places of their own work, then Persetujuan only when the approvals
   feature is on and a model's `approvals:` (0007) names one of their roles, or an `approve:` step does in a flow that
   runs on that model's event (`on: <model>.<event>`; at any depth: `if` then/else, `for_each` do; a flow on a connector
-  trigger or a schedule names no model and does not count), Tanya Raka only when it is on for them, then where to find
+  trigger or a schedule names no model and does not count), Tanya Zafdoz only when it is on for them, then where to find
   the tour again (always last). At most five lit places after the welcome (riset 26 K-TS2): when Persetujuan and Tanya
-  Raka both show, the work places stop at two. The places, in sidebar order:
+  Zafdoz both show, the work places stop at two. The places, in sidebar order:
   1. their work screens (0030 §3, `meta.work`), each explained by the screen's `description` (0030 §1), else by a
      sentence for its type;
   2. then each sidebar group holding entries they may create (`meta.models[m].can.create`), naming those entries;
@@ -242,7 +242,7 @@ screen, or a form a Mulai di sini step opened). What it shows is composed from w
   - Table `rk_tours`, two routes and the meta key `apps[].roles` (§7–8), test `TestOnboardingToursPerPerson`.
 - **rangka-cloud.**
   - `/v1/plan` (through rangka-ai) writes `hint` and `answers`.
-  - Hosted businesses get Raka once the central Raka service exists. That is infrastructure, tracked in rangka-cloud,
+  - Hosted businesses get Zafdoz once the central Zafdoz service exists. That is infrastructure, tracked in rangka-cloud,
     not here.
 - **rangka-apps.** App process files may add `hint` to their stages; no other change.
 

@@ -2,7 +2,7 @@
 
 Status: proposed (16 Nov 2026) · Owner of the change: rangka-os (schema 0.5 `flow`, `model`; kernel canvas;
 `GET /api/v1/processes/{name}`; web Proses bisnis) · Affects: rangka-apps (authors `description` on shipped flows),
-rangka-ai (the Raka skill writes `description` when it writes site flows) · Builds on: 0014 (process canvas)
+rangka-ai (the Zafdoz skill writes `description` when it writes site flows) · Builds on: 0014 (process canvas)
 
 ## Context
 
@@ -14,7 +14,7 @@ rangka-ai (the Raka skill writes `description` when it writes site flows) · Bui
   - labels, which are short names;
   - `detail`, which is CEL or a step such as `create gl_entry`.
 
-  The first prototype wrote these sentences in browser code, keyed by file name. That does not scale, and Raka and
+  The first prototype wrote these sentences in browser code, keyed by file name. That does not scale, and Zafdoz and
   MCP cannot read them.
 - **Placement follows the author, not the owner.** 0014 §7 puts a flow in the first stage whose model it touches. An
   owner expects it under the document that fires it: a flow `on: sales_invoice.submitted` belongs under Faktur, even
@@ -37,11 +37,11 @@ rangka-ai (the Raka skill writes `description` when it writes site flows) · Bui
   reader's permissions, so the author never names in it a document that some readers of the process may not open.
 - Who writes it:
   - rangka-apps, for shipped flows;
-  - the Raka skill, when it writes site flows (rangka-ai `process_from_peta`).
+  - the Zafdoz skill, when it writes site flows (rangka-ai `process_from_peta`).
 
 ### 2. `summary`: the kernel's sentence from structure
 
-When no `description` is written, the web, Raka and MCP need the same fallback sentence. The kernel writes it in Go
+When no `description` is written, the web, Zafdoz and MCP need the same fallback sentence. The kernel writes it in Go
 (`kernel/internal/canvas/summary.go`) and returns it as `summary: {id}` on these nodes:
 
 - flow triggers;

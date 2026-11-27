@@ -7,11 +7,11 @@
  *            (default Bata; the bundled themes of contract 0067 in templates/themes)
  *   kind   : module colours (sales blue, money teal, work purple, stock gold) for charts and kind tiles
  *   status : ok/warn/bad/info only for real states, always with words
- *   Raka   : the green Raka character, everywhere Raka appears
+ *   Zafdoz   : the green Zafdoz character, everywhere Zafdoz appears
  */
 :root[data-brand="juragan"]:not([data-theme="dark"]) {
   color-scheme: light;
-  /* Fondasi v3.1: abu netral dan latar putih, ink untuk tombol utama, teal untuk Raka, warna status untuk status.
+  /* Fondasi v3.1: abu netral dan latar putih, ink untuk tombol utama, teal untuk Zafdoz, warna status untuk status.
      Nilai netral dan status di sini sama dengan web/design-system/tokens.json (app.css punya nilai lamanya sendiri,
      jadi ditegaskan lagi). Aksen (pilihan, tautan, fokus, merek, grafik pertama) milik TEMA usaha: bawaan Bata di
      bawah ini, dan tema lain menimpanya lewat properti inline di <html> (shell.js, meta.theme.overrides). */
@@ -46,7 +46,7 @@
 }
 
 /* Dark: Rangka OS site palette (Dede). The accent follows the business theme as in light (default: Bata dark values
-   of tokens.json); Raka keeps the teal. */
+   of tokens.json); Zafdoz keeps the teal. */
 :root[data-brand="juragan"][data-theme="dark"] {
   color-scheme: dark;
   --app: #161412; --surface: #1c1b19; --soft: #211e1b; --line: #33302e; --line-strong: #403c3a;
@@ -203,7 +203,7 @@
 [data-brand="juragan"] .ap-main .ap-views { margin: 0 0 4px; }
 [data-brand="juragan"] .rk-search { border-radius: var(--r-md); border-color: var(--line-strong); }
 [data-brand="juragan"] .rk-search input { font-size: 14px; }
-/* keadaan kosong tanpa ilustrasi: judul, satu kalimat, satu tombol. Raka hanya muncul di keadaan kosong milik Raka */
+/* keadaan kosong tanpa ilustrasi: judul, satu kalimat, satu tombol. Zafdoz hanya muncul di keadaan kosong milik Zafdoz */
 [data-brand="juragan"] .ap-main .rk-empty > :first-child:not(b) { display: none; }
 [data-brand="juragan"] .ap-main .rk-empty b { font: 600 16px/20px "Inter", var(--font-sans); margin-top: 0; }
 [data-brand="juragan"] .ap-main .rk-empty span { font-size: 14px; color: var(--ink-2); }
@@ -311,7 +311,7 @@
 [data-brand="juragan"] .ap-attn { border-radius: var(--r-lg); border-color: var(--line); }
 [data-brand="juragan"] .ap-attn-head h2 { font: 600 16px/22px "Inter", var(--font-sans); }
 
-/* Raka: karakter hijau dipakai utuh (keputusan Zein 16 Nov); UI di sekitarnya netral */
+/* Zafdoz: karakter hijau dipakai utuh (keputusan Zein 16 Nov); UI di sekitarnya netral */
 
 /* phone: 44px targets for primary actions */
 @media (max-width: 1023px) {
@@ -609,7 +609,7 @@
 @container dtop (max-width: 1029px) { [data-brand="juragan"] .ap-dtop .rk-topnav-item:nth-child(n+6) { display: none; } }
 @container dtop (max-width: 929px) { [data-brand="juragan"] .ap-dtop .rk-topnav-item:nth-child(n+5) { display: none; } }
 @container dtop (max-width: 829px) { [data-brand="juragan"] .ap-dtop .rk-topnav-item:nth-child(n+4) { display: none; } }
-@container dtop (max-width: 629px) { [data-brand="juragan"] .ap-dtop .rk-topnav-items { display: none; } } /* e.g. beside the Raka dock */
+@container dtop (max-width: 629px) { [data-brand="juragan"] .ap-dtop .rk-topnav-items { display: none; } } /* e.g. beside the Zafdoz dock */
 /* paragraf di halaman: tidak ada satu kata tertinggal sendirian di baris terakhir */
 [data-brand="juragan"] .ap-main p, [data-brand="juragan"] .ap-main .ap-muted, [data-brand="juragan"] .ap-main .ap-attn-empty,
 [data-brand="juragan"] .ap-main .rk-empty, [data-brand="juragan"] .ap-main .rk-empty span { text-wrap: pretty; }

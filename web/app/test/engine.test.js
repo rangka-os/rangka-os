@@ -180,6 +180,49 @@ test("prepare(): a cashier sale with promotions and loyalty computes the kernel'
   }
 });
 
+/* The outlet a paired device holds offline: GET /api/v1/edge/config's outlet (code, name, timezone) plus the outlet
+   fields the sale's defaults and computes read through its outlet link (kernel edgePlan.addOutletFields). */
+function deviceOutlet(models, rec) {
+  const out = { name: rec.name, code: rec.code, timezone: "Asia/Jakarta" }, seen = new Set();
+  const walk = (m) => {
+    if (seen.has(m) || !models[m]) return;
+    seen.add(m);
+    const links = models[m].fields.filter((f) => f.type === "link" && f.to === "outlet").map((f) => f.name);
+    for (const f of models[m].fields) {
+      if (f.type === "table") walk(f.of);
+      for (const src of [f.default, f.compute]) {
+        for (const l of links) for (const x of String(src || "").matchAll(new RegExp("\\b" + l + "\\.([a-z_]\\w*)", "g"))) if (!(x[1] in out) && x[1] in rec) out[x[1]] = rec[x[1]];
+      }
+    }
+  };
+  walk("pos_sale");
+  return out;
+}
+
+test("prepare(): a device with the edge config's outlet computes service, PBJT and rounding as the kernel (audit F3)", () => {
+  const fx = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "pos-sale-parity.json"), "utf8"));
+  const byName = {};
+  for (const [m, recs] of Object.entries(fx.records)) byName[m] = Object.fromEntries(recs.map((r) => [r.name, r]));
+  const charged = fx.cases.filter((c) => c.want.service_charge || c.want.pbjt);
+  assert.ok(charged.length >= 2);
+  for (const c of charged) {
+    const meta = { models: fx.models, dashboards: {}, today: fx.base.today, installed: c.installed || fx.base.installed,
+      globals: { tax: c.tax || fx.base.tax, user: { email: "kasir@contoh.id", name: "kasir@contoh.id", roles: ["cashier"], outlets: [] } } };
+    const lookup = (m, n) => (m === "outlet" ? deviceOutlet(fx.models, byName.outlet[n]) : (byName[m] || {})[n] || null);
+    const rec = load({}).create(meta, lookup).prepare("pos_sale", JSON.parse(JSON.stringify(c.sale)));
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(computedOf(fx.models, "pos_sale", rec))), c.want, c.name);
+  }
+  // the 115.500 dine-in bill; with the old outlet shape (code, name, timezone only) the device would charge 100.000
+  const dine = charged.find((c) => c.want.grand_total === 115500 && c.sale.order_type === "dine_in");
+  assert.ok(dine);
+  const meta = { models: fx.models, dashboards: {}, today: fx.base.today, installed: dine.installed || fx.base.installed,
+    globals: { tax: dine.tax || fx.base.tax, user: { email: "kasir@contoh.id", roles: ["cashier"], outlets: [] } } };
+  const bare = (m, n) => (m === "outlet" ? { name: n, code: byName.outlet[n].code, timezone: "Asia/Jakarta" } : (byName[m] || {})[n] || null);
+  assert.strictEqual(load({}).create(meta, bare).prepare("pos_sale", JSON.parse(JSON.stringify(dine.sale))).grand_total, 100000);
+  const outlet = deviceOutlet(fx.models, byName.outlet[dine.sale.outlet]);
+  for (const k of ["service_pct", "pbjt_pct", "rounding_unit", "rounding_mode"]) assert.ok(k in outlet, k);
+});
+
 test("dialect: lists, in, replace, matches, string(), days_between, true/false, quoted text with escapes", () => {
   const E = load({}).create({ models: {}, dashboards: {}, installed: [] }, () => null);
   const ev = (src, vars) => E.evaluate(src, (n) => (vars || {})[n]);
@@ -192,5 +235,7 @@ test("dialect: lists, in, replace, matches, string(), days_between, true/false, 
   assert.strictEqual(ev('"it\\\'s"'), "it's");
   assert.strictEqual(ev("round(2.345, 2)"), 2.35);
   assert.strictEqual(ev("round(-2.5, 0)"), -3);
+  // one argument rounds half up as the kernel's JSRound does (the parity fixture has the money cases, audit F7)
+  assert.strictEqual(ev("round(-52.5)"), -52);
   assert.strictEqual(ev("[1, 2, 3].contains(2)"), true);
 });

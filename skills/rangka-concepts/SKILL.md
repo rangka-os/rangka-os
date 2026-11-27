@@ -7,7 +7,7 @@ metadata: {rangka: {version: 0.5.0, writes: []}}
 # Rangka concepts
 
 Rangka OS runs business apps (sales, stock, cashier, rental, courses and more) from declarative `.rk` metadata. One
-installation serves one business (a **site**). Juragan is the product name owners see; Raka is its AI agent.
+installation serves one business (a **site**). Juragan is the product name owners see; Zafdoz is its AI agent.
 
 ## Apps are made of shared modules
 

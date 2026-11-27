@@ -100,6 +100,12 @@ type User struct {
 	Outlets  []string `json:"outlets"`          // outlet codes this membership is limited to (empty: a scoped role sees no scoped records, an unscoped role ignores outlets)
 }
 
+// SetOrgName creates the organisation when missing and sets its display name (an existing code is kept).
+func SetOrgName(ctx context.Context, q pg.Querier, id, name string) error {
+	_, err := q.Query(ctx, "insert into rk_orgs (id, name) values ($1, $2) on conflict (id) do update set name = excluded.name", id, name)
+	return err
+}
+
 // EnsureOrg creates an organisation when missing.
 func EnsureOrg(ctx context.Context, q pg.Querier, id, name string) error {
 	_, err := q.Query(ctx, "insert into rk_orgs (id, name) values ($1, $2) on conflict (id) do nothing", id, name)

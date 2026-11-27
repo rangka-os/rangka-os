@@ -19,7 +19,7 @@ and a lead card sales roles may not print). Call mock_feature(page, feature) in 
 "live: … · mocked: …"; --require-all turns any mocked feature into a failure.
 
 RANGKA_AI_DIR=<a built rangka-ai checkout> also starts its scripted sidecar (`serve --demo`) and the kernel with --ai-url,
-so test_ai_live asks the real Raka; without it that scenario returns at once and the other Raka scenarios use mocks.
+so test_ai_live asks the real Zafdoz; without it that scenario returns at once and the other Zafdoz scenarios use mocks.
 
 Every HTTP answer >= 400 and every failed request to the kernel fails the scenario too, except 401 on /auth/*, the missing-route 404 ("no such endpoint") of
 the feature probes (approvals, attachments) and what a scenario allows with ctx.allow_http(status, url_regex).
@@ -1064,7 +1064,7 @@ def test_command_menu(page, ctx):
     dlg = page.get_by_role("dialog", name="Menu perintah")
     dlg.wait_for(timeout=5000)
     assert dlg.get_by_role("group", name="Halaman").count() == 1, "pages first"
-    assert dlg.get_by_text("Tanya Raka").count() == 0, "no Tanya Raka without features.ai"
+    assert dlg.get_by_text("Tanya Zafdoz").count() == 0, "no Tanya Zafdoz without features.ai"
     page.mouse.move(1, 1)  # keyboard only: a resting pointer over the results would pick the row under it (hover selects)
     page.keyboard.type("Maju")
     data = dlg.get_by_role("group", name="Data")
@@ -3947,7 +3947,7 @@ def test_ubah_add_table_medium_with_dry_run(page, ctx):
 
 
 def test_ubah_marks_raka_proposals(page, ctx):
-    """Approvers see that a change set came from Raka: a "Dari Raka" pill in the pending list and on the card,
+    """Approvers see that a change set came from Zafdoz: a "Dari Zafdoz" pill in the pending list and on the card,
     with who asked for it."""
     cs = {"id": "cs_raka01", "title": "Nomor PO wajib untuk pelanggan grosir", "status": "previewed", "risk": "medium",
           "source": "ai", "author": {"kind": "ai", "id": ctx.owner[0]}, "ops": [], "layers": [5], "history": [],
@@ -3960,12 +3960,12 @@ def test_ubah_marks_raka_proposals(page, ctx):
     page.get_by_role("button", name="Perubahan menunggu").click()
     item = page.locator(".ap-ubah-pending li", has_text=cs["title"])
     item.wait_for(timeout=10000)
-    assert item.locator(".rk-pill", has_text="Dari Raka").count() == 1, "the pending list marks Raka's proposal"
+    assert item.locator(".rk-pill", has_text="Dari Zafdoz").count() == 1, "the pending list marks Zafdoz's proposal"
     item.locator("button").click()
     card = page.locator(".ap-ubah-card-cs", has_text=cs["title"])
     card.wait_for(timeout=10000)
-    assert card.locator(".rk-pill", has_text="Dari Raka").count() == 1, "the card marks Raka's proposal"
-    page.get_by_text(f"Diusulkan Raka atas permintaan {ctx.owner[0]}").wait_for(timeout=5000)
+    assert card.locator(".rk-pill", has_text="Dari Zafdoz").count() == 1, "the card marks Zafdoz's proposal"
+    page.get_by_text(f"Diusulkan Zafdoz atas permintaan {ctx.owner[0]}").wait_for(timeout=5000)
 
 
 def test_ubah_from_account_menu(page, ctx):
@@ -4052,7 +4052,7 @@ def test_ubah_embedded_posts_changeset(page, ctx):
     ctx.live.add("ubah")
 
 
-# ---------------------------------------------------------------------------------------------- Raka, the assistant (contract 0020)
+# ---------------------------------------------------------------------------------------------- Zafdoz, the assistant (contract 0020)
 AI_SIDE_BTN = ".rk-side .ap-ask"
 
 
@@ -4082,7 +4082,7 @@ def mock_ai(page, ctx, answers):
 
 
 def ai_drawer(page):
-    return page.get_by_role("complementary", name="Percakapan dengan Raka")
+    return page.get_by_role("complementary", name="Percakapan dengan Zafdoz")
 
 
 def hide_ai(page, ctx):
@@ -4099,7 +4099,7 @@ def hide_ai(page, ctx):
 
 
 def test_ai_hidden_without_feature(page, ctx):
-    """No meta.features.ai (the kernel runs without a sidecar): ⌘J does nothing, no Tanya Raka in the sidebar or ⌘K."""
+    """No meta.features.ai (the kernel runs without a sidecar): ⌘J does nothing, no Tanya Zafdoz in the sidebar or ⌘K."""
     hide_ai(page, ctx)
     page.goto(ctx.base + "/app/")
     sign_in(page)
@@ -4108,14 +4108,14 @@ def test_ai_hidden_without_feature(page, ctx):
     page.keyboard.press("ControlOrMeta+j")
     page.wait_for_timeout(200)
     assert page.locator(".rk-askbar").count() == 0 and page.locator(".rk-chat").count() == 0, "no ask bar or drawer"
-    assert page.locator(".rk-fab").count() == 0, "no floating Raka button on a kernel without AI (plain self-hosting)"
+    assert page.locator(".rk-fab").count() == 0, "no floating Zafdoz button on a kernel without AI (plain self-hosting)"
     open_nav(page)
-    assert page.locator(AI_SIDE_BTN).count() == 0, "no Tanya Raka in the sidebar"
+    assert page.locator(AI_SIDE_BTN).count() == 0, "no Tanya Zafdoz in the sidebar"
     page.keyboard.press("Escape")
     page.keyboard.press("ControlOrMeta+k")
     dlg = page.get_by_role("dialog", name="Menu perintah")
     dlg.wait_for(timeout=5000)
-    assert dlg.get_by_text("Tanya Raka").count() == 0, "no Tanya Raka in ⌘K"
+    assert dlg.get_by_text("Tanya Zafdoz").count() == 0, "no Tanya Zafdoz in ⌘K"
 
 
 def test_ai_ask_and_drawer(page, ctx):
@@ -4126,10 +4126,10 @@ def test_ai_ask_and_drawer(page, ctx):
     page.goto(ctx.base + "/app/")
     sign_in(page)
     expect_signed_in(page, ctx)
-    # a real previewed change set for the card (Raka proposes the same kind through MCP)
+    # a real previewed change set for the card (Zafdoz proposes the same kind through MCP)
     cs = page.evaluate("""async () => {
       const RA = window.RangkaApp, ex = await RA.api.file("custom/lead.rk");
-      const ch = RA.opsAddField("lead", {label: "Nomor PO Raka", type: "data", modelLabel: "Lead"}, ex);
+      const ch = RA.opsAddField("lead", {label: "Nomor PO Zafdoz", type: "data", modelLabel: "Lead"}, ex);
       return (await RA.api.runChange(ch, {canApprove: false})).cs;
     }""")
     assert cs["status"] == "previewed", cs
@@ -4148,7 +4148,7 @@ def test_ai_ask_and_drawer(page, ctx):
         dash_title = L((ctx.meta["dashboards"].get(home.split("/d/")[1]) or {}).get("label")) if home.startswith("#/d/") else None
         # ⌘J: the ask bar with the page as context; Escape closes it
         page.keyboard.press("ControlOrMeta+j")
-        bar = page.get_by_role("dialog", name="Tanya Raka")
+        bar = page.get_by_role("dialog", name="Tanya Zafdoz")
         bar.wait_for(timeout=5000)
         chip = bar.locator(".rk-askbar-chip").inner_text()
         assert chip.startswith("Halaman ini"), chip
@@ -4158,7 +4158,7 @@ def test_ai_ask_and_drawer(page, ctx):
         check_fits(page, ctx, "ask bar")
         page.keyboard.press("Escape")
         bar.wait_for(state="detached", timeout=5000)
-        # the sidebar footer's Tanya Raka
+        # the sidebar footer's Tanya Zafdoz
         open_nav(page)
         page.locator(AI_SIDE_BTN).click()
         bar.wait_for(timeout=5000)
@@ -4170,9 +4170,9 @@ def test_ai_ask_and_drawer(page, ctx):
         dlg.wait_for(timeout=5000)
         page.mouse.move(1, 1)
         page.keyboard.type("berapa faktur jatuh tempo?")
-        dlg.get_by_role("group", name="Tanya Raka").locator(".rk-cmd-item").click()
+        dlg.get_by_role("group", name="Tanya Zafdoz").locator(".rk-cmd-item").click()
         bar.wait_for(timeout=5000)
-        box = bar.get_by_role("textbox", name="Tanya Raka")
+        box = bar.get_by_role("textbox", name="Tanya Zafdoz")
         assert box.input_value() == "berapa faktur jatuh tempo?", box.input_value()
         box.press("Enter")
         drawer = ai_drawer(page)
@@ -4204,7 +4204,7 @@ def test_ai_ask_and_drawer(page, ctx):
 
 
 def test_ai_dock(page, ctx):
-    """Raka docks beside the page from 1280px (contract 0064 §1): <html data-raka="dock"> and the shell's right edge at the
+    """Zafdoz docks beside the page from 1280px (contract 0064 §1): <html data-raka="dock"> and the shell's right edge at the
     panel's left, no floating button, a keyboard and pointer resizable grip (360-640, never past innerWidth - 640, kept in
     localStorage), the bulk bar clear of the panel, "Perbesar" covering the window and Escape bringing the dock back, a
     close mid-stream that loses nothing, focus returning to where it was, and below 1280 the floating panel again."""
@@ -4226,7 +4226,7 @@ def test_ai_dock(page, ctx):
 
     def open_dock():
         page.keyboard.press("ControlOrMeta+j")
-        page.get_by_role("dialog", name="Tanya Raka").wait_for(timeout=5000)
+        page.get_by_role("dialog", name="Tanya Zafdoz").wait_for(timeout=5000)
         page.keyboard.press("ControlOrMeta+j")
         ai_drawer(page).wait_for(timeout=5000)
 
@@ -4237,7 +4237,7 @@ def test_ai_dock(page, ctx):
     mark = page.evaluate("() => { const e = document.activeElement; e.setAttribute('data-keep', '1'); return e.tagName; }")
     open_dock()
     drawer = ai_drawer(page)
-    assert html.get_attribute("data-raka") == "dock", "⌘J twice docks Raka"
+    assert html.get_attribute("data-raka") == "dock", "⌘J twice docks Zafdoz"
     drawer.get_by_role("button", name="Tutup").click()
     drawer.wait_for(state="detached", timeout=5000)
     assert page.evaluate("() => !!document.activeElement && document.activeElement.getAttribute('data-keep') === '1'"), f"focus returns to the {mark} that had it"
@@ -4248,18 +4248,18 @@ def test_ai_dock(page, ctx):
     shell = page.locator(".ap-shell")
     assert shell.bounding_box()["x"] + shell.bounding_box()["width"] <= w - 400 + 1, f"the page ends where the dock starts: {shell.bounding_box()}"
     assert drawer.bounding_box()["width"] == 400 or dock_w() == 400, f"default dock width 400, got {dock_w()}"
-    assert page.locator(".rk-fab").count() == 0, "no floating Raka button while docked"
+    assert page.locator(".rk-fab").count() == 0, "no floating Zafdoz button while docked"
     assert drawer.get_by_role("button", name="Kecilkan").count() == 0 and drawer.get_by_role("button", name="Perbesar").count() == 1
-    check_fits(page, ctx, "Raka dock")
+    check_fits(page, ctx, "Zafdoz dock")
     over = page.evaluate("() => [document.scrollingElement.scrollHeight, innerHeight]")
-    assert over[0] <= over[1], f"Raka dock on a short page: the document scrolls vertically, scrollHeight {over[0]} > {over[1]}"
+    assert over[0] <= over[1], f"Zafdoz dock on a short page: the document scrolls vertically, scrollHeight {over[0]} > {over[1]}"
     shot(page, ctx, "ai-dock")
     page.evaluate("() => document.documentElement.setAttribute('data-theme', 'dark')")
     shot(page, ctx, "ai-dock-dark")
     page.evaluate("() => document.documentElement.setAttribute('data-theme', 'light')")
 
     # the grip: ArrowLeft widens by 16px, kept in localStorage; a drag past the cap stops at it
-    grip = drawer.get_by_role("separator", name="Ubah lebar panel Raka")
+    grip = drawer.get_by_role("separator", name="Ubah lebar panel Zafdoz")
     grip.focus()
     for _ in range(6):
         page.keyboard.press("ArrowLeft")
@@ -4269,7 +4269,7 @@ def test_ai_dock(page, ctx):
     page.locator(".ap-shell").wait_for(timeout=15000)
     open_dock()
     assert dock_w() == 496, f"the width is restored after a reload, got {dock_w()}"
-    box = ai_drawer(page).get_by_role("separator", name="Ubah lebar panel Raka").bounding_box()
+    box = ai_drawer(page).get_by_role("separator", name="Ubah lebar panel Zafdoz").bounding_box()
     x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
     page.mouse.move(x, y)
     page.mouse.down()
@@ -4281,7 +4281,7 @@ def test_ai_dock(page, ctx):
     assert int(page.evaluate("() => localStorage.getItem('rk.raka.dock.w')")) == cap
     kept = page.evaluate("() => document.querySelector('.ap-shell').getBoundingClientRect().width")
     assert kept >= 640 - 8 - 1, f"the page keeps its 640px less the shell's 8px inset, got {kept}"
-    check_fits(page, ctx, "Raka dock at its widest")
+    check_fits(page, ctx, "Zafdoz dock at its widest")
 
     # the bulk bar stays left of the panel
     ai_drawer(page).get_by_role("button", name="Tutup").click()
@@ -4330,7 +4330,7 @@ def test_ai_dock(page, ctx):
     page.evaluate("() => document.documentElement.setAttribute('data-theme', 'dark')")
     shot(page, ctx, "ai-full-dark")
     page.evaluate("() => document.documentElement.setAttribute('data-theme', 'light')")
-    check_fits(page, ctx, "Raka full")
+    check_fits(page, ctx, "Zafdoz full")
     page.keyboard.press("Escape")
     page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=5000)
     assert page.locator(".ap-shell > .rk-shell-main").is_visible(), "Escape in Full: the page is back beside the dock"
@@ -4350,8 +4350,8 @@ def test_ai_dock(page, ctx):
     slow.pop().fulfill(status=200, content_type="text/event-stream", body=sse([("text", {"delta": "Jawaban yang lambat."}), ("done", {})]))
     page.wait_for_timeout(300)
     page.keyboard.press("ControlOrMeta+j")
-    page.get_by_role("dialog", name="Tanya Raka").wait_for(timeout=5000)
-    page.get_by_role("dialog", name="Tanya Raka").get_by_role("button", name="Buka chat").click()
+    page.get_by_role("dialog", name="Tanya Zafdoz").wait_for(timeout=5000)
+    page.get_by_role("dialog", name="Tanya Zafdoz").get_by_role("button", name="Buka chat").click()
     ai_drawer(page).get_by_text("Jawaban yang lambat.").wait_for(timeout=5000)
     assert html.get_attribute("data-raka") == "dock"
 
@@ -4362,11 +4362,11 @@ def test_ai_dock(page, ctx):
     assert ai_drawer(page).get_by_role("button", name="Perbesar").count() == 0, "no Perbesar below 1280"
     page.set_viewport_size({"width": w, "height": 900})
     page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=5000)
-    assert "Raka hanya mengusulkan" not in page.locator("body").inner_text(), "the old footer line is gone"
+    assert "Zafdoz hanya mengusulkan" not in page.locator("body").inner_text(), "the old footer line is gone"
 
 
 def test_ai_dock_overlays(page, ctx):
-    """Host overlays and the card actions around the Raka dock (contract 0064 §1): "Buka di Ubah" opens the change set card
+    """Host overlays and the card actions around the Zafdoz dock (contract 0064 §1): "Buka di Ubah" opens the change set card
     and a toast shows over the page, left of the docked panel; in Full a toast still shows, and "Lihat pratinjau" returns
     to the dock with the preview banner visible."""
     if ctx.args.width < 1280:
@@ -4391,9 +4391,9 @@ def test_ai_dock_overlays(page, ctx):
         page.locator(".ap-shell").wait_for(timeout=15000)
         page.locator("[data-loading=false]").first.wait_for(timeout=15000)
         page.keyboard.press("ControlOrMeta+j")
-        bar = page.get_by_role("dialog", name="Tanya Raka")
+        bar = page.get_by_role("dialog", name="Tanya Zafdoz")
         bar.wait_for(timeout=5000)
-        box = bar.get_by_role("textbox", name="Tanya Raka")
+        box = bar.get_by_role("textbox", name="Tanya Zafdoz")
         box.fill("susun field")
         box.press("Enter")
         drawer = ai_drawer(page)
@@ -4522,7 +4522,7 @@ def test_tour_staff_side_shell(page, ctx):
         title = card.locator(".ap-tur-title").inner_text().strip()
         body = card.locator(".ap-tur-body").inner_text()
         titles.append(title)
-        if i > 1 and title not in ("Persetujuan", "Tanya Raka", "Bantuan ada di sini"):
+        if i > 1 and title not in ("Persetujuan", "Tanya Zafdoz", "Bantuan ada di sini"):
             # the ring glides to its place (tur CSS); wait for it to settle on the group the step names
             try:
                 page.wait_for_function(f"(t) => JSON.stringify(({lit_group})()) === JSON.stringify([t])", arg=title, timeout=3000)
@@ -4651,9 +4651,9 @@ def kept_tour(owner, tour="kenalan", gone=False):
 
 
 def test_ai_launcher(page, ctx):
-    """The floating Raka button (rangka.pen OS / Raka · *): shown when meta.features.ai is on; hover widens it to
-    "Tanya Raka"; a click opens the panel above it and turns the button into the close chevron; tucking it to the
-    edge survives a reload, and a click on the tucked tab opens Raka and brings the button back."""
+    """The floating Zafdoz button (rangka.pen OS / Zafdoz · *): shown when meta.features.ai is on; hover widens it to
+    "Tanya Zafdoz"; a click opens the panel above it and turns the button into the close chevron; tucking it to the
+    edge survives a reload, and a click on the tucked tab opens Zafdoz and brings the button back."""
     mock_ai(page, ctx, [])
     page.goto(ctx.base + "/app/")
     sign_in(page)
@@ -4666,7 +4666,7 @@ def test_ai_launcher(page, ctx):
     assert fab.get_attribute("data-state") == "rest", fab.get_attribute("data-state")
     if ctx.args.width >= 768:
         btn.hover()
-        fab.get_by_text("Tanya Raka", exact=True).wait_for(timeout=3000)
+        fab.get_by_text("Tanya Zafdoz", exact=True).wait_for(timeout=3000)
         shot(page, ctx, "ai-launcher-hover")
     btn.click()
     drawer = ai_drawer(page)
@@ -4687,15 +4687,15 @@ def test_ai_launcher(page, ctx):
         drawer.wait_for(state="detached", timeout=5000)
     # tuck it against the edge
     btn.focus()
-    fab.get_by_role("button", name="Sembunyikan Raka ke tepi").click()
+    fab.get_by_role("button", name="Sembunyikan Zafdoz ke tepi").click()
     assert fab.get_attribute("data-state") == "tucked"
     page.reload()
     page.locator(".rk-fab[data-state=tucked]").wait_for(timeout=15000)
     shot(page, ctx, "ai-launcher-tucked")
-    check_fits(page, ctx, "tucked Raka button")
+    check_fits(page, ctx, "tucked Zafdoz button")
     page.locator(".rk-fab-btn").click()
     ai_drawer(page).wait_for(timeout=5000)
-    assert page.evaluate("() => localStorage.getItem('rk.raka.tucked')") is None, "opening Raka brings the button back"
+    assert page.evaluate("() => localStorage.getItem('rk.raka.tucked')") is None, "opening Zafdoz brings the button back"
 
 
 def test_ai_error_message(page, ctx):
@@ -4706,12 +4706,12 @@ def test_ai_error_message(page, ctx):
     sign_in(page)
     expect_signed_in(page, ctx)
     page.keyboard.press("ControlOrMeta+j")
-    box = page.get_by_role("dialog", name="Tanya Raka").get_by_role("textbox", name="Tanya Raka")
+    box = page.get_by_role("dialog", name="Tanya Zafdoz").get_by_role("textbox", name="Tanya Zafdoz")
     box.fill("halo")
     box.press("Enter")
     drawer = ai_drawer(page)
-    drawer.get_by_text("Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.").wait_for(timeout=10000)
-    composer = drawer.get_by_role("textbox", name="Pesan untuk Raka")
+    drawer.get_by_text("Zafdoz sedang tidak bisa dihubungi. Coba lagi sebentar lagi.").wait_for(timeout=10000)
+    composer = drawer.get_by_role("textbox", name="Pesan untuk Zafdoz")
     composer.fill("lagi")
     composer.press("Enter")
     drawer.get_by_text("Terlalu banyak pertanyaan. Coba lagi beberapa menit lagi.").wait_for(timeout=10000)
@@ -4727,7 +4727,7 @@ def test_ai_history_per_person(page, ctx):
     sign_in(page)
     expect_signed_in(page, ctx)
     page.keyboard.press("ControlOrMeta+j")
-    box = page.get_by_role("dialog", name="Tanya Raka").get_by_role("textbox", name="Tanya Raka")
+    box = page.get_by_role("dialog", name="Tanya Zafdoz").get_by_role("textbox", name="Tanya Zafdoz")
     box.fill("pertanyaan rahasia pemilik")
     box.press("Enter")
     drawer = ai_drawer(page)
@@ -4742,21 +4742,21 @@ def test_ai_history_per_person(page, ctx):
     sign_in_as(page, ctx, SALES)
     page.locator("[data-loading=false]").first.wait_for(timeout=15000)
     page.keyboard.press("ControlOrMeta+j")
-    page.get_by_role("dialog", name="Tanya Raka").get_by_role("button", name="Buka chat").click()
+    page.get_by_role("dialog", name="Tanya Zafdoz").get_by_role("button", name="Buka chat").click()
     drawer.get_by_text("Tanya apa saja tentang data bisnismu", exact=False).wait_for(timeout=5000)
     assert drawer.locator(".rk-chat-me, .rk-chat-raka").count() == 0, drawer.inner_text()
     assert drawer.get_by_text("pertanyaan rahasia pemilik").count() == 0, "the owner's question is gone"
 
 
 def ai_turn(page, ask):
-    """Ask Raka `ask` from the open drawer's composer (or ⌘J when the drawer is closed); wait until the answer is done.
-    Returns the last Raka turn."""
+    """Ask Zafdoz `ask` from the open drawer's composer (or ⌘J when the drawer is closed); wait until the answer is done.
+    Returns the last Zafdoz turn."""
     drawer = ai_drawer(page)
     if drawer.count():
-        box = drawer.get_by_role("textbox", name="Pesan untuk Raka")
+        box = drawer.get_by_role("textbox", name="Pesan untuk Zafdoz")
     else:
         page.keyboard.press("ControlOrMeta+j")
-        box = page.get_by_role("dialog", name="Tanya Raka").get_by_role("textbox", name="Tanya Raka")
+        box = page.get_by_role("dialog", name="Tanya Zafdoz").get_by_role("textbox", name="Tanya Zafdoz")
     before = drawer.locator(".rk-chat-raka").count()
     box.fill(ask)
     box.press("Enter")
@@ -4863,7 +4863,7 @@ def test_map_view(page, ctx):
 
 
 def test_ai_live(page, ctx):
-    """The real Raka (rangka-ai serve --demo behind the kernel relay, contract 0020): "berapa faktur jatuh tempo bulan
+    """The real Zafdoz (rangka-ai serve --demo behind the kernel relay, contract 0020): "berapa faktur jatuh tempo bulan
     ini?" streams an answer about invoices in rupiah from the kernel's data; "tambah field Nomor PO di faktur" ends in a
     previewed change set card whose "Lihat pratinjau" opens the preview. Runs only with RANGKA_AI_DIR."""
     if not ctx.ai_live:
@@ -4877,7 +4877,7 @@ def test_ai_live(page, ctx):
     answer = ai_turn(page, "berapa faktur jatuh tempo bulan ini?")
     text = answer.locator(".rk-chat-text").inner_text()
     assert "faktur" in text.lower() and "Rp" in text, f"an answer about invoices in rupiah, got {text!r}"
-    assert answer.locator(".rk-chat-act").count() >= 1, "the activity line of the tool Raka used"
+    assert answer.locator(".rk-chat-act").count() >= 1, "the activity line of the tool Zafdoz used"
     print("     answer: " + text.replace("\n", " ")[:160])
     try:
         turn = ai_turn(page, "tambah field Nomor PO di faktur")
@@ -4891,10 +4891,10 @@ def test_ai_live(page, ctx):
         cid = page.evaluate("() => location.hash.split('preview=')[1]")
         page.get_by_role("status").filter(has_text="Pratinjau: ").wait_for(timeout=15000)
         _, cs = Http(ctx.base).login(*ctx.owner).call("GET", f"/api/v1/changesets/{cid}")
-        assert cs.get("status") == "previewed" and cs.get("source") == "ai", f"a previewed change set from Raka: {cs}"
+        assert cs.get("status") == "previewed" and cs.get("source") == "ai", f"a previewed change set from Zafdoz: {cs}"
         ctx.live.add("ai")
     finally:
-        # whatever Raka proposed stays out of the later scenarios
+        # whatever Zafdoz proposed stays out of the later scenarios
         owner = Http(ctx.base).login(*ctx.owner)
         for c in owner.call("GET", "/api/v1/changesets?status=previewed")[1].get("data") or []:
             if c.get("source") == "ai":

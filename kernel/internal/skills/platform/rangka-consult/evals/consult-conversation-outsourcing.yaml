@@ -1,0 +1,24 @@
+name: consult-conversation-outsourcing
+skill: rangka-consult
+stage: studio
+prompt: "Aku punya usaha outsourcing satpam dan cleaning service, 60 orang di 4 klien. Tiap akhir bulan admin rekap absen dari supervisor buat gaji sama tagihan ke klien, dan itu makan waktu banget."
+conversation:
+  owner: |
+    - Penyedia satpam dan petugas kebersihan di Surabaya, 60 orang, 4 klien (2 kantor, 1 mal, 1 pabrik).
+    - Tiap lokasi punya supervisor yang mencatat absen di kertas lalu mengirim fotonya lewat WA tiap akhir bulan.
+    - Admin mengetik ulang absen ke Excel, lalu menghitung gaji per orang (gaji pokok bulanan dipotong kalau tidak masuk, lembur dibayar per jam).
+    - Tagihan ke klien dihitung dari jumlah orang dan hari hadir dikali tarif per orang per hari, ditambah biaya manajemen 10%.
+    - Gaji dibayar tanggal 1 lewat transfer. Klien rata-rata bayar 30 sampai 45 hari setelah tagihan.
+    - Masalah: rekap makan 3 hari, sering salah ketik, dan uang klien telat sementara gaji harus keluar.
+    - Belum pakai aplikasi HR. Mau karyawan absen dari HP kalau mudah.
+  max_turns: 10
+  offer_within: 5
+expect:
+  skills: [rangka-review]
+  answer:
+    not_mentions: ["modul", "konektor", "katalog", "kepingan"]
+rubric:
+  - "The conversation ends in an offer whose options cover attendance, payroll and client invoicing from the same attendance"
+  - "Zafdoz never asks again something the owner already answered"
+  - "Every Zafdoz reply ends with at most one question"
+  - "The owner's problems (slow recap, typing errors, late client payments) are each answered by a piece in the offer or listed as not covered"

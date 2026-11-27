@@ -23,7 +23,7 @@ func TestMeter(t *testing.T) {
 func TestLimitErrorHint(t *testing.T) {
 	c := &Current{Name: "mulai", Def: &Def{Name: "mulai", Label: "Mulai", Limits: map[string]int64{"outlets": 1}}}
 	e := LimitError(nil, c, Outlets)
-	if e.Code != "plan_limit" || e.Msg != "Paket Mulai berlaku untuk 1 outlet, dan semuanya sudah terpakai. Hubungi tim Juragan untuk menambah." {
+	if e.Code != "plan_limit" || e.Msg != "Paket Mulai berlaku untuk 1 outlet, dan semuanya sudah terpakai. Hubungi tim zafdoz.ai untuk menambah." {
 		t.Fatalf("%+v", e)
 	}
 }

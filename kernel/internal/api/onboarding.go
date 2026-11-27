@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/canvas"
@@ -161,7 +162,17 @@ func (s *Server) Onboarding(ctx context.Context, a engine.Actor) (map[string]any
 	steps := []map[string]any{}
 	var current any
 	procName := any(nil)
+	starter := map[string][]map[string]string{}
 	if p := onboardingProcess(reg); p != nil {
+		// contract 0076 §4: what the owner named in the interview, by model, minus what is already a record; the web
+		// app puts each model's rows on the step of that model, prerequisite steps included
+		for _, mn := range sortedKeys(p.Starter) {
+			if m := reg.Model(mn); m != nil && !m.IsChild && canRead(mn) {
+				if rows := s.starterLeft(ctx, a, m, p.Starter[mn]); len(rows) > 0 {
+					starter[mn] = rows
+				}
+			}
+		}
 		var stages []meta.Stage
 		for _, st := range p.Stages {
 			m := reg.Model(st.Model)
@@ -180,6 +191,7 @@ func (s *Server) Onboarding(ctx context.Context, a engine.Actor) (map[string]any
 			if st.Hint != nil {
 				step["hint"] = st.Hint
 			}
+
 			done, at, err := s.Engine.StageDone(ctx, a.Org, m, st.When)
 			if err != nil {
 				return nil, err
@@ -225,7 +237,8 @@ func (s *Server) Onboarding(ctx context.Context, a engine.Actor) (map[string]any
 			locks[n] = map[string]any{"reason": "needs_data", "needs": needs}
 		}
 	}
-	return map[string]any{"process": procName, "hidden": hidden, "steps": steps, "current": current, "locks": locks}, nil
+	return map[string]any{"process": procName, "hidden": hidden, "steps": steps, "current": current, "locks": locks,
+		"starter": starter}, nil
 }
 
 func (s *Server) getOnboarding(w http.ResponseWriter, r *http.Request, c *caller) {
@@ -271,7 +284,7 @@ func (s *Server) getTours(w http.ResponseWriter, r *http.Request, c *caller) {
 }
 
 // putTour is PUT /api/v1/onboarding/tours/{tour} {state: "seen" | "skipped" | ""}: the caller's own state of one
-// tour; "" forgets it so the tour can start again. Raka never calls it (the assistant writes nothing here).
+// tour; "" forgets it so the tour can start again. Zafdoz never calls it (the assistant writes nothing here).
 func (s *Server) putTour(w http.ResponseWriter, r *http.Request, c *caller) {
 	tour := r.PathValue("tour")
 	if !tourName.MatchString(tour) {
@@ -295,4 +308,39 @@ func (s *Server) putTour(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tour": tour, "state": *body.State})
+}
+
+// starterLeft is a stage's starter (contract 0076 §4) without the rows whose title is already a record the caller can
+// read (compared trimmed and case-blind), so a saved "Tenda" stops being offered. A model without a title field, or a
+// list that fails, keeps every row: offering a row twice is better than hiding one.
+func (s *Server) starterLeft(ctx context.Context, a engine.Actor, m *meta.Model, rows []map[string]string) []map[string]string {
+	if len(rows) == 0 || m.TitleField == "" {
+		return rows
+	}
+	recs, _, err := s.Engine.List(ctx, a, m.Name, engine.ListOpts{Limit: 500})
+	if err != nil {
+		return rows
+	}
+	have := map[string]bool{}
+	for _, r := range recs {
+		if t, ok := r[m.TitleField].(string); ok {
+			have[strings.ToLower(strings.TrimSpace(t))] = true
+		}
+	}
+	var out []map[string]string
+	for _, row := range rows {
+		if !have[strings.ToLower(strings.TrimSpace(row[m.TitleField]))] {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

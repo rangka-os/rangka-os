@@ -4,7 +4,7 @@ type: counter
 label: {id: Kasir A}
 roles: [staf]
 counter:
-  catalogue: {model: catatan_harian, price: text, search: [ghost], filter: "(text", available: text}
+  catalogue: {model: catatan_harian, price: text, search: [ghost], filter: "(text", available: text, variants: {group: ghost, label: text}}
   document:
     model: catatan_harian
     lines: text

@@ -2,7 +2,7 @@
 
 Status: implemented in rangka-os (18 Nov 2026, steps 1–4 of the order of work; step 5 is rangka-apps and Rangka Cloud) · Owner of the change: rangka-os (schema, validators, kernel, web app) · Affects:
 rangka-apps (`notices:` in modules, `notify` steps), rangka-cloud (private: the host side, its spec
-`docs/specs/2026-11-18-notifikasi-design.md` §8), rangka-ai (Raka writes `notify` steps in site flows) · Builds on: 0007,
+`docs/specs/2026-11-18-notifikasi-design.md` §8), rangka-ai (Zafdoz writes `notify` steps in site flows) · Builds on: 0007,
 0010, 0016, 0017, 0020, 0033, 0040, 0043, 0056, 0063, 0065
 
 ## Context
@@ -95,15 +95,15 @@ So that the apps in use today start reaching people without edits:
   `to.emails` (§2); other values are dropped and counted in the audit entry.
 - The audit entry `notify.<channel>` stays.
 
-### 1.4 Raka and change sets
+### 1.4 Zafdoz and change sets
 
-- Raka adds or changes notices only through **site flows** (`flows/<name>.rk`, 0033): a flow with a trigger and a
+- Zafdoz adds or changes notices only through **site flows** (`flows/<name>.rk`, 0033): a flow with a trigger and a
   `notify` step. That is how an owner asks "kabari kepala gudang kalau stok minus". The kind is `site.<flow>`.
 - Risk follows 0033 for flows (medium). A step whose recipients include a role other than `owner` and whose `record`
   model that role cannot read is refused at validate (`notice_role_cannot_read`, error), so a change set cannot send a
   record's content to people who may not open it.
-- Raka cannot edit `module.rk` (catalogue files). It never adds `emails` targets by hand: a person's address in a flow
-  is refused for Raka-authored change sets (`notice_literal_email`, escalated to the owner as for other high-risk
+- Zafdoz cannot edit `module.rk` (catalogue files). It never adds `emails` targets by hand: a person's address in a flow
+  is refused for Zafdoz-authored change sets (`notice_literal_email`, escalated to the owner as for other high-risk
   edits).
 - Change-set preview shows notices in plain words: "Kirim kabar ke Kepala gudang: Stok {…} minus".
 
@@ -289,7 +289,7 @@ modules, written by the rangka-apps owner.
 - Schema 0.5: `module.json` `notices` (§1); `flow.json` `notify` step gains `notice`, `title`, `record`, `outlet`, `id`.
   Under `experimental:` until released (0000 §4).
 - Validators (Go and Python, identical output): `unknown_notice` (a step names a notice its module does not declare),
-  `duplicate_notice`, `notice_role_cannot_read` (error), `notice_literal_email` (Raka-authored change sets),
+  `duplicate_notice`, `notice_role_cannot_read` (error), `notice_literal_email` (Zafdoz-authored change sets),
   `notice_personal_field` (warn), `notice_too_long` (a literal title over 80 or text over 300 runes). Testdata
   `kernel/testdata/notices` and `broken-notices`.
 - Kernel: `rk_notices`, `rk_notice_prefs`; emit path in the `notify` step and in approvals; jobs `notice_host` and
@@ -304,7 +304,7 @@ modules, written by the rangka-apps owner.
   module raises it; `notice:` and `record:` on the existing `notify` steps.
 
 **rangka-ai**
-- Raka writes site flows with `notify` steps for "kabari …" requests and never puts a literal email in one.
+- Zafdoz writes site flows with `notify` steps for "kabari …" requests and never puts a literal email in one.
 
 **rangka-cloud** (private): `POST /api/host/v1/notices`, the per-business bearer at provisioning, feed, mail,
 recipients (its spec §3 and §8).
@@ -325,7 +325,7 @@ recipients (its spec §3 and §8).
   schema 0.5, not `experimental:` (as 0021 §4: the validators never implemented that block). An app that uses them
   needs the release that ships them.
 - **Implicit notices (§1.3).** A field value names a member by email or by their user record (`USR-002`).
-- **`notice_literal_email` (§1.4)** raises a change set Raka proposed to high (the owner decides), at propose and again
+- **`notice_literal_email` (§1.4)** raises a change set Zafdoz proposed to high (the owner decides), at propose and again
   at apply. **`notice_personal_field` (§6)** warns on `{var.field}` of a `users` or `contacts` model when the field is
   `phone`/`npwp` typed or named email, phone, mobile, whatsapp, address, nik, bank_account or npwp. Schema 0.5 has no
   `secret` field, so its error case has nothing to check yet. `notice_too_long` is an error; it counts the literal text
@@ -381,4 +381,5 @@ recipients (its spec §3 and §8).
 
 ## Open
 
-None.
+None. Open 1 from main (whether `kernel.changeset.proposed` is a built-in notice) is built: see the
+`kernel.changeset.proposed` entry above.

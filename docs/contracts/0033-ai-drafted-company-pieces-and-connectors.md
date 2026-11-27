@@ -7,10 +7,10 @@ Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-o
 ## Context
 
 - The Juragan interview (rangka-cloud `docs/specs/2026-11-08-raka-interview-design.md`, "Composition and new pieces",
-  "Connector drafts") has Raka write the pieces no module covers. Examples are a rental booking table, a reminder
+  "Connector drafts") has Zafdoz write the pieces no module covers. Examples are a rental booking table, a reminder
   flow, and a connector for a service with an open API that the owner gives documentation links for.
 - rangka-ai's guardrails (`src/agent/guardrails.ts`, `src/rk/paths.ts`) do not know the site paths `models/` and
-  `flows/` of 0016. They escalate every layer-3 path (`connector_layer`), so Raka can draft no connector at all.
+  `flows/` of 0016. They escalate every layer-3 path (`connector_layer`), so Zafdoz can draft no connector at all.
 - `connectors/<c>.rk` resolves into the shared connectors directory (rangka-connectors). A company's connector written
   there would be lost on the next catalogue upgrade, the problem 0016 solved for models.
 - The kernel's `Assess` rates every `connectors/` change medium and every company flow medium, whatever they do.
@@ -20,10 +20,10 @@ Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-o
 ## Decision
 
 ### 1. Company models and flows (0016 paths)
-- Raka may propose new `models/x_<name>.rk` and new or changed `flows/<name>.rk` in the site, judged by 0016 §5. Raka
+- Zafdoz may propose new `models/x_<name>.rk` and new or changed `flows/<name>.rk` in the site, judged by 0016 §5. Zafdoz
   never proposes model or flow files under `apps/` or `modules/`.
 - **Money and stock stay in the core modules.** These are escalated to the owner as `posted_money_stock`, not proposed:
-  - a company model drafted by Raka with `is_submittable`, `append_only`, a `stock:` block, or a field with
+  - a company model drafted by Zafdoz with `is_submittable`, `append_only`, a `stock:` block, or a field with
     `stock: true`;
   - a company flow step that submits, cancels or amends, runs a model action, or `update`s a money or stock field on
     a submittable model.
@@ -49,18 +49,18 @@ Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-o
   - All of 0017 §5 applies: `secret_literal`, `secret_misplaced`, `secret_host_undeclared`, `secret_plain_http`.
   - New error `connector_host_private`: a host that is an IP literal, `localhost`, or a private, loopback or
     link-local name. The kernel checks it again on the resolved address at send time.
-- **Raka may propose a new company connector.** Only a create, never an edit. Risk:
+- **Zafdoz may propose a new company connector.** Only a create, never an edit. Risk:
 
   | Draft | Risk |
   | --- | --- |
   | Only `GET` actions, no triggers, not money-touching | medium |
   | Any other method, any trigger, or money-touching (§4) | high (owner only) |
-  | Edit or delete of any connector, a catalogue connector, a non-`x_` name | escalated (Raka); high (kernel) |
+  | Edit or delete of any connector, a catalogue connector, a non-`x_` name | escalated (Zafdoz); high (kernel) |
 
 - **Secrets never pass.** The draft declares fields only (`secret: true`, no `default:`). 0017 §4 applies unchanged:
   - the change set's preview lists the missing fields under `preview.requires`, a connector it creates included;
   - the connector stays `needs_auth` until a person sets them (Console or Cloud form, 0017 §3);
-  - Raka never asks for a value and never calls the secrets API.
+  - Zafdoz never asks for a value and never calls the secrets API.
 
 ### 3. Test before wiring
 - The kernel keeps a state per (org, company connector): `needs_auth` → `untested` → `tested`.
@@ -68,7 +68,7 @@ Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-o
   - Who: a person with `connector_auth` (0017 §3). An `ai: true` token is refused (0020 §4).
   - Answer: the mapped output, scrubbed (0017 §6) and cut to 20 rows or 4 KB.
   - On success the state becomes `tested`. Audit entry `connector.test`, with the outcome and never the body.
-- `GET /api/v1/connectors/{c}/test` returns the last result, so Raka can read it and explain it.
+- `GET /api/v1/connectors/{c}/test` returns the last result, so Zafdoz can read it and explain it.
 - **Apply-time check.** Applying a change set whose flows `call` or trigger on a company connector that is not
   `tested` in the change set's org is refused (`connector_untested`). That order is the interview's: draft, owner sets
   the secrets, owner runs the test, then the flows.
@@ -91,7 +91,7 @@ Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-o
 - Catalogue connectors are not covered here (Open).
 
 ### 5. What stays escalated
-- Editing or deleting any existing connector, including a company connector Raka drafted earlier.
+- Editing or deleting any existing connector, including a company connector Zafdoz drafted earlier.
 - `system.rk`, including `connector_auth:` and `ports:`.
 - Roles, secrets and config `ai`/`sso`.
 - Edits to `apps/` and `modules/` files.
@@ -123,14 +123,14 @@ Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-o
   and resolves to `<site>/connectors/x_<c>/connector.rk`.
 - `AI_LAYERS` becomes `[3, 4, 5, 6]`. Layer 3 is limited to a `create` of `connectors/x_*`. Every other layer-3 op
   keeps `connector_layer` (requires admin).
-- New problems Raka repairs itself: `company_model_name` (site model not `x_`), `company_connector_name`,
+- New problems Zafdoz repairs itself: `company_model_name` (site model not `x_`), `company_connector_name`,
   `hosts_required`, `secret_literal`, `secret_misplaced`, `connector_host_private`.
 - `scanSecrets`: inside a connector draft, a field declaration (`{name, secret: true}` without `default`) is not a
   secret. `${VAR}`, `default:` on a secret field, and literal token-like values still escalate as `secrets`.
 - `hasRoles`: a new site model's `permissions` that name only roles from `rangka_meta` are medium, not `permissions`.
 - Risk table: §1 and §2, plus "money-touching connector" high. Escalation code `posted_money_stock` also covers §1's
   company model and flow cases.
-- Header comment and `FORBIDDEN_TOOLS` unchanged. Raka never calls the test or confirm endpoints.
+- Header comment and `FORBIDDEN_TOOLS` unchanged. Zafdoz never calls the test or confirm endpoints.
 
 **rangka-cloud (`internal/kernel/overlay.go`)**
 - `ApprovableOp` allows any op on `models/x_*.rk` and `flows/*.rk`, and a `create` of `connectors/x_*.rk`.
@@ -142,7 +142,7 @@ Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-o
 - Whether catalogue connectors with money (`xendit`) should also need §4's confirmation per site.
 - A `read_only: true` action flag for APIs that read with `POST` (search endpoints). Until then only `GET` can be tested.
 - Promoting a company connector that recurs across tenants into rangka-connectors (drop `x_`, review, release).
-- Whether Raka may propose edits to a company connector it drafted while the state is still `untested`, before
+- Whether Zafdoz may propose edits to a company connector it drafted while the state is still `untested`, before
   anything uses it.
 
 ## Implementation notes (16 Nov 2026)

@@ -231,6 +231,29 @@
                 }
               ]
             },
+            "variants": {
+              "type": "object",
+              "description": "Items sharing a non-empty group collapse into one tile; tapping it opens a sheet of the variants with price and stock (contract 0048 §1). A barcode scan still adds the exact variant",
+              "required": [
+                "group",
+                "label"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "group": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "Data field of the catalogue model: the same value on every variant of one product"
+                },
+                "label": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "Data field of the catalogue model: the variant's name in the sheet (e.g. 'M / Hitam')"
+                },
+                "title": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "Optional data field: the product name on the tile; without it, the shortest common item title prefix"
+                }
+              }
+            },
             "limit": {
               "type": "integer",
               "minimum": 1,
@@ -297,7 +320,7 @@
             },
             "summary": {
               "type": "array",
-              "maxItems": 8,
+              "maxItems": 12,
               "items": {
                 "$ref": "model.json#/$defs/name"
               },
@@ -305,7 +328,7 @@
             },
             "checkout": {
               "type": "array",
-              "maxItems": 6,
+              "maxItems": 8,
               "items": {
                 "oneOf": [
                   {
@@ -353,6 +376,14 @@
             },
             "ref": {
               "$ref": "model.json#/$defs/name"
+            },
+            "party": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Numeric field of the payment row: which part of a split bill the row pays (1-based)"
+            },
+            "parties": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Numeric field of the document: how many people split the bill. With it the tender offers Bayar terpisah"
             },
             "methods": {
               "type": "array",
@@ -457,6 +488,30 @@
             },
             "required": {
               "type": "boolean"
+            },
+            "table": {
+              "type": "object",
+              "description": "Dining tables and a table map (contract 0048 section 2): open bills are server drafts that link a table",
+              "required": [
+                "model",
+                "link",
+                "title"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "model": {"$ref": "model.json#/$defs/name"},
+                "link": {"$ref": "model.json#/$defs/name"},
+                "title": {"$ref": "model.json#/$defs/name"},
+                "area": {"$ref": "model.json#/$defs/name"},
+                "seats": {"$ref": "model.json#/$defs/name"},
+                "filter": {"type": "string"},
+                "match": {
+                  "type": "object",
+                  "additionalProperties": {"$ref": "model.json#/$defs/name"}
+                },
+                "guests": {"$ref": "model.json#/$defs/name"},
+                "bill": {"$ref": "model.json#/$defs/name"}
+              }
             }
           }
         },

@@ -97,6 +97,25 @@ func TestValidateProcess(t *testing.T) {
 		"process_duplicate_stage": `../modules/core/processes/dup_stage.rk stages/1/name stage "step" is declared twice`,
 		"process_name_mismatch":   `../modules/core/processes/bad_name.rk name process name "other_name" must match the file name "bad_name"`,
 		"process_when":            "../modules/core/processes/bad_when.rk stages/0/when `statu` in `statu == 'paid'` is not a field; did you mean \"status\"?",
+		// contract 0076 §4: a starter names models, fields of them, and plain text ones only
+		"process_starter_model": `../modules/core/processes/bad_starter.rk starter/custmer "custmer" is not a model; did you mean "customer"?`,
+	}
+	for _, w := range []string{
+		`../modules/core/processes/bad_starter.rk starter/customer/0/customer_nam "customer_nam" is not a field of customer; did you mean "customer_name"?`,
+		`../modules/core/processes/bad_starter.rk starter/sales_invoice/0/grand_total field "grand_total" of sales_invoice cannot come from the interview: plain text fields only, not computed, read-only or hidden from a role`,
+	} {
+		found := false
+		for _, it := range rep.All() {
+			if it.Code == "process_starter_field" && it.File+" "+it.Where+" "+it.Message == w {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no starter error %q", w)
+		}
+	}
+	if count["process_starter_field"] != 2 {
+		t.Errorf("process_starter_field x%d, want 2 (the city of the same row is fine)", count["process_starter_field"])
 	}
 	for code, w := range want {
 		if count[code] != 1 || got[code] != w {

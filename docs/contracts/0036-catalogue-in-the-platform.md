@@ -116,7 +116,7 @@ Connecting has up to four steps. The screen shows them in order, each with its o
    - One site has one installed set. Per-org `orgs.<id>.config.connectors` is refused (`org_config_key`, as 0032 §1).
 2. **Pick it for a port (change set), only when it `provides` a port that has no vendor yet.**
    - It is a `system.rk` `ports:` edit (0002 §B), so it is high and owner only (`risk.go`: system.rk).
-   - The screen offers it after install ("Pakai Midtrans untuk QRIS?"). Raka never proposes it (§7).
+   - The screen offers it after install ("Pakai Midtrans untuk QRIS?"). Zafdoz never proposes it (§7).
 3. **Credentials (no change set).**
    - The form calls `PUT /api/v1/connectors/{c}/auth/{field}` for the current org (0017 §3).
    - Only the owner and roles granted `connector_auth` see the form. Others see "Perlu diatur oleh pemilik".
@@ -162,15 +162,15 @@ Connecting has up to four steps. The screen shows them in order, each with its o
   `hosts`, `money`, the auth fields with `set`/`hint`/`version` (0017 §3), and the same actions.
 - **One set of rules:** the Console and the web app call the same endpoints.
 
-### 7. Rangka AI (Raka)
-- Raka may read the catalogue (`catalogue_list`, or `GET /api/v1/catalogue` with its delegated token) to suggest
+### 7. Rangka AI (Zafdoz)
+- Zafdoz may read the catalogue (`catalogue_list`, or `GET /api/v1/catalogue` with its delegated token) to suggest
   modules or connectors and explain them in plain words.
-- Raka may propose the change sets of §4 and §5 step 1, through the MCP propose tool like any other change set.
+- Zafdoz may propose the change sets of §4 and §5 step 1, through the MCP propose tool like any other change set.
   - `POST /api/v1/catalogue/propose` is refused to it (`403 ai_forbidden`, 0020 §4). It writes the same `config.rk`
     edit, and the kernel judges it the same way, because 0032 §3 rates the difference in installed modules.
   - The 0032 guardrails apply: adding is medium, and removing is marked high before drafting.
   - Money-touching connectors are high.
-- Raka never proposes `system.rk` `ports:` (escalated, 0033 §5), never asks for a secret, and never calls the secrets,
+- Zafdoz never proposes `system.rk` `ports:` (escalated, 0033 §5), never asks for a secret, and never calls the secrets,
   test or confirm endpoints (0017 §4, 0033 §3).
   - It links the owner to "Atur kunci" on the connector's page instead.
 

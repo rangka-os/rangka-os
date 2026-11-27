@@ -672,7 +672,7 @@ func upgradeHint(reg *meta.Registry, c *Current, key string) string {
 	if AddOnLimits[key] {
 		return " Tambah kapasitas di Konsol."
 	}
-	return " Hubungi tim Juragan untuk menambah."
+	return " Hubungi tim zafdoz.ai untuk menambah."
 }
 
 // poolFull reports whether key is held by a pool cap (contract 0057 §2): the cap, not the plan, is the limit.
@@ -688,7 +688,7 @@ func (c *Current) poolFull(key string) bool {
 	return lim == cp.Value
 }
 
-const poolFullMsg = "Kolam Juragan Grup sudah penuh. Tambah kapasitas atau kurangi pemakaian di bisnis lain."
+const poolFullMsg = "Kolam Zafdoz Grup sudah penuh. Tambah kapasitas atau kurangi pemakaian di bisnis lain."
 
 // LimitError is the refusal of one more of key under c.
 func LimitError(reg *meta.Registry, c *Current, key string) *Error {
@@ -703,7 +703,7 @@ func LimitError(reg *meta.Registry, c *Current, key string) *Error {
 	case Users:
 		what = fmt.Sprintf("Paket %s berlaku untuk %d pengguna, dan semuanya sudah terpakai.", c.Label(), lim)
 	case AICredits:
-		what = fmt.Sprintf("Kredit Raka bulan ini sudah habis (%d dari %d di paket %s). Kredit terisi lagi awal bulan depan.", lim, lim, c.Label())
+		what = fmt.Sprintf("Kredit Zafdoz bulan ini sudah habis (%d dari %d di paket %s). Kredit terisi lagi awal bulan depan.", lim, lim, c.Label())
 	case Apps:
 		what = fmt.Sprintf("Paket %s berlaku untuk %d app, dan semuanya sudah terpasang.", c.Label(), lim)
 	case DBMB:
@@ -1115,7 +1115,7 @@ func (s *Snapshot) Report(reg *meta.Registry, period string) map[string]any {
 		Outlets:   meter(c, Outlets, s.Usage.Outlets, "outlet"),
 		Users:     meter(c, Users, s.Usage.Users, "pengguna"),
 		Staff:     meter(c, Staff, s.Usage.Staff, "staf HP"),
-		AICredits: meter(c, AICredits, s.Usage.AICredits, "kredit Raka bulan ini"),
+		AICredits: meter(c, AICredits, s.Usage.AICredits, "kredit Zafdoz bulan ini"),
 		Apps:      meter(c, Apps, s.Usage.Apps, "app"),
 		DBMB:      meter(c, DBMB, s.Usage.DBMB, "MB database"),
 		FilesMB:   meter(c, FilesMB, s.Usage.FilesMB, "MB file"),

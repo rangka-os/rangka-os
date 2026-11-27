@@ -12,7 +12,7 @@ SITE    ?= $(CAT)/sites/kopi-senja
 CONN    ?= $(WS)/rangka-connectors
 ADDR    ?= :8080
 BIN     := bin/rangka
-# rangka-ai checkout whose dist/cli.js run-demo starts as the Raka sidecar (skipped when not built)
+# rangka-ai checkout whose dist/cli.js run-demo starts as the Zafdoz sidecar (skipped when not built)
 RANGKA_AI_DIR ?= $(WS)/rangka-ai
 AI_PORT ?= 8787
 MODULE  ?=
@@ -103,7 +103,7 @@ compare-python: build
 # Temp Postgres → migrate → seed (org kopi-senja, ceo@saga.co.id / rangka-demo) → serve on :8080 with
 # --dev-open. When rangka-ai is built ($(RANGKA_AI_DIR)/dist/cli.js; set RANGKA_AI_DIR when the workspace has no
 # rangka-ai/), its scripted sidecar (serve --demo, no LLM key) runs on 127.0.0.1:$(AI_PORT) with a random shared
-# secret and the kernel gets --ai-url, so Raka answers in /app/ and /console/ (contract 0020).
+# secret and the kernel gets --ai-url, so Zafdoz answers in /app/ and /console/ (contract 0020).
 # Ctrl-C stops the server and the sidecar and removes the database.
 run-demo: build
 	@URL=$$(PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh start) || exit 1; \
@@ -117,10 +117,10 @@ run-demo: build
 	  RAKA_SERVE_TOKEN=$$RANGKA_AI_SECRET node "$(RANGKA_AI_DIR)/dist/cli.js" serve --demo --port $(AI_PORT) & AI_PID=$$!; \
 	  AI_FLAGS="--ai-url http://127.0.0.1:$(AI_PORT)"; \
 	  i=0; until curl -fs -o /dev/null http://127.0.0.1:$(AI_PORT)/healthz; do \
-	    i=$$((i+1)); if [ $$i -ge 25 ]; then echo "peringatan: Raka belum menjawab di http://127.0.0.1:$(AI_PORT)/healthz setelah 5 detik"; break; fi; sleep 0.2; \
+	    i=$$((i+1)); if [ $$i -ge 25 ]; then echo "peringatan: Zafdoz belum menjawab di http://127.0.0.1:$(AI_PORT)/healthz setelah 5 detik"; break; fi; sleep 0.2; \
 	  done; \
 	elif [ ! -f "$(RANGKA_AI_DIR)/dist/cli.js" ]; then \
-	  echo "Raka tidak dijalankan: $(RANGKA_AI_DIR)/dist/cli.js belum ada (npm run build)"; \
+	  echo "Zafdoz tidak dijalankan: $(RANGKA_AI_DIR)/dist/cli.js belum ada (npm run build)"; \
 	fi; \
 	echo "open http://localhost$(ADDR)/app/  ·  API http://localhost$(ADDR)/api/v1/meta  ·  MCP POST http://localhost$(ADDR)/mcp" && \
 	$(BIN) serve --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" --addr $(ADDR) --dev-open $$AI_FLAGS

@@ -1,13 +1,13 @@
-# 0045 The platform sets Raka's limits
+# 0045 The platform sets Zafdoz's limits
 
 Status: proposed (12 Nov 2026) · Owner of the change: rangka-os (kernel, skills) · Affects: rangka-ai (guardrails,
-`/v1/plan`, agent and consult prompts), rangka-cloud (Raka's token, approval in the studio, build) · Amends: 0033
+`/v1/plan`, agent and consult prompts), rangka-cloud (Zafdoz's token, approval in the studio, build) · Amends: 0033
 (accepted with the changes in §4), 0042 §8 (custom pieces), 0032 §5 (menu group for company tables), 0035 (skill
 rule) · Builds on: 0016, 0017, 0020, 0028
 
 ## Context
 
-- **Owner decision (Dede, 12 Nov 2026).** Raka may customise a business as far as Rangka OS can express it. What Raka
+- **Owner decision (Dede, 12 Nov 2026).** Zafdoz may customise a business as far as Rangka OS can express it. What Zafdoz
   can and cannot do comes from Rangka OS (schema, validator, the kernel's risk rules and approvals), not from choices
   written into the AI engine or into skills.
 - **Today three places refuse before the platform is asked.**
@@ -33,7 +33,7 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 - **What the kernel lacks.** None of 0033's kernel parts exist: no list of paths an assistant may not propose
   (`ai_forbidden_path`), no company connectors (`connectors/x_*` still resolves into the shared directory), no
   connector test or confirm state, no `approvable_by`. That is the bulk of the work.
-- **Raka in the Cloud is not seen as an assistant.** Cloud mints Raka's token with the owner's session
+- **Zafdoz in the Cloud is not seen as an assistant.** Cloud mints Zafdoz's token with the owner's session
   (`projects.go` `CreateToken(ctx, sess, "raka")`), a plain API token. The kernel records its proposals as the owner,
   so a kernel check keyed on the assistant actor would never run there.
 - **Money at run time.** `flow.json` has no step that calls a language model. It has `call`, which calls a connector,
@@ -43,15 +43,15 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 
 ### 1. The rule
 
-- Raka may propose **any change set the platform accepts**: the schema and validator accept its files, and the
+- Zafdoz may propose **any change set the platform accepts**: the schema and validator accept its files, and the
   kernel's `Propose` accepts it from an assistant (§2).
 - How hard it is to approve is decided by the kernel: `Assess` gives the risk (§2b), `approvable_by` gives who
-  approves (§3). Raka never lowers or skips that.
+  approves (§3). Zafdoz never lowers or skips that.
 - **Skills and engine prompts describe how, never whether.** They say how to design, order, explain and repair. They
-  add no ban of their own. A skill line of the form "Raka never proposes X" is allowed only when the platform refuses
+  add no ban of their own. A skill line of the form "Zafdoz never proposes X" is allowed only when the platform refuses
   X and the skill names the platform's code. Design advice ("keep payments in `payments`") is allowed and is worded
   as advice.
-- **Every limit Raka states is traceable.** When Raka tells an owner that something cannot be done, it names the
+- **Every limit Zafdoz states is traceable.** When Zafdoz tells an owner that something cannot be done, it names the
   reason the platform gave: a validator code, a `Propose` refusal, or a capability that `rangka_catalogue` /
   `rangka_meta` does not list. "Aku tidak boleh" without one is a bug.
 
@@ -73,7 +73,7 @@ rule) · Builds on: 0016, 0017, 0020, 0028
   equivalent) decide whether the plan allows them.
 - Removing a field or a select option from an overlay or company model is proposable and rated high (§2b); the data
   stays and only the owner approves.
-- Secrets keep 0017 §4 unchanged: the validator's secret codes reject literal secrets; Raka never asks for or reads
+- Secrets keep 0017 §4 unchanged: the validator's secret codes reject literal secrets; Zafdoz never asks for or reads
   a secret value.
 - This table is the only copy. rangka-ai and rangka-cloud read the kernel's answer (§3); they keep no list of their own.
 
@@ -119,11 +119,11 @@ and history the row holds at that moment (notes 1 and 2).
 would put back an older text over that change. Make a new change set instead. Change sets applied before the
 kernel kept the applied text are not checked.
 
-### 3. Raka is an assistant everywhere; agents and the Cloud ask the platform
+### 3. Zafdoz is an assistant everywhere; agents and the Cloud ask the platform
 
 - **Assistant API tokens.** `POST /api/v1/tokens` accepts the scope `assistant`. Such a token resolves with
   `Via: "ai"`, so the kernel treats its holder as the assistant acting for the person who made it: §2 applies,
-  proposals get source `ai`, `Apply` refuses it. Only a person can create one. The Cloud mints Raka's token this way;
+  proposals get source `ai`, `Apply` refuses it. Only a person can create one. The Cloud mints Zafdoz's token this way;
   existing `raka` tokens are replaced on the next build or Buka sistem.
 - **New field on every change set:** `approvable_by: [role]`, computed at validate and preview time (high:
   `["owner"]`; otherwise `config.ai.approvers`, always including `owner`). Returned by `GET /api/v1/changesets/{id}`
@@ -136,7 +136,7 @@ kernel kept the applied text are not checked.
   repairs up to `max_repairs`, and explains what is left (§5). It keeps:
   - **typed-secret detection** in `preflight`: a password, 2FA code, API key or token pasted into the chat is not
     sent on and the person is told to set it in the Console. A *request about* login, SSO or keys is no longer
-    refused by the engine; Raka answers it from skills and the platform (for example "Buka sistem", or `system.rk`
+    refused by the engine; Zafdoz answers it from skills and the platform (for example "Buka sistem", or `system.rk`
     being admin-only);
   - the claims check (never say done before the platform says applied);
   - `FORBIDDEN_TOOLS` (approve, apply, reject, revert).
@@ -150,7 +150,7 @@ kernel kept the applied text are not checked.
   advice in `rangka-consult` (one ledger is easier to reconcile), not a refusal.
 - §5 "What stays escalated" is replaced by §2 of this contract, enforced by the kernel.
 - The rangka-ai section of 0033 is replaced by §3. Its repair codes (`company_model_name`, `company_connector_name`,
-  `hosts_required`, `secret_literal`, `secret_misplaced`, `connector_host_private`) stay: Raka repairs them from the
+  `hosts_required`, `secret_literal`, `secret_misplaced`, `connector_host_private`) stay: Zafdoz repairs them from the
   validator's answer.
 - The rangka-cloud section of 0033 is replaced by §3. The test and confirm screens for company connectors (0033 §3,
   §4) stay.
@@ -168,24 +168,24 @@ kernel kept the applied text are not checked.
   the reason is the validator code still failing after `max_repairs` or `ai_forbidden_path`. This changes the
   `/v1/plan` response; rangka-ai and rangka-cloud ship it in the same release.
 - **Real gaps** are only:
-  1. a platform refusal or validator code Raka could not repair;
+  1. a platform refusal or validator code Zafdoz could not repair;
   2. a system with no usable API (no connector can be drafted);
   3. edge hardware with no edge module in `rangka_catalogue`;
   4. something no schema key can express.
-- For a real gap Raka says it plainly, in the owner's words, and that the team will add support as soon as possible,
+- For a real gap Zafdoz says it plainly, in the owner's words, and that the team will add support as soon as possible,
   with no date: *"Bagian ini belum bisa aku susun sekarang karena Rangka belum mendukungnya. Tim kami akan secepatnya
   menambah dukungannya, dan aku kabari begitu bisa."* Cloud records it through `internal/gaps` with the platform code
   as evidence and tells the owner when it closes.
 
 ### 6. Money at run time
 
-- Raka may design and draft finance features: money fields, submittable documents, deposit and fee flows, drafts in
+- Zafdoz may design and draft finance features: money fields, submittable documents, deposit and fee flows, drafts in
   `invoicing` and `payments`. They follow §1 and §2 and are rated by §2b (high, owner only).
 - At run time, money and stock are computed and posted by CEL, flows and the kernel. Flows have no step that calls a
   language model, and this contract adds none. A flow that writes a money or stock field from a connector `call` is
   high (§2b), so the owner sees it before it runs; with 0033 §4 a money-touching connector also needs the second
   confirmation for writes.
-- Raka moving money on its own (payouts, transfers) is out of scope and needs its own contract.
+- Zafdoz moving money on its own (payouts, transfers) is out of scope and needs its own contract.
 
 ## Contract changes
 
@@ -212,10 +212,10 @@ kernel kept the applied text are not checked.
 - Agent `INSTRUCTIONS`: drop "a catalogue app that covers the request wins"; point at the skills for ordering.
 - `/v1/plan`: §5, one change set per custom piece, `deferred` as objects with `reason`.
 - Tests: a custom piece with a money field is proposed (not escalated); an `apps/` edit comes back
-  `ai_forbidden_path` from a kernel stand-in and Raka explains it; a pasted API key is not sent on.
+  `ai_forbidden_path` from a kernel stand-in and Zafdoz explains it; a pasted API key is not sent on.
 
 **rangka-cloud**
-- Mint Raka's token with `assistant: true` (§3).
+- Mint Zafdoz's token with `assistant: true` (§3).
 - Studio approve: from `approvable_by`, not `ApprovableOp`; keep `OverlayPath` for the file editor.
 - Build: custom-piece change sets from `/v1/plan` are listed with the others; `deferred` objects become gaps with
   their reason.
@@ -226,8 +226,8 @@ kernel kept the applied text are not checked.
   Today only the studio approves, as the owner; this contract does not change that.
 - A connector drafted for a language-model API: §2b makes money writes from it high, but the platform cannot tell such
   an API apart from any other. Whether to add a connector flag for it.
-- Whether an owner may grant Raka edits to its own drafted company connector while it is still `untested`
+- Whether an owner may grant Zafdoz edits to its own drafted company connector while it is still `untested`
   (0033 Open, unchanged).
 - Company roles (`<site>/roles/`, 0016 Open): once they exist, whether §2's `roles/` row applies to them.
-- The offer step (custom → modules and connectors → bundle, owner confirmation before build) and Raka's memory are
+- The offer step (custom → modules and connectors → bundle, owner confirmation before build) and Zafdoz's memory are
   separate contracts that build on this one.

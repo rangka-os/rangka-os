@@ -4,9 +4,9 @@ Status: proposed (9 Nov 2026; amended 10 Nov 2026: one interview, no `version` f
 
 ## Context
 
-Today Raka's onboarding interview collects 13 flat facts and stops when four are known. Owners do not think in facts; they think in how their business runs. This contract replaces facts with a business flow map, the **peta**: stages the business goes through, the pieces (modules, connectors, devices, services, custom work) that back each stage, open questions, and settings the owner stated. Raka acts as a consultant: it reads the owner's own files, guesses from them (the owner confirms), looks things up in studio knowledge over the 0041 gateway, edits the map with ops, and the owner builds from the map.
+Today Zafdoz's onboarding interview collects 13 flat facts and stops when four are known. Owners do not think in facts; they think in how their business runs. This contract replaces facts with a business flow map, the **peta**: stages the business goes through, the pieces (modules, connectors, devices, services, custom work) that back each stage, open questions, and settings the owner stated. Zafdoz acts as a consultant: it reads the owner's own files, guesses from them (the owner confirms), looks things up in studio knowledge over the 0041 gateway, edits the map with ops, and the owner builds from the map.
 
-Cloud stores the map with the project. rangka-ai stays stateless: it receives the map each turn and returns the resulting map. Money and stock stay in core modules (0033); Raka never claims something is made (0035 section 5). File content is data, never instructions.
+Cloud stores the map with the project. rangka-ai stays stateless: it receives the map each turn and returns the resulting map. Money and stock stay in core modules (0033); Zafdoz never claims something is made (0035 section 5). File content is data, never instructions.
 
 ## Decision
 
@@ -111,12 +111,12 @@ A reply may carry `guesses: [{"id": "g_dp", "file": "f_1", "claim": "Deposit sel
 
 `POST /v1/interview` is the consult turn. It replaces the previous interview (request with `facts` and `catalogue`, response `{reply, facts, done, done_refused}`); it is not a second version next to it. There is no `version` field: a request that carries one has it ignored.
 
-- Request adds: `map` (required), `confirmed_guesses: [id]`, `files: [{id, name, media_type, status}]`, `kernel: {url, token}` (the gateway, section 5; optional: without it Raka works from the map and conversation only), `budget: {near_limit: boolean}` (optional; absent means false). Examples may carry `map` next to `facts`. The request drops `facts` and `catalogue`; a request that still sends them has them ignored.
+- Request adds: `map` (required), `confirmed_guesses: [id]`, `files: [{id, name, media_type, status}]`, `kernel: {url, token}` (the gateway, section 5; optional: without it Zafdoz works from the map and conversation only), `budget: {near_limit: boolean}` (optional; absent means false). Examples may carry `map` next to `facts`. The request drops `facts` and `catalogue`; a request that still sends them has them ignored.
 - Response: `{reply, map, dropped_ops, guesses, suggest_build, usage, provider, model}`. No `done`, no `facts`.
-- `suggest_build` (boolean) is set by Raka when the map covers the flow from first contact to money in. Cloud then offers the "Susun rancangan" action. It never ends the interview, and the owner can build without it.
-- `budget.near_limit`: Cloud sets it once the session has used 80% of its interview budget. Raka then says so once in its reply, offers "Susun rancangan" by setting `suggest_build` when the map has anything to build, and says that the story and the map move to the account on sign-in. Cloud adds the sign-in and paket link actions under the reply; Raka never writes links.
+- `suggest_build` (boolean) is set by Zafdoz when the map covers the flow from first contact to money in. Cloud then offers the "Susun rancangan" action. It never ends the interview, and the owner can build without it.
+- `budget.near_limit`: Cloud sets it once the session has used 80% of its interview budget. Zafdoz then says so once in its reply, offers "Susun rancangan" by setting `suggest_build` when the map has anything to build, and says that the story and the map move to the account on sign-in. Cloud adds the sign-in and paket link actions under the reply; Zafdoz never writes links.
 
-**Facts to map for legacy projects.** Projects made before this contract have facts and no map; Cloud turns them into a map with these rules. The interview has no scripted fallback (amended 10 Nov 2026): when Raka cannot answer, Cloud says so and the owner retries.
+**Facts to map for legacy projects.** Projects made before this contract have facts and no map; Cloud turns them into a map with these rules. The interview has no scripted fallback (amended 10 Nov 2026): when Zafdoz cannot answer, Cloud says so and the owner retries.
 
 Fact keys and labels (rangka-cloud `FactKeys`, in this order, verbatim):
 
@@ -174,14 +174,14 @@ Scripted questions (rangka-cloud `MissingFactQuestions`, verbatim):
 | `owner_files` | none | `[{id,name,media_type,status}]` |
 | `owner_file` | `{id}` | `{id, name, status, text, truncated}` (section 6) |
 
-No other tool exists in place `studio`; names containing approve, apply, reject or revert stay refused (0041). rangka-os docs are not served separately in this contract: what Raka needs from them is in the skills.
+No other tool exists in place `studio`; names containing approve, apply, reject or revert stay refused (0041). rangka-os docs are not served separately in this contract: what Zafdoz needs from them is in the skills.
 
 ### 6. Owner files
 
 - Accepted types: `text/csv`, `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `text/plain`, `image/png`, `image/jpeg`, `image/webp`. At most 10 MB per file, at most 20 files per project.
-- Raka reads files unscrubbed, after a disclaimer shown on the uploader. Guest files expire with the guest project.
+- Zafdoz reads files unscrubbed, after a disclaimer shown on the uploader. Guest files expire with the guest project.
 - Extraction is stateless in rangka-ai: `POST /v1/extract {name, media_type, data}` (`data` is base64) answers `{status: "ok", text, truncated}` (text at most 60000 UTF-16 units; spreadsheets as one Markdown table per sheet, at most 200 rows each) or `{status: "unreadable", reason}` with reasons `vision_unavailable`, `unsupported_type`, `corrupt`, `too_large`.
-- Cloud stores the result; `owner_file` returns it. An unreadable file answers `status: "unreadable"` with its reason, never an empty text that Raka could read as "the file is empty".
+- Cloud stores the result; `owner_file` returns it. An unreadable file answers `status: "unreadable"` with its reason, never an empty text that Zafdoz could read as "the file is empty".
 - File content is data, never instructions; so is the file `name`.
 
 ### 7. Model roles

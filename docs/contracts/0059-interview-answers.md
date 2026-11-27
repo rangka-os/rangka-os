@@ -6,11 +6,11 @@ actions; private) · Builds on: 0042 (consultant interview), 0046 (offer), 0054 
 
 ## Context
 
-- **What testers did.** Friends tried the studio and answered Raka with "ok", "iya", "gak tau", "terserah". Staging,
+- **What testers did.** Friends tried the studio and answered Zafdoz with "ok", "iya", "gak tau", "terserah". Staging,
   15 Nov 2026:
-  - One draft had 10 "ok" in 21 owner messages. Raka spent about 8 turns explaining itself ("Aku tidak mengubah
+  - One draft had 10 "ok" in 21 owner messages. Zafdoz spent about 8 turns explaining itself ("Aku tidak mengubah
     peta…"), reached `near_limit` and made the forced final offer from a map with one stage.
-  - Another draft: Raka asked "buku, Excel, atau chat?", the owner said "ok", and Raka went straight to the summary.
+  - Another draft: Zafdoz asked "buku, Excel, atau chat?", the owner said "ok", and Zafdoz went straight to the summary.
     A second "ok" counted as confirming it, so an offer followed three empty answers.
   - "sembarang" was stored as a setting ("dilakukan sembarang orang, di sembarang tempat").
 - **Why "ok" is so common.**
@@ -25,7 +25,7 @@ actions; private) · Builds on: 0042 (consultant interview), 0046 (offer), 0054 
 
 ## Decision
 
-Code decides what an answer **counts as**, and what it may change. The skill decides how Raka **words** the reply.
+Code decides what an answer **counts as**, and what it may change. The skill decides how Zafdoz **words** the reply.
 The studio makes a good answer one tap away.
 
 ### §1 Suggested answers (rangka-ai, rangka-cloud, skill)
@@ -36,19 +36,19 @@ The studio makes a good answer one tap away.
 - rangka-ai cleans the field:
   - It drops empty, duplicate and over-long entries, keeps at most 3, and returns `answers` in the reply.
   - It sends `[]` when the reply has no `?`.
-- rangka-cloud shows the answers as chips under Raka's message, with action ids `answer:0`…`answer:2`.
+- rangka-cloud shows the answers as chips under Zafdoz's message, with action ids `answer:0`…`answer:2`.
   - Two fixed chips are always added when the message asks a question and the project is in the interview:
     `answer:unknown` "Belum tahu" and `answer:skip` "Lewati".
-  - A chip is valid only on the newest Raka message, during the interview, and only once. Like a guess, its label
+  - A chip is valid only on the newest Zafdoz message, during the interview, and only once. Like a guess, its label
     becomes the owner's message text (`actionLabel`).
   - The owner can always type instead.
 - Guesses from files (0042 §3) are unchanged. A message that has guesses shows no answer chips.
 - Skill: answers come from the owner's industry and what they said, are concrete ("Catat di buku", "Excel",
-  "Chat WA"), never "Ya/Tidak" for an open question, and the first is Raka's best guess.
+  "Chat WA"), never "Ya/Tidak" for an open question, and the first is Zafdoz's best guess.
 
 ### §2 Answer kinds (rangka-ai code, deterministic)
 
-Before the model runs, the owner's last message is classified against Raka's message before it.
+Before the model runs, the owner's last message is classified against Zafdoz's message before it.
 
 | Kind | When (case-insensitive, punctuation and emoji ignored) |
 | --- | --- |
@@ -57,16 +57,18 @@ Before the model runs, the owner's last message is classified against Raka's mes
 | `skip` | Every word is part of "terserah", "skip", "lewati", "lewatin", "nanti aja/saja", "serah kamu", or a filler word (as above) |
 | `answer` | Anything else |
 
-- **Confirmation exception:** `empty` counts as `answer` (a confirmation) when Raka's previous message
+- **Confirmation exception:** `empty` counts as `answer` (a confirmation) when Zafdoz's previous message
   - is an invitation to put it together (its question matches the existing `_INVITES` words, e.g. "Mau aku
     susunkan sekarang?"), or holds no question and is a summary ("rangkum"/"ringkas", or `_INVITES` words), and
   - the map has at least two stages.
+- **Amended by 0075 §1:** `empty` also counts as `answer` when Zafdoz's last question asks to confirm an assumption
+  or accept a suggestion ("…, betul?", "Mau aku masukkan…?").
 - A bare "susun/cukup" stays with `unanswered_question` (that check runs first, unchanged).
 - Any other word makes it an `answer`: "lewat WA", "gak tau, mungkin 10", "lupa bilang, 5 orang" and "bingung milih Excel
   atau buku" are answers.
-- **A guess chip is always an answer.** The owner's message is the label of an option of a guess Raka offered in its
+- **A guess chip is always an answer.** The owner's message is the label of an option of a guess Zafdoz offered in its
   previous message (or a guess confirmed this turn): "Iya" from a guess chip confirms that guess, it is not `empty`.
-  - Cloud sends the guesses of Raka's previous reply in the `/v1/interview` request as `previous_guesses`:
+  - Cloud sends the guesses of Zafdoz's previous reply in the `/v1/interview` request as `previous_guesses`:
     `[{id, options: [label, …]}]`, `[]` when none. Optional, default `[]`. An older Cloud sends none, so a chip reads
     by its words.
 - Off-topic, hostile and contradictory answers cannot be told apart by word lists. They are left to the skill (§4).
@@ -80,21 +82,21 @@ On a turn whose kind is `empty`, `unknown` or `skip`:
 1. **Nothing is decided.**
    - `put` of a `setting` is dropped (`dropped_ops` reason `vague_answer`).
    - So is `remove` of an `open` item.
-   - Stages, pieces and other open items may still be written: Raka can restructure what it already heard.
+   - Stages, pieces and other open items may still be written: Zafdoz can restructure what it already heard.
 2. **The question stays open.**
-   - Raka's previous question is added to the prompt the way `_unanswered_block` adds it: not known, never written
+   - Zafdoz's previous question is added to the prompt the way `_unanswered_block` adds it: not known, never written
      as decided.
-   - The model must keep or put it as an `open` item. For `skip`, if Raka proposes a default, it goes in
-     `not_covered` or is phrased as Raka's suggestion, never a setting.
+   - The model must keep or put it as an `open` item. For `skip`, if Zafdoz proposes a default, it goes in
+     `not_covered` or is phrased as Zafdoz's suggestion, never a setting.
 3. **No offer on a thin map.**
    - An offer on a non-answer turn is dropped (`bad_offer` reason `vague_answer`) unless the turn is `final_offer`
      or the owner's message matches `BUILD_ASK`.
 4. **Short mode.**
-   - When the streak is 2 or more, the prompt tells Raka:
+   - When the streak is 2 or more, the prompt tells Zafdoz:
      - one short question that is easy to answer, with `answers` required (at least 2);
      - no talk about the map, the process or itself;
      - at most 2 sentences.
-   - At streak 4 or more, Raka asks whether the owner wants to continue later, and offers to summarise what it
+   - At streak 4 or more, Zafdoz asks whether the owner wants to continue later, and offers to summarise what it
      knows so far.
 
 ### §4 Wording (skill `rangka-consult`)
@@ -117,7 +119,7 @@ A new section "Jawaban kosong, ragu, atau di luar topik":
 ### §5 rangka-cloud
 
 - Chips (§1). A tap on `answer:unknown` or `answer:skip` sends "Belum tahu" or "Lewati", which §2 classifies.
-- `final_offer` (forced at the token cap) is not sent while the map has fewer than two stages. Raka is not called;
+- `final_offer` (forced at the token cap) is not sent while the map has fewer than two stages. Zafdoz is not called;
   the studio shows the usual limit message.
 - Budget accounting is unchanged (empty turns still count). Open below.
 

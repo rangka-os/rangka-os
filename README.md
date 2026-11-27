@@ -42,7 +42,7 @@ stock, POS), built first for Indonesian small and medium businesses.
 Every module, model, rule, flow, dashboard, print format, theme and backend capability is a `.rk` file: strict YAML,
 checked by JSON Schema. The kernel turns those files into Postgres tables, a REST + MCP API, realtime events and the
 screens of the web app. A running installation changes only through **change sets**: proposed (by a person, the
-Console or the Raka AI agent), validated on a copy, previewed with their SQL, approved by a person, applied live and
+Console or the Zafdoz AI agent), validated on a copy, previewed with their SQL, approved by a person, applied live and
 revertible. Money and stock never depend on an LLM.
 
 > **Status: alpha (`v0.5.0-alpha`).** Rangka runs end to end, backs up and restores, enforces permissions and row
@@ -65,9 +65,9 @@ revertible. Money and stock never depend on an LLM.
   imports, CSV export, attachments, plan limits. Every screen works from phone to desktop.
 - **Change sets.** Propose → validate → preview → approve → apply → revert. High-risk changes need the owner; an AI
   token can never approve or apply.
-- **Raka in the app.** The Rangka AI agent answers in the web app and Console through a sidecar
+- **Zafdoz in the app.** The Rangka AI agent answers in the web app and Console through a sidecar
   ([contract 0020](docs/contracts/0020-ai-assistant-relay.md)) and changes things only by proposing change sets.
-  [`skills/`](skills) gives Raka and any other agent harness the same Rangka skills
+  [`skills/`](skills) gives Zafdoz and any other agent harness the same Rangka skills
   ([contract 0035](docs/contracts/0035-raka-skills.md)).
 - **Rangka ID built in.** Password sign-in (bcrypt), sessions, API tokens, an OpenID Connect provider, roles with
   outlet scope and Postgres row-level security per organisation.
@@ -114,7 +114,7 @@ installs, or set `PGBIN`).
 mkdir rangka && cd rangka
 git clone git@github.com:rangka-os/rangka-os.git
 git clone git@github.com:rangka-os/rangka-connectors.git
-git clone git@github.com:rangka-os/rangka-ai.git          # optional: Raka answers in the demo when built
+git clone git@github.com:rangka-os/rangka-ai.git          # optional: Zafdoz answers in the demo when built
 
 cd rangka-os/kernel
 make run-demo                  # throwaway Postgres → migrate → seed → serve on :8080; Ctrl-C cleans up
@@ -146,9 +146,9 @@ Every `rangka` setting can come from flags, the environment or a `.env` file in 
 ## How it fits together
 
 ```
- 6  Presentation    themes/*.rk · layouts/*.rk · print formats       ← owners, Raka (low risk)
+ 6  Presentation    themes/*.rk · layouts/*.rk · print formats       ← owners, Zafdoz (low risk)
  5  Apps            modules/<m>/… · apps/<app>/{app,dashboards,processes}.rk   ← module and app authors
- 4  Organisation    config.rk · features.rk · custom/<model>.rk overlays       ← owners, Raka
+ 4  Organisation    config.rk · features.rk · custom/<model>.rk overlays       ← owners, Zafdoz
  3  Integrations    rangka-connectors/<c>/connector.rk               ← admin
  2  Capabilities    system.rk: db · cache · queue · scheduler · realtime · files · search · notify · auth
  1  Kernel          this repo: rangka validate · migrate · seed · serve · backup · restore (Go)
@@ -204,7 +204,7 @@ Read more: [architecture and layers](https://rangka-os.github.io/rangka-os/guide
 | **[rangka-os](https://github.com/rangka-os/rangka-os)** (this repo) | Kernel, schemas, validators, web app, Console, design system, docs | ELv2 |
 | [rangka-apps](https://github.com/rangka-os/rangka-apps) | Modules and apps (CRM, sales, invoicing, payments, stock, …), example sites | ELv2 |
 | [rangka-connectors](https://github.com/rangka-os/rangka-connectors) | Integrations as `connector.rk` (WhatsApp Business first) | ELv2 |
-| [rangka-ai](https://github.com/rangka-os/rangka-ai) | Raka, the AI agent: guardrails in code, works only through change sets | ELv2 |
+| [rangka-ai](https://github.com/rangka-os/rangka-ai) | Zafdoz, the AI agent: guardrails in code, works only through change sets | ELv2 |
 | [rangka-edge](https://github.com/rangka-os/rangka-edge) | Outlet device agent: printers, scanners, cash drawers; offline first | ELv2 |
 | rangka-cloud | Managed hosting, chat onboarding, billing | private |
 
@@ -213,7 +213,7 @@ Read more: [architecture and layers](https://rangka-os.github.io/rangka-os/guide
 Done and tested on Postgres 16: validators, migrations with dry run and rollback, document lifecycle, numbering,
 approvals, multi-organisation with row scope and RLS, permissions, attachments, imports, CSV export, print formats,
 list aggregates, dashboards, declared stock moves, recurring documents, plan limits, change sets, Rangka ID + OIDC,
-MCP and skills, backup and restore, the responsive web app and Console, the POS counter work screen, the Raka relay,
+MCP and skills, backup and restore, the responsive web app and Console, the POS counter work screen, the Zafdoz relay,
 releases on npm, GitHub and ghcr.io.
 
 Still open: the CEL engine, YAML reader, JSON Schema validator, HTTP router and job queue are small in-tree packages

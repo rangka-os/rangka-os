@@ -49,6 +49,7 @@ type Config struct {
 	DatabaseURL                     string
 	Addr                            string
 	Org                             string
+	OrgName                         string // the org's display name (--org-name, $RANGKA_ORG_NAME); set on every start when given
 	DevOpen                         bool
 	Schemas                         *schema.Set
 	Version                         string
@@ -197,11 +198,23 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			db.Close()
 			return nil, err
 		}
+		if err := SeedDefaultsAll(ctx, db, reg, cfg.Logf); err != nil {
+			db.Close()
+			return nil, err
+		}
 		if err := plan.Sync(ctx, db, reg); err != nil { // contract 0028: rangka user add reads the limits from here
 			db.Close()
 			return nil, fmt.Errorf("plan: %w", err)
 		}
-		if err := auth.EnsureOrg(ctx, db, cfg.Org, titleCase(cfg.Org)); err != nil {
+		// The display name: the host's (Rangka Cloud passes the business title, which the slug only approximates:
+		// "Mogu", not "Mogu S61i") wins on every start, so a rename reaches a running business at its next deploy;
+		// without one a new org is named after its id and an existing name stays.
+		if cfg.OrgName != "" {
+			err = auth.SetOrgName(ctx, db, cfg.Org, cfg.OrgName)
+		} else {
+			err = auth.EnsureOrg(ctx, db, cfg.Org, titleCase(cfg.Org))
+		}
+		if err != nil {
 			db.Close()
 			return nil, err
 		}
@@ -632,6 +645,10 @@ func (s *Server) Reload(ctx context.Context) error {
 		return err
 	}
 	if err := SyncOrgs(ctx, s.DB, reg); err != nil {
+		return err
+	}
+	// contract 0076: a module installed by this change set brings its defaults into empty tables
+	if err := SeedDefaultsAll(ctx, s.DB, reg, s.Cfg.Logf); err != nil {
 		return err
 	}
 	if err := plan.Sync(ctx, s.DB, reg); err != nil {

@@ -1,5 +1,5 @@
 /* Tur sorotan (contract 0053 §7, riset desain 26): a guided tour that dims the page, lights up one real element at a
- * time (a sidebar entry, the Tambah button, Persetujuan, Tanya Raka, a form field) and explains it in the owner's words
+ * time (a sidebar entry, the Tambah button, Persetujuan, Tanya Zafdoz, a form field) and explains it in the owner's words
  * with Lanjut, Kembali, Lewati and "x dari y".
  *
  * Built here, not vendored (26 K-TS1): about 300 lines, the design system's tokens, no build step.
@@ -268,7 +268,7 @@
   function start(def, opts) {
     if (!def || !def.steps || !def.steps.length) return;
     if (current && current.def.id === def.id) return;
-    // an optional step whose element is not on the page at all (Raka off, no Persetujuan) is dropped now, so
+    // an optional step whose element is not on the page at all (Zafdoz off, no Persetujuan) is dropped now, so
     // "x dari y" counts only what will be shown; one merely hidden (a closed drawer) stays
     var steps = def.steps.filter(function (s) {
       if (!s.optional || !s.target) return true;

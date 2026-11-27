@@ -5,7 +5,7 @@
   var React = window.React, h = React.createElement, useState = React.useState, useEffect = React.useEffect, useRef = React.useRef, useMemo = React.useMemo;
   var R = window.Rangka, API = window.RangkaConsoleAPI;
   var api = API({ baseUrl: (window.RANGKA_CONSOLE_CONFIG || {}).baseUrl || "" });
-  /* Raka (contract 0020) is the end-user app's assistant (../app/ai.js) mounted here; it only needs aiChat, so it gets the app's API client. */
+  /* Zafdoz (contract 0020) is the end-user app's assistant (../app/ai.js) mounted here; it only needs aiChat, so it gets the app's API client. */
   var aiApi = window.RangkaAppAPI ? window.RangkaAppAPI({ baseUrl: api.baseUrl }) : null;
 
   /* ================================================================ formatting */
@@ -617,7 +617,7 @@
             { key: "status", label: "Status", render: function (v) { return csLoz(v); } },
             { key: "risk", label: "Risiko", render: function (v) { return riskLoz(v); } },
             { key: "lay", label: "Lapis", render: function (v, r) { return h("span", { className: "cn-chips" }, (r.layers || []).map(layerLoz)); } },
-            { key: "who", label: "Penulis", render: function (v, r) { return r.source === "ai" ? h(R.Lozenge, { tone: "new" }, "Dari Raka") : r.author && r.author.kind === "ai" ? h(R.Lozenge, { tone: "new" }, "Rangka AI") : h("span", { className: "cn-muted" }, r.author ? r.author.id : "—"); } },
+            { key: "who", label: "Penulis", render: function (v, r) { return r.source === "ai" ? h(R.Lozenge, { tone: "new" }, "Dari Zafdoz") : r.author && r.author.kind === "ai" ? h(R.Lozenge, { tone: "new" }, "Rangka AI") : h("span", { className: "cn-muted" }, r.author ? r.author.id : "—"); } },
             { key: "last", label: "Terakhir", render: function (v) { return h("span", { className: "cn-nowrap", title: dt(v) }, rel(v)); } }] })));
   }
 
@@ -691,7 +691,7 @@
       h(R.Textarea, { label: "Alasan penolakan", hint: "Dikirim ke penulis" + (c.author && c.author.kind === "ai" ? " (Rangka AI belajar dari alasan ini)" : "") + " dan dicatat di riwayat.", value: note, onChange: function (e) { setNote(e.target.value); }, autoFocus: true }));
     return h(React.Fragment, null,
       h(R.PageHeader, { title: c.title, breadcrumb: ["Change set", c.id], onNavigate: function (i) { if (i === 0) ctx.nav("/changesets"); }, onBack: function () { ctx.nav("/changesets"); },
-        tags: [h(React.Fragment, { key: "t" }, csLoz(st), riskLoz(c.risk), (c.layers || []).map(layerLoz), c.source === "ai" ? h(R.Lozenge, { key: "ai", tone: "new" }, "Dari Raka") : c.author && c.author.kind === "ai" ? h(R.Lozenge, { key: "ai", tone: "new" }, "Rangka AI") : null)],
+        tags: [h(React.Fragment, { key: "t" }, csLoz(st), riskLoz(c.risk), (c.layers || []).map(layerLoz), c.source === "ai" ? h(R.Lozenge, { key: "ai", tone: "new" }, "Dari Zafdoz") : c.author && c.author.kind === "ai" ? h(R.Lozenge, { key: "ai", tone: "new" }, "Rangka AI") : null)],
         extra: [btn("validate", "Validasi", "default", "check"), btn("preview", "Pratinjau", "default", "eye"), btn("reject", "Tolak", "danger"),
           btn("approve", "Setujui", "primary", "check", approveBlock, approveBlock), btn("apply", "Terapkan", "primary", "send"), btn("revert", "Kembalikan", "default", "amend")] },
         h("div", { className: "cn-steps-wrap" }, h(R.Steps, { size: "small", items: steps.items, current: steps.current, status: ["invalid", "rejected", "failed"].indexOf(st) >= 0 ? "error" : undefined, label: "Siklus change set" }))),
@@ -712,7 +712,7 @@
                 h("div", null, h("h3", { className: "cn-h3" }, "Migrasi (" + (pv.migrations || []).length + ")"), (pv.migrations || []).length ? h(CodeView, { text: pv.migrations.join("\n\n"), label: "SQL migrasi" }) : h("p", { className: "cn-empty-line" }, "Tanpa migrasi database.")))
                 : h("p", { className: "cn-empty-line" }, "Belum ada pratinjau. Pratinjau menjalankan change set di salinan: SQL migrasi, jumlah data terdampak, layar yang berubah."))),
           h("div", { className: "cn-detail-side" },
-            h(R.Card, { title: "Rincian" }, h(R.Descriptions, { column: 1, items: [["ID", mono(c.id)], ["Penulis", c.source === "ai" ? "Raka, atas permintaan " + ((c.author && c.author.id) || "—") : authorText(c.author)], ["Organisasi", c.org || "Seluruh instalasi"], ["Dibuat", dt(c.created_at || ((c.history || [])[0] || {}).at)],
+            h(R.Card, { title: "Rincian" }, h(R.Descriptions, { column: 1, items: [["ID", mono(c.id)], ["Penulis", c.source === "ai" ? "Zafdoz, atas permintaan " + ((c.author && c.author.id) || "—") : authorText(c.author)], ["Organisasi", c.org || "Seluruh instalasi"], ["Dibuat", dt(c.created_at || ((c.history || [])[0] || {}).at)],
               ["Lapis", (c.layers || []).map(function (l) { return l + " · " + LAYERS[l]; }).join(", ")], ["Risiko", riskLoz(c.risk)]] })),
             h(R.Card, { title: "Riwayat" }, h(Timeline, { items: c.history || [] }))))),
       dialog);
@@ -940,7 +940,7 @@
           f.set_at ? h("span", { className: "cn-nowrap", title: dt(f.set_at) }, rel(f.set_at) + (f.source === "host" ? " · Rangka Cloud" : f.set_by ? " · " + f.set_by : "")) : "—", actions];
       }), "Konektor ini tidak butuh kunci"));
     return h(R.DrawerSection, { title: "Kunci" }, body,
-      h("p", { className: "cn-note" }, "Nilai kunci dikirim sekali ke kernel dan tidak pernah dikirim balik ke Console, ke Raka, atau ke change set."));
+      h("p", { className: "cn-note" }, "Nilai kunci dikirim sekali ke kernel dan tidak pernah dikirim balik ke Console, ke Zafdoz, atau ke change set."));
   }
   /* ================================================================ Organisations */
   function effectivePlan(features, name) {
@@ -1211,7 +1211,7 @@
       { label: "Change set", items: csList.map(function (c) { return { label: c.title, icon: "amend", sub: c.id + " · " + (CS_STATUS[c.status] || [0, c.status])[1], onSelect: function () { nav("/changesets/" + c.id); } }; }) }];
     var role = me && me.roles && me.roles[0];
 
-    /* Raka: only on a kernel that reports meta.features.ai (never in demo mode) */
+    /* Zafdoz: only on a kernel that reports meta.features.ai (never in demo mode) */
     var aiKey = window.RangkaApp && window.RangkaApp.consoleAiStorageKey ? window.RangkaApp.consoleAiStorageKey(me && me.email) : null; // one per person
     var aiOn = !demo && !!(meta.features && meta.features.ai === true && aiApi && window.RangkaApp && window.RangkaApp.AssistantRoot && aiKey);
     function askRaka(q) { setNavOpen(false); if (aiRef.current) aiRef.current.ask(q); }
@@ -1221,13 +1221,13 @@
       if (r.screen === "apps" && r.parts[0] === "model" && r.parts[1]) { ctx.model = r.parts[1]; ctx.title += " · " + r.parts[1]; }
       return ctx;
     }
-    if (aiOn) cmdGroups.push({ label: "Tanya Raka", filter: false, items: [{ label: "Tanya Raka", icon: "spark", sub: "AI", ai: true }] });
+    if (aiOn) cmdGroups.push({ label: "Tanya Zafdoz", filter: false, items: [{ label: "Tanya Zafdoz", icon: "spark", sub: "AI", ai: true }] });
 
     function help() { toast("info", "Bantuan", "Console membaca /api/v1 sesuai CONTRACTS.md. Tekan ⌘K untuk lompat ke layar mana pun."); }
     function openCmd() { setSwitchAt(null); setNavOpen(false); setCmd(true); }
     function toggleCollapsed() { if (rail) { setRailOpen(!railOpen); return; } var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
     function logout() {
-      if (window.RangkaApp && window.RangkaApp.clearAiStorage) window.RangkaApp.clearAiStorage(); // Raka's history leaves with the person
+      if (window.RangkaApp && window.RangkaApp.clearAiStorage) window.RangkaApp.clearAiStorage(); // Zafdoz's history leaves with the person
       api.logout().then(function () {
         toast("info", "Keluar", demo ? "Mode demo tidak punya sesi." : "Sesi diakhiri.");
         if (!demo) location.reload();
@@ -1245,8 +1245,8 @@
     var narrow = !phone && (rail ? !railOpen : collapsed), floating = rail && railOpen;
     var mode = h("span", { className: "cn-mode", title: demo ? "Data demo dari demo-data.js: " + api.modeReason : "Terhubung ke kernel " + api.modeReason },
       h(R.Lozenge, { tone: demo ? "new" : "ok", bold: demo }, demo ? "Mode demo" : "Terhubung"));
-    var askBtn = !aiOn ? null : narrow ? h(R.IconButton, { icon: "spark", label: "Tanya Raka", className: "cn-ask-icon", onClick: function () { askRaka(); } })
-      : h(R.Button, { variant: "quiet", icon: "spark", className: "cn-ask", onClick: function () { askRaka(); } }, "Tanya Raka");
+    var askBtn = !aiOn ? null : narrow ? h(R.IconButton, { icon: "spark", label: "Tanya Zafdoz", className: "cn-ask-icon", onClick: function () { askRaka(); } })
+      : h(R.Button, { variant: "quiet", icon: "spark", className: "cn-ask", onClick: function () { askRaka(); } }, "Tanya Zafdoz");
     var footer = narrow
       ? h(React.Fragment, null, askBtn, me ? h("span", { title: (me.name || "") + (demo ? " · Mode demo" : ""), role: "img", "aria-label": me.name || "Akun" }, h(R.Avatar, { name: me.name || "?", size: 28, presence: "online" })) : null)
       : h("div", { className: "cn-side-foot" }, askBtn,

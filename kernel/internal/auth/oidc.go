@@ -159,7 +159,7 @@ summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-r
 </style></head>
 <body><div class="brand"><span class="logo"><svg viewBox="0 0 256 256" aria-hidden="true"><path fill="#fff" fill-rule="evenodd" d="M215.15 95L153.15 33L69.64 33L131.64 95ZM61.15 217L123.15 217L123.15 103.49L61.15 41.49Z"/></svg>rangka</span>
 <svg class="joint" viewBox="0 0 256 256" aria-hidden="true"><path fill="#fff" fill-rule="evenodd" d="M215.15 95L153.15 33L69.64 33L131.64 95ZM61.15 217L123.15 217L123.15 103.49L61.15 41.49Z"/></svg>
-<div class="pitch"><h2>Jadi juragan, bukan admin.</h2><p>Raka menyusun alur bisnismu dan ikut menjalankannya. Uang tetap kamu yang setujui.</p></div></div>
+<div class="pitch"><h2>Jadi juragan, bukan admin.</h2><p>Zafdoz menyusun alur bisnismu dan ikut menjalankannya. Uang tetap kamu yang setujui.</p></div></div>
 <main>{{if .Back}}<div class="box"><h1>Masuk ke akunmu</h1><p class="err" role="alert">{{.Error}}</p><a class="btn" href="{{.Back}}">Kembali ke halaman masuk</a></div>{{else}}<div class="box"><span class="chip">{{.Client}}</span><h1>Masuk ke akunmu</h1><p class="sub">Pakai akun Rangka ID untuk masuk ke {{.Client}}.</p>
 {{if .Error}}<p class="err" role="alert">{{.Error}}</p>{{end}}
 {{range .Upstreams}}<a class="btn" href="{{.Href}}">Masuk dengan {{.Label}}</a>

@@ -654,6 +654,11 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 						return false, nil
 					}
 				}
+				// a matched row carries its child rows (rangka-apps#122: a merge reads the lines of the bill it
+				// folds); rows that do not match never cost the extra queries
+				if err := store.LoadChildren(o.ctx, o.tx, r.registry(), a.Org, m, []store.Record{rec}); err != nil {
+					return false, err
+				}
 				return true, nil
 			}
 			if srt == "" {

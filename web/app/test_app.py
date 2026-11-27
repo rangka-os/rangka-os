@@ -4056,7 +4056,10 @@ def test_ubah_embedded_posts_changeset(page, ctx):
     expect_signed_in(page, ctx)
     page.locator("[data-loading=false]").wait_for(timeout=15000)  # no request in flight when the page navigates away
     page.wait_for_load_state("networkidle")
-    host = "<!doctype html><meta charset=utf-8><title>host</title><script>window.__msgs=[];addEventListener('message',e=>window.__msgs.push(e.data));</script>" \
+    # The framed app also asks this parent for its push state (contract 0074 §6, rangka:push); those requests are kept
+    # apart so __msgs holds every other message, and each must be a rangka:changeset.
+    host = "<!doctype html><meta charset=utf-8><title>host</title><script>window.__msgs=[];window.__push=[];" \
+           "addEventListener('message',e=>(e.data&&e.data.type==='rangka:push'?window.__push:window.__msgs).push(e.data));</script>" \
            "<iframe id=f style='width:100%;height:800px;border:0' src='/app/?mode=ubah" + hash_ + "'></iframe>"
     page.route(ctx.base + "/embed-host.html", lambda r: r.fulfill(status=200, content_type="text/html", body=host))
     page.goto(ctx.base + "/embed-host.html")
@@ -4070,6 +4073,8 @@ def test_ubah_embedded_posts_changeset(page, ctx):
     for m in msgs:
         assert m["type"] == "rangka:changeset" and sorted(m["changeset"]) == ["id", "risk", "status", "title"], m
     assert msgs[0]["changeset"]["id"] == msgs[1]["changeset"]["id"] and msgs[1]["changeset"]["status"] == "applied" and msgs[1]["changeset"]["risk"] == "low", msgs
+    for m in page.evaluate("() => window.__push"):  # only a state read: ubah never turns push on or off by itself
+        assert m["op"] == "state" and sorted(m) == ["id", "op", "type"], m
     fr.get_by_role("button", name="Urungkan").click()
     fr.get_by_text("Perubahan dibatalkan", exact=True).wait_for(timeout=15000)
     msgs = page.evaluate("() => window.__msgs")

@@ -889,6 +889,8 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-clock-now { display: grid; gap: 2px; }
 .ap-clock-state { font: 600 22px/28px var(--font-sans); color: var(--ink); }
 .ap-clock-since { margin: 0; color: var(--muted); }
+.ap-clock-shift { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--neutral); color: var(--ink-2); font-size: 14px; }
+.ap-clock-shift.t-warn { background: var(--warn-tint); color: var(--warn); }
 .ap-clock-sites { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
 .ap-clock-sites legend { margin-bottom: 6px; font: 600 14px/20px var(--font-sans); }
 .ap-clock-site { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border-radius: 12px; background: var(--soft); cursor: pointer; }

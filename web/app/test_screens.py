@@ -81,6 +81,44 @@ def test_staff_lands_on_home_screen_in_work_shell(browser, ctx):
     c.close()
 
 
+PUSH_PARENT = """<!doctype html><meta charset="utf-8"><title>cloud</title>
+<style>html,body,iframe{margin:0;border:0;width:100%;height:100%}</style>
+<iframe src="/app/"></iframe>
+<script>
+window.__ops = []; var st = "off";
+addEventListener("message", function (e) {
+  var d = e.data; if (!d || d.type !== "rangka:push") return;
+  window.__ops.push(d.op);
+  if (d.op === "enable") st = "on"; else if (d.op === "disable") st = "off";
+  e.source.postMessage({type: "rangka:push-state", id: d.id, state: st}, e.origin);
+});
+</script>"""
+
+
+def test_staff_phone_shell_turns_push_on_through_cloud(browser, ctx):
+    """Contract 0074 §6: a phone-only staff member in the work shell, framed by Rangka Cloud, finds "Nyalakan
+    notifikasi" in the account menu; it asks the parent, and the entry flips to "Matikan notifikasi". Phone, tablet and
+    desktop (the rail's account button)."""
+    for size, vp in (("hp", PHONE375), ("tablet", TABLET), ("desktop", DESK)):
+        c, p = page_for(browser, ctx, STAF, vp)
+        p.route("**/parent.html", lambda r: r.fulfill(status=200, content_type="text/html", body=PUSH_PARENT))
+        p.goto("/parent.html")
+        fr = next(f for f in p.frames if f != p.main_frame)
+        fr.wait_for_selector(".ap-workshell .ap-work-entry", timeout=15000)
+        p.wait_for_timeout(800)
+        acct = fr.locator(".ap-wacct") if size == "hp" else fr.locator(".ap-wme")
+        acct.click()
+        fr.get_by_role("menuitem", name="Nyalakan notifikasi").wait_for(timeout=5000)
+        shot(ctx, p, f"push-staf-menu-{size}")
+        fr.get_by_role("menuitem", name="Nyalakan notifikasi").click()
+        fr.get_by_text("Notifikasi menyala").wait_for(timeout=5000)
+        assert p.evaluate("() => window.__ops").count("enable") == 1
+        acct.click()
+        fr.get_by_role("menuitem", name="Matikan notifikasi").wait_for(timeout=5000)
+        shot(ctx, p, f"push-staf-menyala-{size}")
+        c.close()
+
+
 def test_entry_saves_submits_and_starts_again(browser, ctx):
     c, p = page_for(browser, ctx, STAF, PHONE)
     p.goto("/app/#/w/isi_jam")

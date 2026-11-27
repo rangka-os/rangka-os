@@ -3810,6 +3810,59 @@ def test_pwa_installable_and_offline(page, ctx):
     assert page.locator(".ap-offline").count() == 0
 
 
+PUSH_PARENT = """<!doctype html><meta charset="utf-8"><title>cloud</title>
+<style>html,body,iframe{margin:0;border:0;width:100%;height:100%}</style>
+<iframe src="/app/"></iframe>
+<script>
+window.__ops = []; var st = "off";
+addEventListener("message", function (e) {
+  var d = e.data; if (!d || d.type !== "rangka:push") return;
+  window.__ops.push(d.op);
+  if (d.op === "enable") st = "on"; else if (d.op === "disable") st = "off";
+  e.source.postMessage({type: "rangka:push-state", id: d.id, state: st}, e.origin);
+});
+</script>"""
+
+
+def test_pwa_push_relay(page, ctx):
+    """Web push for a hosted business (contract 0074 §6): the app framed by Rangka Cloud asks its parent for the push
+    state; the account menu offers "Nyalakan notifikasi" only when the parent answers "off", turning on and off goes
+    through the parent, and without a parent (not framed) the app offers nothing. Screenshots at 375, 1024, 1280."""
+    ctx.allowed_failed.append(re.compile(r"/(api|auth)/"))
+    # not framed: no parent to answer, no entry
+    open_route(page, ctx, ctx.home()[0])
+    page.wait_for_timeout(2000)
+    assert account_menu(page).get_by_role("menuitem", name="Nyalakan notifikasi").count() == 0, "push offered without Cloud"
+    page.keyboard.press("Escape")
+    for size, vp in (("hp", {"width": 375, "height": 812}), ("tablet", {"width": 1024, "height": 768}), ("desktop", {"width": 1280, "height": 800})):
+        c = page.context.browser.new_context(viewport=vp, locale="id-ID")
+        p = c.new_page()
+        p.route("**/api/v1/onboarding/tours", lambda r: _json(r, 200, TOURS_SEEN) if r.request.method == "GET" else r.continue_())
+        p.route("**/parent.html", lambda r: r.fulfill(status=200, content_type="text/html", body=PUSH_PARENT))
+        p.goto(ctx.base + "/app/")
+        sign_in(p, *ctx.owner)
+        p.locator(".ap-shell .rk-shell-content").wait_for(timeout=15000)
+        p.goto(ctx.base + "/parent.html")
+        fr = next(f for f in p.frames if f != p.main_frame)
+        fr.locator(".ap-shell .rk-shell-content").wait_for(timeout=15000)
+        p.wait_for_timeout(800)
+        menu = account_menu(fr)
+        menu.get_by_role("menuitem", name="Nyalakan notifikasi").wait_for(timeout=5000)
+        if ctx.args.shots:
+            p.screenshot(path=os.path.join(ctx.args.shots, f"push-menu-tawarkan-{size}.png"))
+        menu.get_by_role("menuitem", name="Nyalakan notifikasi").click()
+        fr.get_by_text("Notifikasi menyala").wait_for(timeout=5000)
+        assert p.evaluate("() => window.__ops").count("enable") == 1, p.evaluate("() => window.__ops")
+        menu = account_menu(fr)
+        menu.get_by_role("menuitem", name="Matikan notifikasi").wait_for(timeout=5000)
+        if ctx.args.shots:
+            p.screenshot(path=os.path.join(ctx.args.shots, f"push-menyala-{size}.png"))
+        menu.get_by_role("menuitem", name="Matikan notifikasi").click()
+        fr.get_by_text("Notifikasi dimatikan").wait_for(timeout=5000)
+        assert p.evaluate("() => window.__ops").count("disable") == 1
+        c.close()
+
+
 def test_no_horizontal_scroll(page, ctx):
     ensure_records(ctx, "sales_invoice", 3)
     approvals_mocked(page, ctx)
@@ -4003,7 +4056,10 @@ def test_ubah_embedded_posts_changeset(page, ctx):
     expect_signed_in(page, ctx)
     page.locator("[data-loading=false]").wait_for(timeout=15000)  # no request in flight when the page navigates away
     page.wait_for_load_state("networkidle")
-    host = "<!doctype html><meta charset=utf-8><title>host</title><script>window.__msgs=[];addEventListener('message',e=>window.__msgs.push(e.data));</script>" \
+    # The framed app also asks this parent for its push state (contract 0074 §6, rangka:push); those requests are kept
+    # apart so __msgs holds every other message, and each must be a rangka:changeset.
+    host = "<!doctype html><meta charset=utf-8><title>host</title><script>window.__msgs=[];window.__push=[];" \
+           "addEventListener('message',e=>(e.data&&e.data.type==='rangka:push'?window.__push:window.__msgs).push(e.data));</script>" \
            "<iframe id=f style='width:100%;height:800px;border:0' src='/app/?mode=ubah" + hash_ + "'></iframe>"
     page.route(ctx.base + "/embed-host.html", lambda r: r.fulfill(status=200, content_type="text/html", body=host))
     page.goto(ctx.base + "/embed-host.html")
@@ -4017,6 +4073,8 @@ def test_ubah_embedded_posts_changeset(page, ctx):
     for m in msgs:
         assert m["type"] == "rangka:changeset" and sorted(m["changeset"]) == ["id", "risk", "status", "title"], m
     assert msgs[0]["changeset"]["id"] == msgs[1]["changeset"]["id"] and msgs[1]["changeset"]["status"] == "applied" and msgs[1]["changeset"]["risk"] == "low", msgs
+    for m in page.evaluate("() => window.__push"):  # only a state read: ubah never turns push on or off by itself
+        assert m["op"] == "state" and sorted(m) == ["id", "op", "type"], m
     fr.get_by_role("button", name="Urungkan").click()
     fr.get_by_text("Perubahan dibatalkan", exact=True).wait_for(timeout=15000)
     msgs = page.evaluate("() => window.__msgs")

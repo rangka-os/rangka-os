@@ -69,7 +69,7 @@ Issue rangka-os#261 slice a
   - the menu leaves out dashboards missing from `/meta` and models the caller cannot read.
 - Schema 0.5 field key `grouping: false` (int, float) writes the number without thousands separators (a year:
   2026, not 2.026); dashboard list key `empty:` (label) is the sentence an empty list shows in a compact card.
-- Web push for members reuses rangka-cloud#179 and the kernel notices inbox (0066); not in this contract.
+- Web push is in §6.
 
 ### 5. The `staff` plan limit (amendment of 0057 §1)
 - New limit key `staff` in `features.rk` plans: people whose roles are all `desk: false` (0030 §3, phone-only work
@@ -86,6 +86,22 @@ Issue rangka-os#261 slice a
   `read_only.users` with the other read-only people.
 - The numbers per plan are a business call (Toni, Dede); the issue proposes Mulai 10, Juragan 50, Pro 200, Grup 500.
   Kernel and rangka-apps demo sites only carry example values.
+
+### 6. Web push (slice b; the Cloud side is pending)
+- Hosted businesses: push goes through Rangka Cloud (rangka-cloud#236), which owns the browser permission, the VAPID
+  key and the subscription. The app is framed by Cloud, so the page only relays the ask with `postMessage` to the
+  parent origin: `{type: "rangka:push", op: "state" | "enable" | "disable", id}`; the parent answers
+  `{type: "rangka:push-state", id, state}` with `state` one of `on`, `off`, `blocked`, `unsupported`. Answers from
+  any other source or origin, or with another id, are ignored. No answer within 1.5 s (self-hosted, not framed) means
+  `unsupported`: the account menu shows nothing. `off` shows "Nyalakan notifikasi", `on` "Matikan notifikasi",
+  `blocked` explains how to allow it in the browser.
+- `sw.js` handles `push` (JSON `{title, body, url, tag, severity}`; anything else shows a generic notice) and
+  `notificationclick` (focus or open the app). `url` is kept only when it is a path inside the worker's scope.
+- Cloud side (not built yet, needs a rangka-cloud card): the page that frames the app listens for `rangka:push`, checks
+  the frame's window and origin, and answers from its own permission and subscription. Until then every ask times out
+  and the app shows nothing. The Cloud service worker owns the subscription and receives the push; the `sw.js`
+  handlers below serve a worker that owns a subscription itself (self-hosted, later) and stay harmless otherwise.
+- Kernel-native push for self-hosted sites is deferred; they keep the notices inbox (0066).
 
 ## Consequences
 - rangka-apps replaces the per-role own-records grants with one member grant per model, can drop the role list from

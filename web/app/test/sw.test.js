@@ -68,3 +68,21 @@ test("index.html never loads Leaflet: a page without a map keeps its first-load 
   const html = fs.readFileSync(path.join(APP, "index.html"), "utf8");
   assert.ok(!/leaflet/i.test(html), "Leaflet is loaded by map.js on first use only");
 });
+
+test("pushView: Cloud's JSON, links kept only inside the app's scope", () => {
+  const v = (d) => SW.pushView(d, "/app/");
+  const a = v({ title: "Slip gaji terbit", body: "Slip Oktober siap", url: "/app/#/d/saya", tag: "n1", severity: "high" });
+  assert.strictEqual(a.title, "Slip gaji terbit");
+  assert.strictEqual(a.options.body, "Slip Oktober siap");
+  assert.strictEqual(a.options.tag, "n1");
+  assert.strictEqual(a.options.requireInteraction, true);
+  assert.strictEqual(a.options.data.url, "/app/#/d/saya");
+  for (const bad of ["https://evil.example/app/", "//evil.example/app/", "/\\evil.example", "/other/page", "/app/ x", "/app/../admin", "/app/%2e%2e/admin", "/app/./../../x", "/app/%2e%2e/%2f%2fevil.example", "javascript:alert(1)", 5, null]) {
+    assert.strictEqual(v({ title: "t", url: bad }).options.data.url, "/app/", String(bad));
+  }
+  const g = v(null);
+  assert.strictEqual(g.title, "Kabar baru");
+  assert.strictEqual(g.options.body, "");
+  assert.strictEqual(g.options.requireInteraction, false);
+  assert.strictEqual(g.options.tag, undefined);
+});

@@ -61,3 +61,23 @@ test("themeOf: device pick, then the saved personal mode, then the business mode
   assert.strictEqual(S.themeOf(null, { theme: { mode: "dark", personal: { mode: "light" } } }), "light");
   assert.strictEqual(S.themeOf(null, { theme: { mode: "dark", personal: { mode: null } } }), "dark");
 });
+
+test("withPersonal puts the pick and the effective theme on a copy of meta", () => {
+  const meta = { user: { id: "u" }, theme: { name: "standard", overrides: { primary: { light: "#111", dark: "#eee" } }, personal: { theme: null, mode: "system" } } };
+  const eff = T.cardEffective({ name: "laut", label: { id: "Laut" } }, { light: { primary: "#036" }, dark: { primary: "#9cf" }, overrides: { primary: { light: "#036", dark: "#9cf" } } });
+  const m = T.withPersonal(meta, { theme: "laut", mode: "dark" }, eff);
+  assert.deepStrictEqual(plain(m.theme.personal), { theme: "laut", mode: "dark" });
+  assert.strictEqual(m.theme.effective.name, "laut");
+  assert.deepStrictEqual(plain(m.theme.effective.overrides), { primary: { light: "#036", dark: "#9cf" } });
+  assert.strictEqual(m.user, meta.user, "the rest of meta is shared");
+  assert.deepStrictEqual(plain(meta.theme.personal), { theme: null, mode: "system" }, "the original is untouched");
+  // no effective given: only the pick changes (the mode paints now, the colours once known)
+  const keep = T.withPersonal(m, { theme: "daun", mode: "light" }, null);
+  assert.strictEqual(keep.theme.effective, m.theme.effective);
+  assert.deepStrictEqual(plain(keep.theme.personal), { theme: "daun", mode: "light" });
+});
+
+test("businessEffective takes the business theme keys of meta.theme", () => {
+  const e = plain(T.businessEffective({ name: "senja", mode: "system", overrides: { a: 1 }, font: { sans: "inter" }, personal: { theme: "x" }, effective: { name: "x" }, path: "themes/senja.rk" }));
+  assert.deepStrictEqual(e, { name: "senja", mode: "system", overrides: { a: 1 }, font: { sans: "inter" } });
+});

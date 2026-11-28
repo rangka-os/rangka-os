@@ -168,14 +168,16 @@
     var previewing = null;
     var api = {};
 
-    function raw(method, path, body, extra) {
+    function raw(method, path, body, extra, signal) {
       var init = { method: method, credentials: "include", headers: { Accept: "application/json" } };
+      if (signal) init.signal = signal;
       Object.keys(extra || {}).forEach(function (k) { init.headers[k] = extra[k]; });
       if (body instanceof FormData) init.body = body;
       else if (body !== undefined) { init.body = JSON.stringify(body); init.headers["Content-Type"] = "application/json"; }
       return doFetch(base + path, init).then(function (res) {
         return res;
       }, function (err) {
+        if (err && err.name === "AbortError") throw err;
         throw ApiError(0, "network", "Tidak bisa terhubung ke server", { cause: String(err && err.message || err) });
       });
     }
@@ -192,8 +194,8 @@
     }
 
     /** → Promise<{status, body}>; rejects with ApiError on any non-2xx. */
-    function call(method, path, body, headers) {
-      return raw(method, path, body, headers).then(function (res) {
+    function call(method, path, body, headers, signal) {
+      return raw(method, path, body, headers, signal).then(function (res) {
         if (res.status < 200 || res.status >= 300) return failure(res).then(function (e) { throw e; });
         // read the (empty) body anyway: an unread 204 shows up as an aborted request
         if (res.status === 204) return res.text().then(function () { return { status: 204, body: null }; }, function () { return { status: 204, body: null }; });
@@ -209,9 +211,9 @@
      * is told; without a connection (status 0) the stored answer comes back instead and opts.onStale(at) gets its time.
      * A path never opened on this device rejects with a status 0 error that says so.
      */
-    function json(method, path, body) {
+    function json(method, path, body, signal) {
       var rc = opts.readCache;
-      if (!rc || method !== "GET" || !rc.cacheable(path)) return call(method, path, body).then(function (r) { return r.body; });
+      if (!rc || method !== "GET" || !rc.cacheable(path)) return call(method, path, body, undefined, signal).then(function (r) { return r.body; });
       return call(method, path, body).then(function (r) {
         rc.put(path, r.body);
         if (opts.onFresh) opts.onFresh(path);
@@ -230,6 +232,34 @@
     function root() { return previewing ? "/api/v1/preview/" + enc(previewing) : "/api/v1"; }
     function rec(model, name) { return root() + "/r/" + enc(model) + (name === undefined ? "" : "/" + enc(name)); }
     function wrec(model, name) { return "/api/v1/r/" + enc(model) + (name === undefined ? "" : "/" + enc(name)); }
+
+    /* ----- latest-wins save channels */
+    var channels = {};
+    function staleError() { var e = new Error("superseded by a newer request"); e.name = "AbortError"; e.stale = true; return e; }
+    /**
+     * api.latest(key, send): one save channel per key. send(signal) starts the request with an AbortSignal (null where
+     * the browser has no AbortController). A newer call on the same key aborts the previous request; the previous
+     * promise then rejects with a stale error, and so does any answer that lands after a newer call started, so a late
+     * answer never overwrites newer state. Only the newest call resolves or rejects with its own result.
+     */
+    api.latest = function (key, send) {
+      var ch = channels[key] || (channels[key] = { seq: 0, ctl: null });
+      if (ch.ctl) { try { ch.ctl.abort(); } catch (e) { /* already settled */ } }
+      var seq = ++ch.seq, ctl = global.AbortController ? new global.AbortController() : null;
+      ch.ctl = ctl;
+      function done() { if (seq === ch.seq) ch.ctl = null; }
+      return Promise.resolve().then(function () { return send(ctl ? ctl.signal : null); }).then(function (v) {
+        done();
+        if (seq !== ch.seq) throw staleError();
+        return v;
+      }, function (e) {
+        done();
+        if (seq !== ch.seq || (e && e.name === "AbortError")) throw staleError();
+        throw e;
+      });
+    };
+    /** True for the error api.latest rejects with when a newer call replaced this one: callers ignore it. */
+    api.isStale = function (e) { return !!(e && e.stale); };
 
     /* ----- session */
     /** /auth/me (and POST /auth/org, which answers the same body) → {id, email, name, org, orgName, roles, orgs, approver,
@@ -483,7 +513,12 @@
     api.appearance = function () { return json("GET", "/api/v1/me/appearance"); };
     /** DELETE /api/v1/me/appearance: forget the person's pick (back to the business theme and the device's mode). */
     api.clearAppearance = function () { return json("DELETE", "/api/v1/me/appearance"); };
-    api.setAppearance = function (a) { return json("PUT", "/api/v1/me/appearance", { theme: a.theme || null, mode: a.mode || "system" }); };
+    /** Latest wins (save channel "appearance"): a newer pick aborts the request still in flight, and an answer that
+     *  arrives after a newer pick rejects with a stale error (api.isStale) instead of resolving. */
+    api.setAppearance = function (a) {
+      var b = { theme: a.theme || null, mode: a.mode || "system" };
+      return api.latest("appearance", function (signal) { return json("PUT", "/api/v1/me/appearance", b, signal); });
+    };
 
     /* ----- Pengaturan → Tim (contract 0056 §4): the owner's browser session only; 403 for everyone else */
     /** GET /api/v1/team → {managed_by: "kernel" | "host", members: [{user_id, email, full_name, role, outlets, record, access}]}. */

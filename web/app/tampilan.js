@@ -2,7 +2,10 @@
  *
  * RangkaApp.AppearancePage #/pengaturan/tampilan:
  * - "Untukmu", for everyone: the person's own mode (Ikuti sistem, Terang, Gelap) and theme ("Ikuti tema usaha" or any
- *   theme of GET /api/v1/themes), saved at once with PUT /api/v1/me/appearance. No approval.
+ *   theme of GET /api/v1/themes). A pick paints at once (ctx.patchMeta, from the business theme or the card's derived
+ *   colours, fetched once per card when the page opens) and is saved behind it with PUT /api/v1/me/appearance, latest
+ *   wins (api.latest): a newer pick aborts the older request, a late answer is ignored, an error paints the last
+ *   saved look again. No approval.
  * - "Tema usaha", for the owner: the gallery. A click tries the theme on this page only (POST /themes/derive, painted
  *   with RA.paintTheme); "Terapkan" points config.rk theme at it through a change set (api.runChange: low risk, so it
  *   applies when the owner may approve).
@@ -11,7 +14,8 @@
  *   font. Every change is derived and tried on the page with the contrast checks; "Simpan dan pakai" writes
  *   themes/<name>.rk and points config.rk at it, as one change set.
  *
- * Pure helpers (test/tampilan.test.js): slug, themeYaml, themeOps, checkSummary, deriveSpec.
+ * Pure helpers (test/tampilan.test.js): slug, themeYaml, themeOps, checkSummary, deriveSpec, withPersonal,
+ * businessEffective, cardEffective.
  */
 (function (global) {
   "use strict";
@@ -81,7 +85,29 @@
     return s;
   }
 
-  RA.tampilan = { slug: slug, themeYaml: themeYaml, themeOps: themeOps, checkSummary: checkSummary, deriveSpec: deriveSpec };
+  /** The business theme (the top-level keys of meta.theme) in the shape of meta.theme.effective. */
+  function businessEffective(theme) {
+    var t = theme || {}, out = {};
+    ["name", "label", "mode", "tokens", "overrides", "font", "radius", "density"].forEach(function (k) { if (t[k] !== undefined) out[k] = t[k]; });
+    return out;
+  }
+
+  /** A gallery card with its /themes/derive answer, in the shape of meta.theme.effective. */
+  function cardEffective(card, d) {
+    return { name: card.name, label: card.label, tokens: { light: (d && d.light) || {}, dark: (d && d.dark) || {} }, overrides: (d && d.overrides) || {} };
+  }
+
+  /** meta with the person's pick {theme, mode} in theme.personal and, when given, eff as theme.effective; the rest of
+   *  meta is shared, not copied. Painting it is what the server will answer once the pick is saved. */
+  function withPersonal(meta, pick, eff) {
+    var t = Object.assign({}, (meta && meta.theme) || {});
+    t.personal = { theme: (pick && pick.theme) || null, mode: (pick && pick.mode) || "system" };
+    if (eff) t.effective = eff;
+    return Object.assign({}, meta, { theme: t });
+  }
+
+  RA.tampilan = { slug: slug, themeYaml: themeYaml, themeOps: themeOps, checkSummary: checkSummary, deriveSpec: deriveSpec,
+    withPersonal: withPersonal, businessEffective: businessEffective, cardEffective: cardEffective };
 
   if (!global.React || !global.Rangka) return;
   var React = global.React, h = React.createElement, R = global.Rangka;
@@ -132,30 +158,80 @@
     var cs = useState(null), logo = cs[0], setLogo = cs[1]; // {colours, suggested}
     var editing = useState(false), open = editing[0], setOpen = editing[1];
     var timer = useRef(null);
+    var sv = useState(false), saving = sv[0], setSaving = sv[1];
+    var saveSeq = useRef(0), base = useRef(null), derived = useRef({});
+    var metaRef = useRef(meta);
+    metaRef.current = meta;
+    var bizName = (meta.theme && meta.theme.name) || "standard";
 
+    // the gallery; reloaded when the business theme changes, not on every personal pick
     useEffect(function () {
       var live = true;
-      api.themes().then(function (d) { if (live) set({ loading: false, data: d, error: null }); }, function (e) { if (live) set({ loading: false, data: null, error: e }); });
+      api.themes().then(function (d) {
+        if (!live) return;
+        set({ loading: false, data: d, error: null });
+        // every card's colours once, so a pick paints without waiting for the server
+        ((d && d.themes) || []).forEach(function (c) { deriveOf(c).then(null, function () {}); });
+      }, function (e) { if (live) set({ loading: false, data: null, error: e }); });
       return function () { live = false; };
-    }, [meta]);
-    // leaving the page puts the effective theme back
-    useEffect(function () { return function () { RA.paintTheme(ctx.meta); }; }, []);
+    }, [bizName, meta.theme && meta.theme.path]);
+    // leaving the page puts the effective theme back (the newest meta, not the one the page opened with)
+    useEffect(function () { return function () { RA.paintTheme(metaRef.current); }; }, []);
 
     var data = s.data || { themes: [], current: "standard", allowed: { custom: true } };
     var themes = data.themes || [];
     function cardOf(name) { for (var i = 0; i < themes.length; i++) if (themes[i].name === name) return themes[i]; return null; }
 
+    /** The card's /themes/derive answer: asked once per card, then kept (a failed ask is asked again next time). */
+    function deriveOf(card) {
+      var key = card && card.name;
+      if (!key) return Promise.reject(new Error("no card"));
+      if (!derived.current[key]) {
+        derived.current[key] = api.themeDerive(RA.tampilan.deriveSpec(card)).then(function (d) {
+          derived.current[key] = Promise.resolve(d);
+          return d;
+        }, function (e) { delete derived.current[key]; throw e; });
+      }
+      return derived.current[key];
+    }
+
+    // Paint first, save behind: the pick shows at once; PUT /me/appearance runs latest wins; /meta is reloaded
+    // quietly once the newest pick is saved; on an error the last saved look comes back.
     function savePersonal(next) {
-      var body = { theme: next.theme !== undefined ? next.theme : personal.theme, mode: next.mode || modeNow };
-      api.setAppearance(body).then(function () { return ctx.reloadMeta(); }).then(function () { ctx.toast("ok", "Tampilanmu disimpan", "Hanya berlaku untukmu."); },
-        function (e) { ctx.toast("bad", "Tampilan tidak bisa disimpan", errText(e)); });
+      var body = { theme: next.theme !== undefined ? next.theme : personal.theme || null, mode: next.mode || modeNow };
+      var seq = ++saveSeq.current;
+      if (!base.current) base.current = { theme: meta.theme, device: devicePick };
+      function latest() { return seq === saveSeq.current; }
+      function paint(eff) { if (latest()) ctx.patchMeta(function (m) { return RA.tampilan.withPersonal(m, body, eff); }); }
+      var card = body.theme ? cardOf(body.theme) : null;
+      if (!body.theme || body.theme === bizName || !card) paint(RA.tampilan.businessEffective(meta.theme));
+      else {
+        paint(null); // the mode at once; the colours as soon as the card's are known (usually already)
+        deriveOf(card).then(function (d) { paint(RA.tampilan.cardEffective(card, d)); }, function () {});
+      }
+      setSaving(true);
+      api.setAppearance(body).then(function () {
+        if (!latest()) return null;
+        base.current = null;
+        return ctx.reloadMeta(undefined, { stale: function () { return !latest(); } }).then(null, function () {});
+      }).then(function () { if (latest()) setSaving(false); }, function (e) {
+        if (api.isStale && api.isStale(e)) return;
+        setSaving(false);
+        var was = base.current;
+        base.current = null;
+        if (was) {
+          ctx.patchMeta(function (m) { return Object.assign({}, m, { theme: was.theme }); });
+          try { if (was.device) global.localStorage.setItem("rk.app.theme", was.device); else global.localStorage.removeItem("rk.app.theme"); } catch (x) { /* private window */ }
+        }
+        ctx.toast("bad", "Tampilan tidak bisa disimpan", errText(e));
+      });
     }
 
     function stopTrying() { setTrying(null); RA.paintTheme(ctx.meta); }
 
     function tryCard(card) {
       if (card.name === data.current) { stopTrying(); return; }
-      api.themeDerive(RA.tampilan.deriveSpec(card)).then(function (d) {
+      deriveOf(card).then(function (d) {
         setTrying({ name: card.name, label: L(card.label) || card.name, overrides: d.overrides, checks: d.checks });
         RA.paintTheme(ctx.meta, { overrides: d.overrides });
       }, function (e) { ctx.toast("bad", "Tema tidak bisa dicoba", errText(e)); });
@@ -220,7 +296,7 @@
       }).then(function (ok) { if (ok) setOpen(false); }, function (e) { ctx.toast("bad", "Tema tidak bisa disimpan", errText(e)); });
     }
 
-    var mine = h(R.Card, { title: "Untukmu" },
+    var mine = h(R.Card, { title: "Untukmu", extra: saving ? h("span", { className: "ap-tp-desc", role: "status" }, "Menyimpan…") : null },
       h("div", { className: "ap-tp" },
         h("div", null, h("p", { className: "ap-tp-label" }, "Mode"),
           h(R.Segmented, { key: "m" + modeNow, label: "Mode", value: modeNow, options: MODES, onChange: function (v) {

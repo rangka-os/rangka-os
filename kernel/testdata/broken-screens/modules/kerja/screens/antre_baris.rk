@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: antre_baris
+type: queue
+label: {id: Antre baris}
+roles: [staf]
+queue:
+  source: {model: jam_kerja}
+  card: {title: staf, line_badge: staf}
+  line_steps:
+    - {when: "true", label: {id: Proses}, set: {hours: 1}}

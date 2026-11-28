@@ -9,4 +9,5 @@ fields:
   - {name: amount, type: currency, label: {id: Jumlah}, compute: round(qty * rate)}
   - {name: note, type: data, label: {id: Catatan}}
   - {name: is_gift, type: check, label: {id: Gratis}}
+  - {name: hold, type: check, label: {id: Tahan di dapur}}
   - {name: buyer_copy, type: data, label: {id: Pembeli}, compute: parent.buyer}

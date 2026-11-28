@@ -508,7 +508,22 @@ def test_lost_answer_on_queue_screen_is_replayed_once(browser, ctx):
     c.close()
 
 
-def test_kitchen_queue_moves_cards_and_undoes(browser, ctx):
+TV = {"width": 1920, "height": 1080}
+# A Web Audio stand-in: suspended until resume() (the browser's autoplay rule), counts every tone started.
+FAKE_AUDIO = """
+window.__tones = 0;
+window.AudioContext = function () {
+  var self = this; this.state = 'suspended'; this.currentTime = 0; this.destination = {};
+  this.resume = function () { self.state = 'running'; return Promise.resolve(); };
+  var node = function () { return { connect: function () {}, gain: { setValueAtTime: function () {}, exponentialRampToValueAtTime: function () {} },
+    frequency: {}, start: function () { window.__tones++; }, stop: function () {} }; };
+  this.createOscillator = node; this.createGain = node;
+};
+"""
+
+
+def kitchen_setup(browser, ctx):
+    """A menu and a cashier page that writes tickets with rows (tiket_dapur: line_status, held per row)."""
     o, _ = page_for(browser, ctx, OWNER, DESK)
     menu = o.request.get("/api/v1/r/menu?limit=1").json()["data"]
     if not menu:  # run alone (-k): make one
@@ -516,64 +531,176 @@ def test_kitchen_queue_moves_cards_and_undoes(browser, ctx):
         menu = o.request.get("/api/v1/r/menu?limit=1").json()["data"]
     o.close()
     k, _ = page_for(browser, ctx, KASIR, PHONE)
-    for table in ("Meja 1", "Meja 2"):
-        r = k.request.post("/api/v1/r/tiket_dapur", data=json.dumps({"table_no": table, "items": [{"menu": menu[0]["name"], "qty": 2, "note": "pedas"}]}),
+
+    def ticket(table, rows):
+        r = k.request.post("/api/v1/r/tiket_dapur", data=json.dumps({"table_no": table, "items": [dict({"menu": menu[0]["name"]}, **x) for x in rows]}),
                            headers={"Content-Type": "application/json"})
         assert r.status == 201, r.text()
-    k.close()
+        return r.json()["name"]
+    return k, ticket
+
+
+def row_state(c, name):
+    return [(x["qty"], x.get("line_status"), bool(x.get("held"))) for x in c.request.get(f"/api/v1/r/tiket_dapur/{name}").json()["items"]]
+
+
+def test_kitchen_rows_steps_undo_stale_and_recall(browser, ctx):
+    # contract 0077: a tap moves one row, "Semua siap" the rest, Urungkan for 5 seconds, a stale row write is refused,
+    # held rows wait greyed with no button, totals count what is left, Baru selesai brings a ticket back
+    k, ticket = kitchen_setup(browser, ctx)
+    t1 = ticket("Meja R1", [{"qty": 2, "note": "pedas"}, {"qty": 1}, {"qty": 3, "held": True}])
     c, p = page_for(browser, ctx, DAPUR, TABLET, allow=("/api/v1/r/tiket_dapur/",))
-    p.goto("/app/")
-    p.wait_for_url("**/#/w/dapur")
-    p.wait_for_selector(".ap-queue-card")
-    heads = p.locator(".ap-queue-col h2").all_inner_texts()
-    assert [h.split("\n")[0] for h in heads] == ["Baru", "Dimasak", "Siap"], heads
-    baru = p.locator(".ap-queue-col").nth(0)
-    assert baru.locator(".ap-queue-card").count() == 2
-    assert "×2" in baru.inner_text() and "pedas" in baru.inner_text(), baru.inner_text()
-    card = baru.locator(".ap-queue-card", has_text="Meja 1")
-    card.get_by_role("button", name="Masak").click()
-    p.locator(".ap-queue-col").nth(1).locator(".ap-queue-card", has_text="Meja 1").wait_for()
-    # undo within 3 seconds puts it back
+    p.goto("/app/#/w/dapur")
+    card = p.locator(".ap-qcard", has_text="Meja R1")
+    card.wait_for()
+    assert card.locator(".ap-qrow").count() == 3, card.inner_text()
+    assert card.locator(".ap-qrow-muted").count() == 1 and card.locator(".ap-qrow-muted .ap-qrow-verb").count() == 0, "a held row has no button"
+    first = card.locator("button.ap-qrow", has_text="pedas")
+    assert "Proses" in first.inner_text()
+    first.click()
+    card.locator("button.ap-qrow", has_text="pedas").locator(".ap-lz", has_text="Diproses").wait_for()
     p.get_by_role("button", name="Urungkan").click()
-    p.locator(".ap-queue-col").nth(0).locator(".ap-queue-card", has_text="Meja 1").wait_for()
-    shot(ctx, p, "dapur")
-    # through to served: the card leaves the screen (filter status != 'served')
-    for label, col in (("Masak", 1), ("Siap", 2)):
-        p.locator(".ap-queue-card", has_text="Meja 2").get_by_role("button", name=label).click()
-        p.locator(".ap-queue-col").nth(col).locator(".ap-queue-card", has_text="Meja 2").wait_for()
-    p.locator(".ap-queue-card", has_text="Meja 2").get_by_role("button", name="Diantar").click()
-    p.locator(".ap-queue-card", has_text="Meja 2").wait_for(state="detached")
-    rows = c.request.get("/api/v1/r/tiket_dapur?limit=5").json()["data"]
-    assert sorted(r["status"] for r in rows) == ["new", "served"], rows
-    # a stale card: another device moved Meja 1 to ready; this screen still shows it as Baru and its step is refused
-    m1 = [r for r in rows if r["table_no"] == "Meja 1"][0]["name"]
+    p.wait_for_timeout(800)
+    assert row_state(c, t1)[0][1] == "new", row_state(c, t1)
+    p.reload(); card.wait_for()
+    # Proses then Siap on one row: it leaves the card; the second row is still Baru
+    card.locator("button.ap-qrow", has_text="pedas").click()
+    card.locator("button.ap-qrow", has_text="pedas").locator(".ap-lz", has_text="Diproses").wait_for()
+    p.wait_for_timeout(600)
+    card.locator("button.ap-qrow", has_text="pedas").click()
+    card.locator(".ap-qrow", has_text="pedas").wait_for(state="detached")
+    assert [s for _, s, _ in row_state(c, t1)] == ["ready", "new", "new"], row_state(c, t1)
+    assert c.request.get(f"/api/v1/r/tiket_dapur/{t1}").json()["items"][0].get("ready_at"), "now() stamps ready_at"
+    # totals: what is still to make, held apart
+    p.get_by_role("button", name="Total item").click()
+    tot = p.locator(".ap-qtotals").inner_text()
+    assert "Total item" in tot and "ditahan" in tot, tot
+    shot(ctx, p, "dapur-rows-tablet")
+    # a stale tablet: another device moved the second row; this screen's tap is refused and the card reloads
     frozen = {}
-    def freeze(route):  # this tablet keeps seeing the old list (its refresh has not come yet)
+    def freeze(route):
         if route.request.method == "GET" and "frozen" in frozen:
             route.fulfill(status=200, content_type="application/json", body=frozen["frozen"])
         else:
             resp = route.fetch()
             if route.request.method == "GET":
-                frozen.setdefault("last", resp.text())
+                frozen["last"] = resp.text()
             route.fulfill(response=resp)
     p.route("**/api/v1/r/tiket_dapur?*", freeze)
-    p.wait_for_timeout(6000)  # one refresh through the route
+    p.wait_for_timeout(6000)
     frozen["frozen"] = frozen["last"]
-    assert c.request.patch(f"/api/v1/r/tiket_dapur/{m1}", data=json.dumps({"status": "ready"}), headers={"Content-Type": "application/json"}).status == 200
-    p.locator(".ap-queue-card", has_text="Meja 1").get_by_role("button", name="Masak").click()
+    rows = c.request.get(f"/api/v1/r/tiket_dapur/{t1}").json()["items"]
+    rows[1]["line_status"] = "in_progress"
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{t1}", data=json.dumps({"items": rows}), headers={"Content-Type": "application/json"}).status == 200
+    card.locator("button.ap-qrow").nth(0).click()
     p.wait_for_selector("text=sudah diubah di perangkat lain")
-    assert c.request.get(f"/api/v1/r/tiket_dapur/{m1}").json()["status"] == "ready", "the stale step did not move it back"
+    assert [s for _, s, _ in row_state(c, t1)] == ["ready", "in_progress", "new"], "the stale write changed nothing"
     p.unroute("**/api/v1/r/tiket_dapur?*")
-    p.wait_for_timeout(6000)  # the real list again
-    # undo after another device changed the card: refused
-    p.locator(".ap-queue-col").nth(2).locator(".ap-queue-card", has_text="Meja 1").get_by_role("button", name="Diantar").click()
-    p.get_by_role("button", name="Urungkan").wait_for()
-    assert c.request.patch(f"/api/v1/r/tiket_dapur/{m1}", data=json.dumps({"status": "new"}), headers={"Content-Type": "application/json"}).status == 200
-    p.get_by_role("button", name="Urungkan").click()
-    p.wait_for_selector("text=Tidak bisa diurungkan")
-    assert c.request.get(f"/api/v1/r/tiket_dapur/{m1}").json()["status"] == "new"
-    ctx["errors"] = [x for x in ctx["errors"] if "409" not in x]  # the two refused conditional writes
-    c.close()
+    ctx["errors"] = [x for x in ctx["errors"] if "409" not in x]
+    # recall: the ticket marked ready (stored status in this fixture) is listed; Kembalikan sets its ready rows back
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{t1}", data=json.dumps({"status": "ready"}), headers={"Content-Type": "application/json"}).status == 200
+    p.reload()
+    p.get_by_role("button", name=re.compile(r"Baru selesai \(\d+\)")).click()
+    p.locator(".ap-qrecall-row", has_text="Meja R1").get_by_role("button", name="Kembalikan").click()
+    p.wait_for_timeout(1000)
+    assert [s for _, s, _ in row_state(c, t1)] == ["in_progress", "in_progress", "new"], row_state(c, t1)
+    k.close()
+
+
+def test_kitchen_pass_fire_and_hand_over_offline_queue(browser, ctx):
+    # contract 0077: the pass joins tickets by table, fires a held row (Lepas), hands over ready rows; offline, a row
+    # write waits in the outbox and is sent when the connection is back
+    k, ticket = kitchen_setup(browser, ctx)
+    a = ticket("Meja P5", [{"qty": 1, "line_status": "ready"}, {"qty": 2, "held": True}])
+    b = ticket("Meja P5", [{"qty": 1, "line_status": "in_progress"}])
+    c, p = page_for(browser, ctx, DAPUR, TABLET, allow=("/api/v1/r/tiket_dapur/",))
+    p.goto("/app/#/w/pass")
+    card = p.locator(".ap-qcard", has_text="Meja P5")
+    card.wait_for()
+    assert p.locator(".ap-qcard", has_text="Meja P5").count() == 1, "one card per table across tickets"
+    assert card.locator(".ap-qrow").count() == 3
+    card.locator("button.ap-qrow", has_text="Lepas").click()
+    p.wait_for_timeout(1000)
+    assert row_state(c, a)[1][2] is False, row_state(c, a)
+    card.get_by_role("button", name=re.compile("Serahkan yang siap")).click()
+    p.wait_for_timeout(1000)
+    assert row_state(c, a)[0][1] == "done", row_state(c, a)
+    shot(ctx, p, "pass-tablet")
+    # Urungkan after the step took the card off the list (its last row handed over): the device's own copy is undone
+    e = ticket("Meja P6", [{"qty": 1, "line_status": "ready"}])
+    card6 = p.locator(".ap-qcard", has_text="Meja P6")
+    card6.wait_for(timeout=15000)
+    card6.get_by_role("button", name=re.compile("Serahkan yang siap")).click()
+    p.wait_for_timeout(1000)
+    assert row_state(c, e)[0][1] == "done", row_state(c, e)
+    p.locator(".ap-qsnack").get_by_role("button", name="Urungkan").click()
+    p.wait_for_timeout(1200)
+    assert row_state(c, e)[0][1] == "ready", ("undo after the card left the list", row_state(c, e))
+    # offline: the tap is shown at once and waits; back online it is sent
+    p.context.set_offline(True)
+    rows_b = c.request.get(f"/api/v1/r/tiket_dapur/{b}").json()["items"]
+    assert rows_b[0]["line_status"] == "in_progress"
+    p.goto("/app/#/w/dapur") if False else None
+    c2, d = page_for(browser, ctx, DAPUR, TABLET, allow=("/api/v1/r/tiket_dapur/",))
+    d.goto("/app/#/w/dapur")
+    dcard = d.locator(".ap-qcard", has_text="Meja P5").filter(has=d.locator("button.ap-qrow", has_text="Siap"))
+    dcard.first.wait_for()
+    d.context.set_offline(True)
+    dcard.first.locator("button.ap-qrow", has_text="Siap").click()
+    d.wait_for_timeout(1500)
+    assert c.request.get(f"/api/v1/r/tiket_dapur/{b}").json()["items"][0]["line_status"] == "in_progress", "not sent while offline"
+    d.context.set_offline(False)
+    d.evaluate("window.dispatchEvent(new Event('online'))")
+    deadline = time.time() + 20
+    while time.time() < deadline and c.request.get(f"/api/v1/r/tiket_dapur/{b}").json()["items"][0]["line_status"] != "ready":
+        d.wait_for_timeout(500)
+    assert c.request.get(f"/api/v1/r/tiket_dapur/{b}").json()["items"][0]["line_status"] == "ready", "sent once back online"
+    ctx["errors"] = [x for x in ctx["errors"] if "ERR_INTERNET_DISCONNECTED" not in x and "Failed to fetch" not in x and "net::" not in x]
+    p.context.set_offline(False)
+    k.close()
+
+
+def test_kitchen_tv_mode_tone_badge_and_guest_board(browser, ctx):
+    # rangka-apps#131: dark (screen theme), one tone when a row the station can work appears (also a fired held row),
+    # the rail badge counts open tickets, TV sizes; the guest board (siap_ambil) is read-only
+    k, ticket = kitchen_setup(browser, ctx)
+    ticket("Meja TV 1", [{"qty": 1}])
+    c, p = page_for(browser, ctx, DAPUR, TV, allow=("/api/v1/r/tiket_dapur/",))
+    p.add_init_script(FAKE_AUDIO)
+    p.goto("/app/")
+    p.wait_for_url("**/#/w/dapur")
+    p.wait_for_selector(".ap-qcard")
+    assert p.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    size = p.evaluate("parseFloat(getComputedStyle(document.querySelector('.ap-qrow')).fontSize)")
+    assert size >= 22, f"row text {size}px on a TV"
+    assert p.locator(".ap-qtotals").count() == 1, "Total item is open by default on a TV"
+    badge = p.locator(".ap-workbar a[href='#/w/dapur'] .ap-tabbar-n")
+    badge.wait_for()
+    p.get_by_role("button", name="Nyalakan suara").click()
+    p.get_by_role("button", name="Nyalakan suara").wait_for(state="detached")
+    assert p.evaluate("window.__tones") == 0, "the first load does not sound"
+    held = ticket("Meja TV 2", [{"qty": 1, "held": True}])
+    p.locator(".ap-qcard", has_text="Meja TV 2").wait_for(timeout=12000)
+    p.wait_for_timeout(500)
+    assert p.evaluate("window.__tones") == 0, "a held row is not something to make yet: no tone"
+    rows = c.request.get(f"/api/v1/r/tiket_dapur/{held}").json()["items"]
+    rows[0]["held"] = False
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{held}", data=json.dumps({"items": rows}), headers={"Content-Type": "application/json"}).status == 200
+    p.wait_for_function("window.__tones > 0", timeout=12000)
+    tones = p.evaluate("window.__tones")
+    p.wait_for_timeout(6000)
+    assert p.evaluate("window.__tones") == tones, "one tone per new row"
+    shot(ctx, p, "dapur-tv")
+    p.goto("/app/#/w/pass")
+    p.wait_for_selector(".ap-qcard")
+    shot(ctx, p, "pass-tv")
+    p.goto("/app/#/w/siap_ambil")
+    p.wait_for_selector(".ap-queue-board .ap-queue-card")
+    assert p.locator(".ap-queue button.rk-btn").count() == 0, "no steps on the board"
+    shot(ctx, p, "siap-ambil-tv")
+    p.goto("/app/#/r/tiket_dapur")
+    p.wait_for_function("document.documentElement.getAttribute('data-theme') !== 'dark'")
+    k.close()
 
 
 def test_owner_keeps_dashboard_home_with_kerja_group(browser, ctx):

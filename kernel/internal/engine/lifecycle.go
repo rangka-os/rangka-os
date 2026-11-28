@@ -215,14 +215,78 @@ func (o *op) checkExpect(m *meta.Model, cur store.Record) error {
 	sort.Strings(keys)
 	for _, k := range keys {
 		f := m.Field(k)
-		if f == nil || f.Type == "table" || o.e.FieldHidden(o.actor, m, f) {
+		if f == nil || o.e.FieldHidden(o.actor, m, f) {
 			return badRequest("_if: " + k + " is not a field of " + m.Name + " the caller can compare")
+		}
+		if f.Type == "table" { // contract 0077 §1: {row name: {child field: value}}
+			if err := o.checkExpectRows(f, cur[k], o.expect[k]); err != nil {
+				return err
+			}
+			continue
 		}
 		got := cur[k]
 		if got == nil {
 			got = store.Zero(f)
 		}
 		if !cel.Equal(got, o.expect[k]) {
+			return conflict("precondition_failed", "Data ini sudah diubah di perangkat lain ("+labelOr(f)+"). Muat ulang lalu coba lagi.")
+		}
+	}
+	return nil
+}
+
+// checkExpectRows compares the stored rows of a table field with a precondition {row name: {child field: value}}
+// (contract 0077 §1): every named row must exist, every named child field must hold the value, and every stored row
+// must be named (a row another device added since the caller loaded the record is a conflict, not a silent delete by
+// a PATCH that rewrites the table). A field the caller cannot see is refused like a document field.
+func (o *op) checkExpectRows(f *meta.Field, stored any, want any) error {
+	cm := o.registry().Models[f.Of]
+	byRow, ok := want.(map[string]any)
+	if cm == nil || !ok {
+		return badRequest("_if: " + f.Name + " takes {row name: {field: value}}")
+	}
+	have := map[string]map[string]any{}
+	for _, r := range rows(stored) {
+		have[str(r["name"])] = r
+	}
+	names := make([]string, 0, len(byRow))
+	for n := range byRow {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		fields, ok := byRow[n].(map[string]any)
+		if !ok {
+			return badRequest("_if: " + f.Name + "." + n + " takes {field: value}")
+		}
+		row, found := have[n]
+		if !found {
+			return conflict("precondition_failed", "Data ini sudah diubah di perangkat lain ("+labelOr(f)+"). Muat ulang lalu coba lagi.")
+		}
+		ks := make([]string, 0, len(fields))
+		for k := range fields {
+			ks = append(ks, k)
+		}
+		sort.Strings(ks)
+		for _, k := range ks {
+			cf := cm.Field(k)
+			if cf == nil || cf.Type == "table" || o.e.FieldHidden(o.actor, cm, cf) {
+				return badRequest("_if: " + f.Name + "." + k + " is not a field of " + cm.Name + " the caller can compare")
+			}
+			got, want := row[k], fields[k]
+			if got == nil {
+				got = store.Zero(cf)
+			}
+			if want == nil { // a row field the device never had a value for (null) is its zero value
+				want = store.Zero(cf)
+			}
+			if !cel.Equal(got, want) {
+				return conflict("precondition_failed", "Data ini sudah diubah di perangkat lain ("+labelOr(f)+"). Muat ulang lalu coba lagi.")
+			}
+		}
+	}
+	for n := range have {
+		if _, named := byRow[n]; !named {
 			return conflict("precondition_failed", "Data ini sudah diubah di perangkat lain ("+labelOr(f)+"). Muat ulang lalu coba lagi.")
 		}
 	}

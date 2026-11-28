@@ -67,6 +67,13 @@
       },
       "description": "Device capabilities; the screen still opens without them, with a notice"
     },
+    "theme": {
+      "enum": [
+        "light",
+        "dark"
+      ],
+      "description": "Colour mode of the whole page while this screen is open, above the person's pick and the company's theme.mode (contract 0048 §6), e.g. dark on a kitchen display"
+    },
     "offline": {
       "enum": [
         "none",
@@ -304,6 +311,10 @@
                 "flag": {
                   "$ref": "model.json#/$defs/name",
                   "description": "A check field of the line the cashier can switch on a cart line, e.g. a promo's free gift (contract 0069 §1); its label names the switch"
+                },
+                "hold": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "A check field of the line: the line sheet's Tahan switch (hold the line at the kitchen until the pass fires it, contract 0077 §3)"
                 }
               }
             },
@@ -528,8 +539,7 @@
       "description": "Work through cards that change state: kitchen tickets, today's jobs (contract 0030 §2)",
       "required": [
         "source",
-        "card",
-        "steps"
+        "card"
       ],
       "additionalProperties": false,
       "properties": {
@@ -589,11 +599,16 @@
             "age_from": {
               "type": "string",
               "description": "A date or datetime field (or created_at, modified_at) the card's age counts from"
-            }
+            },
+            "line_show": {"type": "string", "description": "CEL over the row: rows shown (all when missing)"},
+            "line_muted": {"type": "string", "description": "CEL over the row: rows shown greyed (held)"},
+            "line_badge": {"$ref": "model.json#/$defs/name", "description": "A select field of the row shown as a lozenge (option label and tone)"},
+            "line_tag": {"$ref": "model.json#/$defs/name", "description": "A field of the record shown on each row (the station, with group_by)"}
           }
         },
         "steps": {
           "type": "array",
+          "description": "The card's buttons; without steps the screen is a read-only board (a pickup counter's ready list)",
           "minItems": 1,
           "items": {
             "type": "object",
@@ -654,6 +669,89 @@
           "minimum": 3,
           "maximum": 300,
           "description": "Seconds between refreshes (default 10)"
+        },
+        "alert": {
+          "enum": [
+            "new"
+          ],
+          "description": "new: one short sound when a card enters the first column after the first load (a kitchen display)"
+        },
+        "line_steps": {
+          "type": "array",
+          "minItems": 1,
+          "description": "A tap on a row runs the first step whose when holds (contract 0077 §2)",
+          "items": {
+            "type": "object",
+            "required": ["when", "label", "set"],
+            "additionalProperties": false,
+            "properties": {
+              "when": {"type": "string", "description": "CEL over the row (card. is the record)"},
+              "label": {"$ref": "model.json#/$defs/label"},
+              "label_field": {"$ref": "model.json#/$defs/name", "description": "A field of the record whose non-empty value replaces the label (a station's own verb)"},
+              "min": {"type": "integer", "minimum": 1, "description": "bulk_steps: the button shows from this many matching rows (default 1)"},
+              "set": {
+                "type": "object",
+                "propertyNames": {"$ref": "model.json#/$defs/name"},
+                "additionalProperties": {"type": ["string", "number", "boolean"]},
+                "description": "row field: literal value; \"now()\" on a date or datetime field is the device's current time"
+              }
+            }
+          }
+        },
+        "bulk_steps": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Card buttons: set applies to every row whose when holds; hidden when none (contract 0077 §2)",
+          "items": {
+            "type": "object",
+            "required": ["when", "label", "set"],
+            "additionalProperties": false,
+            "properties": {
+              "when": {"type": "string", "description": "CEL over the row (card. is the record)"},
+              "label": {"$ref": "model.json#/$defs/label"},
+              "label_field": {"$ref": "model.json#/$defs/name", "description": "A field of the record whose non-empty value replaces the label (a station's own verb)"},
+              "min": {"type": "integer", "minimum": 1, "description": "bulk_steps: the button shows from this many matching rows (default 1)"},
+              "set": {
+                "type": "object",
+                "propertyNames": {"$ref": "model.json#/$defs/name"},
+                "additionalProperties": {"type": ["string", "number", "boolean"]},
+                "description": "row field: literal value; \"now()\" on a date or datetime field is the device's current time"
+              }
+            }
+          }
+        },
+        "group_by": {"$ref": "model.json#/$defs/name", "description": "Records sharing this field's value form one card (an order across stations)"},
+        "choose": {"$ref": "model.json#/$defs/name", "description": "A field of the record: a row of choices (Semua and its values) the device remembers, e.g. a station tablet showing Bar only (contract 0077)"},
+        "totals": {
+          "type": "object",
+          "required": ["by", "qty"],
+          "additionalProperties": false,
+          "description": "Side panel: rows' qty summed per by value (contract 0077 §2)",
+          "properties": {
+            "by": {"$ref": "model.json#/$defs/name"},
+            "qty": {"$ref": "model.json#/$defs/name"},
+            "when": {"type": "string", "description": "CEL over the row: rows counted"},
+            "held": {"$ref": "model.json#/$defs/name", "description": "A check field of the row: counted apart"},
+            "split": {"$ref": "model.json#/$defs/name", "description": "A field of the row whose values split each total"}
+          }
+        },
+        "recall": {
+          "type": "object",
+          "required": ["filter", "label", "when", "set"],
+          "additionalProperties": false,
+          "description": "The Baru selesai tab: recently finished records and a button that sets their rows back (contract 0077 §2)",
+          "properties": {
+            "filter": {"type": "string"},
+            "sort": {"type": "string"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            "label": {"$ref": "model.json#/$defs/label"},
+            "when": {"type": "string", "description": "CEL over the row: rows set back"},
+            "set": {
+              "type": "object",
+              "propertyNames": {"$ref": "model.json#/$defs/name"},
+              "additionalProperties": {"type": ["string", "number", "boolean"]}
+            }
+          }
         }
       }
     },

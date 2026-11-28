@@ -83,7 +83,7 @@
   function cartFromBill(doc, rec) {
     return ((rec && rec[doc.lines]) || []).map(function (l, i) {
       return { key: l.line_key || ("L" + i + "#" + Date.now()), item: l[doc.line.item], title: String(l.description || l[doc.line.item]),
-        price: Number(l[doc.line.price || "rate"]) || 0, qty: Number(l[doc.line.qty]) || 0, note: (doc.line.note && l[doc.line.note]) || "", saved: true };
+        price: Number(l[doc.line.price || "rate"]) || 0, qty: Number(l[doc.line.qty]) || 0, note: (doc.line.note && l[doc.line.note]) || "", hold: !!(doc.line.hold && l[doc.line.hold]), saved: true };
     });
   }
 

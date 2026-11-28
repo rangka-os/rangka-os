@@ -11,7 +11,8 @@
  *     shows the server's total and change fields. set: values are fetched again for every sale. line.amount: with summary
  *     each cart line shows the model's amount (a promo, a free gift), the plain qty x price struck through when lower.
  *     line.flag: a check of the line the cashier switches on a cart line (e.g. a promo's free gift); a flagged line is
- *     never merged with another. checkout [field | {field, filter}] (contract 0069 §1): fields of the document filled
+ *     never merged with another. line.hold (contract 0077 §3): a check of the line, the "Sajikan nanti" switch (not
+ *     "Tahan", which parks the bill): the kitchen keeps the line until the pass fires it; such a line is never merged. checkout [field | {field, filter}] (contract 0069 §1): fields of the document filled
  *     before paying (customer, promo, voucher code); they ride in the compute call, so the breakdown follows them.
  *   payments {table, method, amount, methods}: tender. Cash quick amounts (uang pas and round notes), QRIS full or part;
  *     change = cash given - (total - QRIS).
@@ -46,7 +47,7 @@
   function cartAdd(cart, item) {
     var out = (cart || []).map(function (l) { return Object.assign({}, l); });
     for (var i = 0; i < out.length; i++) {
-      if (out[i].item === item.item && !out[i].note && !out[i].flag && !out[i].saved) { out[i].qty += 1; return out; }
+      if (out[i].item === item.item && !out[i].note && !out[i].flag && !out[i].hold && !out[i].saved) { out[i].qty += 1; return out; }
     }
     out.push({ key: item.item + "#" + out.length + "#" + Date.now(), item: item.item, title: item.title, price: Number(item.price) || 0, qty: 1, note: "" });
     return out;
@@ -105,6 +106,7 @@
       r[doc.line.qty] = l.qty;
       if (doc.line.note && l.note) r[doc.line.note] = l.note;
       if (doc.line.flag && l.flag) r[doc.line.flag] = true;
+      if (doc.line.hold && l.hold) r[doc.line.hold] = true;
       return r;
     });
     if (slots.payments && pay) {
@@ -1093,6 +1095,9 @@
     // line.amount (0069 §1): the model's amount per line once computed; the plain qty x price struck through when lower
     var lineMeta = doc.line && ((ctx.meta.models || {})[((docMeta.fields || []).filter(function (f) { return f.name === doc.lines; })[0] || {}).of] || {});
     var flagField = doc.line && doc.line.flag ? ((lineMeta.fields || []).filter(function (f) { return f.name === doc.line.flag; })[0] || { name: doc.line.flag }) : null;
+    // the hold switch only where its field applies (depends_on: a shop without a kitchen never sees it)
+    var holdField = doc.line && doc.line.hold ? (lineMeta.fields || []).filter(function (f) { return f.name === doc.line.hold; })[0] : null;
+    var holdOn = !!holdField && fieldShown(holdField, {});
     function amountView(l, i) {
       var plainAmt = Math.round(l.qty * l.price), modelAmt = fresh ? lineAmount(doc, fresh.rec, i) : null;
       if (modelAmt === null || modelAmt === plainAmt) return h("span", { className: "ap-counter-amt" }, rp(plainAmt));
@@ -1103,7 +1108,8 @@
       return h("li", { key: l.key },
         h("div", { className: "ap-counter-line" },
           h("button", { type: "button", className: "ap-counter-line-t", onClick: function () { setNoteLine(noteLine === i ? null : i); } }, l.title,
-            l.note ? h("small", null, l.note) : doc.line && (doc.line.note || doc.line.flag) ? h("small", { className: "ap-counter-addnote" }, doc.line.note ? "+ catatan" : "+ pilihan") : null,
+            l.hold ? h("small", { className: "ap-counter-later" }, "Sajikan nanti") : null,
+            l.note ? h("small", null, l.note) : doc.line && (doc.line.note || doc.line.flag || doc.line.hold) ? h("small", { className: "ap-counter-addnote" }, doc.line.note ? "+ catatan" : "+ pilihan") : null,
             h("small", { className: "ap-counter-unit" }, rp(l.price))),
           h("div", { className: "ap-counter-qty" },
             h("button", { type: "button", "aria-label": "Kurangi " + l.title, onClick: function () { setLine(i, { qty: l.qty - 1 }); } }, "−"),
@@ -1114,6 +1120,9 @@
         // the switch shows on a line the cashier opened (tap its name, like the note) or one already switched on
         flagField && (l.flag || noteLine === i) ? h("button", { type: "button", className: "ap-counter-flag", "aria-pressed": l.flag ? "true" : "false",
           onClick: function () { setLine(i, { flag: !l.flag }); } }, h(R.Icon, { name: l.flag ? "check" : "add" }), L(flagField.label) || flagField.name) : null,
+        // contract 0077 §3: hold the line at the kitchen until the pass fires it (dessert later, mains after starters)
+        holdOn && (l.hold || noteLine === i) ? h("button", { type: "button", className: "ap-counter-flag", "aria-pressed": l.hold ? "true" : "false",
+          onClick: function () { setLine(i, { hold: !l.hold }); } }, h(R.Icon, { name: l.hold ? "check" : "add" }), "Sajikan nanti, dilepas dari Penyerahan") : null,
         noteLine === i && doc.line.note ? h("input", { className: "ap-counter-note", "aria-label": "Catatan " + l.title, placeholder: "Catatan, misalnya kurang manis",
           value: l.note, autoFocus: true, onChange: function (e) { setLine(i, { note: e.target.value }); }, onKeyDown: function (e) { if (e.key === "Enter") setNoteLine(null); } }) : null);
     }));

@@ -351,6 +351,9 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 			if fl := v.slotField(p, "counter/document/line/flag", lm, lf, line["flag"], []string{"check"}); fl != nil && (fl["compute"] != nil || fl["read_only"] == true) {
 				v.rep.extra("error", p, "counter/document/line/flag", "screen_slot_type", fmt.Sprintf(`"%s" is computed or read-only; the cashier cannot switch it`, pyStr(line["flag"])))
 			}
+			if hl := v.slotField(p, "counter/document/line/hold", lm, lf, line["hold"], []string{"check"}); hl != nil && (hl["compute"] != nil || hl["read_only"] == true) {
+				v.rep.extra("error", p, "counter/document/line/hold", "screen_slot_type", fmt.Sprintf(`"%s" is computed or read-only; the cashier cannot switch it`, pyStr(line["hold"])))
+			}
 		}
 		v.slotField(p, "counter/document/total", docModel, docFields, doc["total"], numericKinds)
 		v.slotField(p, "counter/document/change", docModel, docFields, doc["change"], numericKinds)
@@ -517,7 +520,8 @@ func (v *validator) screenQueue(p string, b map[string]any, visible map[string]v
 		v.slotField(p, fmt.Sprintf("queue/card/fields/%d", i), m, fields, x, nil)
 	}
 	lines := v.slotField(p, "queue/card/lines", m, fields, card["lines"], tableKind)
-	if lm, lf := childOf(lines, visible); lm != nil {
+	lm, lf := childOf(lines, visible)
+	if lm != nil {
 		for i, x := range asList(card["line"]) {
 			v.slotField(p, fmt.Sprintf("queue/card/line/%d", i), lm, lf, x, nil)
 		}
@@ -569,6 +573,7 @@ func (v *validator) screenQueue(p string, b map[string]any, visible map[string]v
 			}
 		}
 	}
+	v.queueLines(p, b, card, m, fields, lm, lf)
 	if cols := asMap(b["columns"]); cols != nil {
 		if f := v.slotField(p, "queue/columns/by", m, fields, cols["by"], nil); f != nil && str(f, "type") == "select" {
 			opts := optionSet(f)
@@ -578,6 +583,77 @@ func (v *validator) screenQueue(p string, b map[string]any, visible map[string]v
 				}
 			}
 		}
+	}
+}
+
+// rowSet checks a row step's set (contract 0077 §2): fields of the line model a client may write, select values options.
+func (v *validator) rowSet(p, at string, set map[string]any, lm *Model, lf map[string]map[string]any) {
+	ks := make([]string, 0, len(set))
+	for k := range set {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	for _, k := range ks {
+		f, has := lf[k]
+		switch {
+		case !has:
+			v.rep.extra("error", p, at+"/set/"+k, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s%s`, k, lm.Name, suggest(k, keys(lf))))
+		case f["compute"] != nil || f["read_only"] == true:
+			v.rep.extra("error", p, at+"/set/"+k, "screen_slot_type", fmt.Sprintf(`"%s" is computed or read-only; set: cannot fill it`, k))
+		case str(f, "type") == "select":
+			if val := pyStr(set[k]); !optionSet(f)[val] {
+				v.rep.extra("error", p, at+"/set/"+k, "screen_slot_type", fmt.Sprintf(`"%s" is not an option of %s`, val, k))
+			}
+		case set[k] == "now()" && str(f, "type") != "date" && str(f, "type") != "datetime":
+			v.rep.extra("error", p, at+"/set/"+k, "screen_slot_type", fmt.Sprintf(`"now()" fills a date or datetime field; %s is not one`, k))
+		}
+	}
+}
+
+// queueLines checks the row slots of a queue (contract 0077 §2): line_show/muted/badge/tag, line_steps, bulk_steps,
+// group_by, totals, recall. Row slots need card.lines.
+func (v *validator) queueLines(p string, b, card map[string]any, m *Model, fields map[string]map[string]any, lm *Model, lf map[string]map[string]any) {
+	v.slotField(p, "queue/card/line_tag", m, fields, card["line_tag"], nil)
+	v.slotField(p, "queue/group_by", m, fields, b["group_by"], nil)
+	v.slotField(p, "queue/choose", m, fields, b["choose"], nil)
+	if lm == nil {
+		for _, k := range []string{"line_steps", "bulk_steps", "totals", "recall"} {
+			if _, ok := b[k]; ok {
+				v.rep.extra("error", p, "queue/"+k, "screen_slot_type", "row slots need card.lines (a table field)")
+				return
+			}
+		}
+		for _, k := range []string{"line_show", "line_muted", "line_badge"} {
+			if _, ok := card[k]; ok {
+				v.rep.extra("error", p, "queue/card/"+k, "screen_slot_type", "row slots need card.lines (a table field)")
+				return
+			}
+		}
+		return
+	}
+	v.parens(p, "queue/card/line_show", card["line_show"])
+	v.parens(p, "queue/card/line_muted", card["line_muted"])
+	v.slotField(p, "queue/card/line_badge", lm, lf, card["line_badge"], []string{"select"})
+	for _, key := range []string{"line_steps", "bulk_steps"} {
+		for i, x := range asList(b[key]) {
+			st := asMap(x)
+			at := fmt.Sprintf("queue/%s/%d", key, i)
+			v.parens(p, at+"/when", st["when"])
+			v.slotField(p, at+"/label_field", m, fields, st["label_field"], nil)
+			v.rowSet(p, at, asMap(st["set"]), lm, lf)
+		}
+	}
+	if tot := asMap(b["totals"]); tot != nil {
+		v.slotField(p, "queue/totals/by", lm, lf, tot["by"], nil)
+		v.slotField(p, "queue/totals/qty", lm, lf, tot["qty"], numericKinds)
+		v.slotField(p, "queue/totals/held", lm, lf, tot["held"], []string{"check"})
+		v.slotField(p, "queue/totals/split", lm, lf, tot["split"], nil)
+		v.parens(p, "queue/totals/when", tot["when"])
+	}
+	if rc := asMap(b["recall"]); rc != nil {
+		v.parens(p, "queue/recall/filter", rc["filter"])
+		v.parens(p, "queue/recall/when", rc["when"])
+		v.rowSet(p, "queue/recall", asMap(rc["set"]), lm, lf)
 	}
 }
 

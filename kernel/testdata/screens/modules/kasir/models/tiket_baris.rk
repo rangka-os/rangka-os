@@ -6,3 +6,15 @@ fields:
   - {name: menu, type: link, to: menu, label: {id: Menu}, required: true}
   - {name: qty, type: float, label: {id: Qty}, default: '1'}
   - {name: note, type: data, label: {id: Catatan}}
+  # per-item kitchen state (contract 0077): a station moves a row, the pass fires a held row
+  - name: line_status
+    type: select
+    label: {id: Status item}
+    default: "'new'"
+    options:
+      - {value: new, label: {id: Baru}, tone: neutral}
+      - {value: in_progress, label: {id: Diproses}, tone: info}
+      - {value: ready, label: {id: Siap}, tone: ok}
+      - {value: done, label: {id: Diambil}, tone: muted}
+  - {name: held, type: check, label: {id: Ditahan}}
+  - {name: ready_at, type: datetime, label: {id: Siap pada}}

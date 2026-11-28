@@ -619,6 +619,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
    switch; the checkout fields folded to one line above the breakdown */
 .ap-counter-amt.promo { display: grid; justify-items: end; color: var(--ink); font-weight: 600; }
 .ap-counter-amt.promo s { color: var(--muted); font-size: 12px; font-weight: 400; }
+.ap-counter-line-t .ap-counter-later { color: var(--warn); font-weight: 600; }
 .ap-counter-flag { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; margin-top: 4px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink-2); font: 500 12px/16px var(--font-sans); cursor: pointer; }
 .ap-counter-flag .rk-icon { width: 14px; height: 14px; }
 .ap-counter-flag[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
@@ -685,6 +686,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-queue-card ul { margin: 0; padding: 0 0 0 16px; color: var(--ink-2); font-size: 14px; }
 .ap-queue-sub, .ap-queue-fields { margin: 0; color: var(--muted); font-size: 13px; }
 .ap-queue-card .rk-btn { min-height: 44px; justify-content: center; }
+.ap-work-queue .ap-queue-card .rk-btn { font-size: 15px; font-weight: 600; }
 .ap-counter-done .ap-counter-due { justify-content: center; }
 .ap-counter-tick { justify-self: center; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--ok-tint); color: var(--ok); }
 .ap-counter-tick.queued { background: var(--warn-tint); color: var(--warn); }
@@ -732,10 +734,10 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
   .ap-workshell > .ap-whead { grid-column: 2; grid-row: 1; }
   .ap-workshell > .ap-main { grid-column: 2; grid-row: 2; }
   .ap-workshell > .ap-workbar { grid-column: 1; grid-row: 1 / span 2; grid-template-columns: none !important; grid-auto-rows: min-content; align-content: start; gap: 4px;
-    position: static; padding: 10px 8px; border-top: 0; border-right: 1px solid var(--line); }
+    position: static; padding: 10px 4px; border-top: 0; border-right: 1px solid var(--line); }
   .ap-workshell > .ap-workbar a, .ap-workshell > .ap-workbar button { min-height: 60px; font-size: 12px; }
   /* rail labels wrap to two lines instead of "Kasir tan…" */
-  .ap-workshell > .ap-workbar span { white-space: normal; text-align: center; line-height: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+  .ap-workshell > .ap-workbar span { white-space: normal; text-align: center; line-height: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: break-word; hyphens: auto; }
   /* the counter's order bar and sheet sit beside the rail, not over it */
   .ap-workshell .ap-counter-bar { left: 96px; bottom: calc(16px + env(safe-area-inset-bottom)); }
   .ap-workshell .ap-counter.sheet .ap-counter-cart { left: 88px; }
@@ -1474,3 +1476,80 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 .ap-tbl-guests { display: grid; gap: 12px; justify-items: start; max-width: 360px; margin-top: 16px; padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--r-dialog); background: var(--surface); }
 .ap-tbl-stepper { display: flex; align-items: center; gap: 16px; }
 .ap-tbl-stepper output { min-width: 32px; text-align: center; font: 700 24px/28px var(--font-sans); color: var(--ink); }
+/* queue board (no steps): a pickup counter's ready list, titles large enough to read across the room */
+.ap-queue-board .ap-queue-card header b { font-size: 28px; line-height: 34px; }
+.ap-queue-board .ap-queue-col { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.ap-queue-board .ap-queue-col > h2, .ap-queue-board .ap-queue-col > p { grid-column: 1 / -1; }
+/* a guest board shows who, not how long */
+.ap-queue-board.ap-queue-rows .ap-queue-age { display: none; }
+.ap-queue-board .ap-qcard > header b { overflow-wrap: anywhere; }
+/* queue rows (contract 0077): a row is the touch target (wet hands: the whole row, no swipe or long press) */
+.ap-qbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+.ap-qbar b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.ap-qbar-grow { flex: 1; }
+.ap-qchoose { display: flex; flex-wrap: wrap; gap: 4px; }
+.ap-qtoggle { border: 0; background: none; padding: 8px 10px; border-radius: var(--r-btn); font: 600 13px/18px var(--font-sans); color: var(--muted); cursor: pointer; }
+.ap-qtoggle:hover { background: var(--neutral); }
+.ap-qtoggle[aria-pressed="true"] { background: var(--selected); color: var(--selected-ink); }
+.ap-qbody { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+.ap-qbody-side { grid-template-columns: 1fr 300px; }
+.ap-qcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+.ap-qcard { padding: 0; gap: 0; }
+.ap-qcard > header { padding: 12px 16px 8px; }
+.ap-qcard > .ap-queue-sub { padding: 0 16px 8px; }
+.ap-qrows { display: grid; }
+.ap-qrow { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 2px 12px; min-height: 56px; padding: 8px 16px; border: 0; border-top: 1px solid var(--line);
+  background: none; text-align: left; font: 600 16px/22px var(--font-sans); color: var(--ink); width: 100%; box-sizing: border-box; }
+button.ap-qrow { cursor: pointer; }
+button.ap-qrow:hover { background: var(--hover, var(--neutral)); }
+button.ap-qrow:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ap-qrow-q { font-variant-numeric: tabular-nums; min-width: 2.2ch; }
+.ap-qrow-n { min-width: 0; }
+.ap-qrow-verb { grid-row: 1 / span 2; grid-column: 3; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px;
+  border: 1px solid var(--line-strong); border-radius: var(--r-btn); background: var(--surface); font-weight: 700; white-space: nowrap; }
+button.ap-qrow:hover .ap-qrow-verb { background: var(--neutral); }
+.ap-qrow-meta { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font: 500 14px/20px var(--font-sans); color: var(--muted); }
+.ap-qrow-muted .ap-qrow-q, .ap-qrow-muted .ap-qrow-n { color: var(--muted); font-weight: 500; }
+.ap-lz { display: inline-flex; align-items: center; padding: 1px 8px; border-radius: 6px; font: 700 12px/18px var(--font-sans); background: var(--neutral); color: var(--muted); white-space: nowrap; }
+.ap-lz-ok { background: var(--ok-tint); color: var(--ok); }
+.ap-lz-warn { background: var(--warn-tint); color: var(--warn); }
+.ap-lz-bad { background: var(--bad-tint); color: var(--bad); }
+.ap-lz-info { background: var(--info-tint); color: var(--info); }
+.ap-qfoot { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.ap-qfoot .rk-btn { flex: 1; min-height: 44px; justify-content: center; font-weight: 700; }
+.ap-qtotals { border-left: 1px solid var(--line); padding: 0 0 0 16px; }
+.ap-qtotals h2 { margin: 0 0 8px; font: 600 13px/18px var(--font-sans); color: var(--muted); }
+.ap-qtot { display: grid; grid-template-columns: 3ch 1fr; gap: 2px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.ap-qtot b { text-align: right; font-variant-numeric: tabular-nums; font-size: 18px; }
+.ap-qtot span { font-weight: 600; }
+.ap-qtot small { grid-column: 2; color: var(--muted); font-size: 13px; }
+.ap-qrecall-row { display: flex; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+.ap-qrecall-row span { flex: 1; color: var(--muted); }
+.ap-qsnack { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 30; display: flex; align-items: center; gap: 16px; padding: 10px 10px 10px 18px;
+  border-radius: 10px; background: var(--ink); color: var(--surface); font: 600 14px/20px var(--font-sans); box-shadow: var(--shadow-pop); }
+.ap-qsnack button { border: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; padding: 8px 10px; cursor: pointer; }
+.ap-work-queue .ap-qfoot .rk-btn { font-size: 15px; }
+/* a TV (1600px and wider): the kitchen display is read from about 3 m, so cards and type scale up */
+@media (min-width: 1600px) {
+  .ap-work-queue { max-width: none; padding: 20px 28px; }
+  .ap-queue-cols { gap: 20px; }
+  .ap-queue-col h2 { font-size: 20px; line-height: 28px; }
+  .ap-queue-card { padding: 18px; gap: 12px; border-left-width: 6px; }
+  .ap-queue-card header b { font-size: 24px; line-height: 30px; }
+  .ap-queue-age { font-size: 18px; line-height: 24px; }
+  .ap-queue-card ul { font-size: 20px; line-height: 30px; padding-left: 22px; }
+  .ap-queue-sub, .ap-queue-fields { font-size: 17px; }
+  .ap-work-queue .ap-queue-card .rk-btn { min-height: 56px; font-size: 20px; }
+  .ap-queue-board .ap-queue-col { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+  .ap-queue-board .ap-queue-card header b { font-size: 44px; line-height: 52px; }
+  .ap-qcards { grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 16px; }
+  .ap-qbody-side { grid-template-columns: 1fr 400px; }
+  .ap-qbar { font-size: 18px; }
+  .ap-qtoggle { font-size: 17px; }
+  .ap-qrow { min-height: 72px; font-size: 24px; line-height: 30px; }
+  .ap-qrow-meta { font-size: 19px; line-height: 26px; }
+  .ap-lz { font-size: 16px; line-height: 22px; }
+  .ap-qrow-verb { min-height: 56px; padding: 0 22px; font-size: 20px; }
+  .ap-qtot b { font-size: 24px; } .ap-qtot span { font-size: 21px; } .ap-qtot small { font-size: 17px; }
+  .ap-work-queue .ap-qfoot .rk-btn { min-height: 60px; font-size: 20px; }
+}

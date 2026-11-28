@@ -3647,6 +3647,7 @@ def check_screen_queue(rep, p, b, visible):
                 val = pystr(sset[k])
                 if val not in option_values(fields[k]):
                     rep.add("error", p, f"{at}/set/{k}", "screen_slot_type", f'"{val}" is not an option of {k}')
+    check_queue_lines(rep, p, b, card, mn, fields, ln, lf)
     cols = b.get("columns") if isinstance(b.get("columns"), dict) else None
     if cols is not None:
         f = slot_field(rep, p, "queue/columns/by", mn, fields, cols.get("by"))
@@ -3655,6 +3656,57 @@ def check_screen_queue(rep, p, b, visible):
             for i, x in enumerate(cols.get("values") if isinstance(cols.get("values"), list) else []):
                 if isinstance(x, str) and x not in opts:
                     rep.add("error", p, f"queue/columns/values/{i}", "screen_slot_type", f'"{x}" is not an option of {cols.get("by")}')
+
+
+def check_row_set(rep, p, at, sset, ln, lf):
+    """A row step's set (contract 0077 §2): fields of the line model a client may write, select values options."""
+    sset = {str(k): v for k, v in sset.items()} if isinstance(sset, dict) else {}
+    for k in sorted(sset):
+        if k not in lf:
+            rep.add("error", p, f"{at}/set/{k}", "unknown_field", f'"{k}" is not a field of {ln}{suggest(k, lf)}')
+        elif lf[k].get("compute") is not None or lf[k].get("read_only") is True:
+            rep.add("error", p, f"{at}/set/{k}", "screen_slot_type", f'"{k}" is computed or read-only; set: cannot fill it')
+        elif lf[k].get("type") == "select":
+            val = pystr(sset[k])
+            if val not in option_values(lf[k]):
+                rep.add("error", p, f"{at}/set/{k}", "screen_slot_type", f'"{val}" is not an option of {k}')
+        elif sset[k] == "now()" and lf[k].get("type") not in ("date", "datetime"):
+            rep.add("error", p, f"{at}/set/{k}", "screen_slot_type", f'"now()" fills a date or datetime field; {k} is not one')
+
+
+def check_queue_lines(rep, p, b, card, mn, fields, ln, lf):
+    """Row slots of a queue (contract 0077 §2): line_show/muted/badge/tag, line_steps, bulk_steps, group_by, totals,
+    recall. Row slots need card.lines."""
+    slot_field(rep, p, "queue/card/line_tag", mn, fields, card.get("line_tag"))
+    slot_field(rep, p, "queue/group_by", mn, fields, b.get("group_by"))
+    slot_field(rep, p, "queue/choose", mn, fields, b.get("choose"))
+    rowish = [k for k in ("line_steps", "bulk_steps", "totals", "recall") if k in b] + [f"card/{k}" for k in ("line_show", "line_muted", "line_badge") if k in card]
+    if not ln:
+        if rowish:
+            rep.add("error", p, "queue/" + rowish[0], "screen_slot_type", "row slots need card.lines (a table field)")
+        return
+    parens(rep, p, "queue/card/line_show", card.get("line_show"))
+    parens(rep, p, "queue/card/line_muted", card.get("line_muted"))
+    slot_field(rep, p, "queue/card/line_badge", ln, lf, card.get("line_badge"), ["select"])
+    for key in ("line_steps", "bulk_steps"):
+        for i, st in enumerate(b.get(key) if isinstance(b.get(key), list) else []):
+            st = st if isinstance(st, dict) else {}
+            at = f"queue/{key}/{i}"
+            parens(rep, p, f"{at}/when", st.get("when"))
+            slot_field(rep, p, f"{at}/label_field", mn, fields, st.get("label_field"))
+            check_row_set(rep, p, at, st.get("set"), ln, lf)
+    tot = b.get("totals") if isinstance(b.get("totals"), dict) else None
+    if tot is not None:
+        slot_field(rep, p, "queue/totals/by", ln, lf, tot.get("by"))
+        slot_field(rep, p, "queue/totals/qty", ln, lf, tot.get("qty"), NUMERIC_KINDS)
+        slot_field(rep, p, "queue/totals/held", ln, lf, tot.get("held"), ["check"])
+        slot_field(rep, p, "queue/totals/split", ln, lf, tot.get("split"))
+        parens(rep, p, "queue/totals/when", tot.get("when"))
+    rc = b.get("recall") if isinstance(b.get("recall"), dict) else None
+    if rc is not None:
+        parens(rep, p, "queue/recall/filter", rc.get("filter"))
+        parens(rep, p, "queue/recall/when", rc.get("when"))
+        check_row_set(rep, p, "queue/recall", rc.get("set"), ln, lf)
 
 
 NUMERIC_KINDS = ["currency", "money", "float", "int", "percent"]
@@ -3751,6 +3803,9 @@ def check_screen_counter(rep, p, b, visible, prints):
             fl = slot_field(rep, p, "counter/document/line/flag", ln, lf, line.get("flag"), ["check"])
             if fl is not None and (fl.get("compute") is not None or fl.get("read_only") is True):
                 rep.add("error", p, "counter/document/line/flag", "screen_slot_type", f'"{line.get("flag")}" is computed or read-only; the cashier cannot switch it')
+            hl = slot_field(rep, p, "counter/document/line/hold", ln, lf, line.get("hold"), ["check"])
+            if hl is not None and (hl.get("compute") is not None or hl.get("read_only") is True):
+                rep.add("error", p, "counter/document/line/hold", "screen_slot_type", f'"{line.get("hold")}" is computed or read-only; the cashier cannot switch it')
         slot_field(rep, p, "counter/document/total", dn, df, doc.get("total"), NUMERIC_KINDS)
         slot_field(rep, p, "counter/document/change", dn, df, doc.get("change"), NUMERIC_KINDS)
         for i, x in enumerate(doc.get("summary") if isinstance(doc.get("summary"), list) else []):

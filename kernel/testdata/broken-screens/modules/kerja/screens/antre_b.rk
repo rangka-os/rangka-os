@@ -3,6 +3,7 @@ name: antre_b
 type: queue
 label: {id: Antre B}
 roles: [staf]
+theme: system
 queue:
   source: {model: catatan_harian}
   card: {title: text}

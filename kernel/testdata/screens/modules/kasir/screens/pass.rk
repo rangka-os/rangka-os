@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+# The pass (contract 0077): one card per table across tickets; fire held rows, hand over what is ready.
+name: pass
+type: queue
+label: {id: Penyerahan}
+icon: list
+roles: [dapur, kasir]
+queue:
+  source: {model: tiket_dapur, filter: "status != 'served' && date == today()", sort: created_at}
+  group_by: table_no
+  card: {title: table_no, lines: items, line: [menu, qty], line_tag: status, line_badge: line_status, line_muted: held, line_show: "line_status != 'done'"}
+  line_steps:
+    - {when: "held", label: {id: Lepas}, set: {held: false}}
+  bulk_steps:
+    - {when: "held", label: {id: Lepas semua}, set: {held: false}}
+    - {when: "!held && line_status == 'ready'", label: {id: Serahkan yang siap}, set: {line_status: done}}
+  refresh: 5

@@ -26,7 +26,7 @@ func TestLoadScreensAndWork(t *testing.T) {
 		}
 		got = append(got, x+"/"+w.App)
 	}
-	if want := "isi_jam*@staf/kantor catat/kantor antrian@staf/kantor jual*@kasir/kantor dapur*@dapur/kantor jual_online@kasir/kantor absen_masuk*@pekerja/kantor absen_kelas*@pengajar/kantor serah_alat*@petugas/kantor rute_tagih*@penagih/kantor terima_bayar@penagih/kantor"; join(got) != want {
+	if want := "isi_jam*@staf/kantor catat/kantor antrian@staf/kantor jual*@kasir/kantor dapur*@dapur/kantor siap_ambil@dapur/kantor pass@dapur/kantor jual_online@kasir/kantor absen_masuk*@pekerja/kantor absen_kelas*@pengajar/kantor serah_alat*@petugas/kantor rute_tagih*@penagih/kantor terima_bayar@penagih/kantor"; join(got) != want {
 		t.Fatalf("work = %q, want %q", join(got), want)
 	}
 }

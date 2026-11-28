@@ -295,6 +295,17 @@
     return { items: items, more: more };
   }
 
+  /** The list filter that counts a queue screen's first column (contract 0048 §7 rail badge: e.g. new kitchen tickets):
+   *  its source filter and columns.by == the first columns.values; null for another screen or a queue without values. */
+  function queueBadgeFilter(s) {
+    var q = s && s.type === "queue" && s.queue, c = q && q.columns, v = c && c.by && c.values && c.values[0];
+    if (!q || !q.source || !q.source.model) return null;
+    // a row queue without columns (contract 0077) counts its open records; a grouped one counts on its own load only
+    if (v == null) return !q.group_by && (q.line_steps || q.bulk_steps) ? q.source.filter || "true" : null;
+    var own = c.by + " == '" + String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+    return q.source.filter ? "(" + q.source.filter + ") && " + own : own;
+  }
+
   /** The entries the kernel's features add: Persetujuan (counts.approvals as a badge), Proses bisnis, and Impor data
    *  (one entry for a single import, else a group of the imports by label). */
   function featureNav(meta, features, counts) {
@@ -456,6 +467,13 @@
     var m = meta && meta.theme && meta.theme.mode;
     return m === "light" || m === "dark" ? m : "light";
   }
+  /** The mode a work screen sets while it is open (screen theme, contract 0048 §6): light or dark above the person's
+   *  pick and the company's mode (a shared kitchen TV stays dark), else null. */
+  function screenMode(route, meta) {
+    if (!route || route.kind !== "work") return null;
+    var s = ((meta && meta.screens) || {})[route.screen];
+    return s && (s.theme === "light" || s.theme === "dark") ? s.theme : null;
+  }
 
   function lowerFirst(s) { return s ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
   function recHash(model, name) { return "#/r/" + encodeURIComponent(model) + "/" + encodeURIComponent(name); }
@@ -597,6 +615,7 @@
   RA.workItems = workItems;
   RA.workShell = workShell;
   RA.workBar = workBar;
+  RA.queueBadgeFilter = queueBadgeFilter;
   RA.navGroups = navGroups;
   RA.topNavItems = topNavItems;
   RA.sideNav = sideNav;
@@ -605,6 +624,7 @@
   RA.shellKind = shellKind;
   RA.densityOf = densityOf;
   RA.themeOf = themeOf;
+  RA.screenMode = screenMode;
   RA.themeVars = themeVars;
   RA.fontHref = fontHref;
   RA.commandGroups = commandGroups;
@@ -983,7 +1003,7 @@
     var xs = useState(false), expired = xs[0], setExpired = xs[1];
     var ns = useState(false), navOpen = ns[0], setNavOpen = ns[1];
     var ms = useState(boot.meta), meta = ms[0], setMeta = ms[1];
-    var theme = themeOf(themePick, meta);
+    var theme = screenMode(route, meta) || themeOf(themePick, meta);
     var es = useState(boot.eng), eng = es[0], setEng = es[1];
     var fs = useState(boot.features), features = fs[0], setFeatures = fs[1];
     var cr = useState(0), setCacheRev = cr[1];
@@ -1239,6 +1259,37 @@
       }, function () {});
     }
     useEffect(refreshApprovals, [features, me && me.org]);
+
+    // the work shell's queue badges (contract 0048 §7): the first column's count of each queue screen in the bar,
+    // fetched every 60 seconds while the tab is visible and online; quiet on failure (the badge keeps its last count)
+    var qcs = useState({}), queueCounts = qcs[0], setQueueCounts = qcs[1];
+    useEffect(function () {
+      function onCount(e) {
+        var d = e && e.detail;
+        if (d && d.screen) setQueueCounts(function (c0) { if (c0[d.screen] === d.n) return c0; var c = Object.assign({}, c0); c[d.screen] = d.n; return c; });
+      }
+      global.addEventListener("rk-queue-count", onCount);
+      return function () { global.removeEventListener("rk-queue-count", onCount); };
+    }, []);
+    useEffect(function () {
+      if (!workShell(meta)) return undefined;
+      var screens = (meta && meta.screens) || {}, alive = true;
+      var counted = workItems(meta).slice(0, 5).map(function (it) { var n = it.id.slice(2); return { name: n, s: screens[n], filter: queueBadgeFilter(screens[n]) }; })
+        .filter(function (x) { return x.filter; });
+      if (!counted.length) return undefined;
+      function tick() {
+        if (global.document.hidden || global.navigator.onLine === false) return;
+        counted.forEach(function (x) {
+          api.list(x.s.queue.source.model, { filter: x.filter, limit: 1 }).then(function (r) {
+            if (!alive || !r || typeof r.total !== "number") return;
+            setQueueCounts(function (c0) { var c = Object.assign({}, c0); c[x.name] = r.total; return c; });
+          }, function () {});
+        });
+      }
+      tick();
+      var t = global.setInterval(tick, 60000);
+      return function () { alive = false; global.clearInterval(t); };
+    }, [meta, me && me.org]);
 
     /** Move the session to another org. On success the whole app reloads at #/ so me, meta, features and every view
      *  come fresh from the server for the new org; nothing from the old org survives. On failure nothing changes. */
@@ -1635,7 +1686,9 @@
           // (the 48px header is hidden there); a phone keeps the header and the bottom bar
           h("span", { className: "ap-wbrand", title: companyName, "aria-hidden": "true" }, String(companyName || "R").trim().charAt(0).toUpperCase()),
           wb.items.map(function (it) {
-            return h("a", { key: it.id, href: "#/" + it.id, "aria-current": it.id === here ? "page" : undefined }, h(R.Icon, { name: it.icon }), h("span", null, it.label));
+            var qn = queueCounts[it.id.slice(2)];
+            return h("a", { key: it.id, href: "#/" + it.id, "aria-current": it.id === here ? "page" : undefined }, h(R.Icon, { name: it.icon }), h("span", null, it.label),
+              qn > 0 ? h("i", { className: "ap-tabbar-n", "aria-label": qn + " baru" }, qn > 99 ? "99+" : qn) : null);
           }),
           wb.more.length ? h("button", { type: "button", "aria-expanded": navOpen, "aria-current": moreHere ? "page" : undefined, onClick: function () { setNavOpen(!navOpen); } },
             h(R.Icon, { name: "menu" }), h("span", null, "Lainnya"), approvalCount > 0 ? h("i", { className: "ap-tabbar-n" }, approvalCount) : null) : null),

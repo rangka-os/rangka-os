@@ -505,3 +505,22 @@ test("pwaMenu: web push entries follow what Rangka Cloud answered, also on the i
   const s = A.accountSections({ pwa: ["push"] });
   assert.deepStrictEqual(s[0].items.map((i) => [i.key, i.label]), [["app:push", "Nyalakan notifikasi"]]);
 });
+
+test("screenMode: a work screen's theme while it is open (contract 0048 §6), else null", () => {
+  const meta = { screens: { dapur: { theme: "dark" }, kasir: {}, odd: { theme: "system" } } };
+  assert.strictEqual(A.screenMode({ kind: "work", screen: "dapur" }, meta), "dark");
+  assert.strictEqual(A.screenMode({ kind: "work", screen: "kasir" }, meta), null);
+  assert.strictEqual(A.screenMode({ kind: "work", screen: "odd" }, meta), null, "only light or dark");
+  assert.strictEqual(A.screenMode({ kind: "home" }, meta), null, "leaving the screen restores the person's mode");
+});
+
+test("queueBadgeFilter: the source filter and the first column's value (contract 0048 §7)", () => {
+  const s = { type: "queue", queue: { source: { model: "kitchen_ticket", filter: "date == today()" }, columns: { by: "status", values: ["new", "cooking"] } } };
+  assert.strictEqual(A.queueBadgeFilter(s), "(date == today()) && status == 'new'");
+  assert.strictEqual(A.queueBadgeFilter({ type: "queue", queue: { source: { model: "m" }, columns: { by: "k", values: ["it's"] } } }), "k == 'it\\'s'");
+  assert.strictEqual(A.queueBadgeFilter({ type: "queue", queue: { source: { model: "m" } } }), null, "no columns, no badge");
+  assert.strictEqual(A.queueBadgeFilter({ type: "counter" }), null);
+  const rows = { type: "queue", queue: { source: { model: "t", filter: "date == today()" }, line_steps: [{}] } };
+  assert.strictEqual(A.queueBadgeFilter(rows), "date == today()", "a row queue counts its open records");
+  assert.strictEqual(A.queueBadgeFilter({ type: "queue", queue: { source: { model: "t" }, group_by: "sale", bulk_steps: [{}] } }), null, "grouped: no list count");
+});

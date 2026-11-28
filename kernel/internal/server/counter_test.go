@@ -83,3 +83,56 @@ func TestConditionalPatch(t *testing.T) {
 		t.Fatalf("after refusals: %v", s)
 	}
 }
+
+// _if on a table field (contract 0077 §1): {row name: {child field: value}}; a stored row not named is a conflict.
+func TestConditionalPatchRows(t *testing.T) {
+	owner, _, _ := screensEnv(t)
+	m := owner.must(201, "POST", "/api/v1/r/menu", map[string]any{"menu_name": "Soto", "price": 20000}).JSON["name"].(string)
+	tk := owner.must(201, "POST", "/api/v1/r/tiket_dapur", map[string]any{"table_no": "Meja 3",
+		"items": []any{map[string]any{"menu": m, "qty": 1}, map[string]any{"menu": m, "qty": 2, "held": true}}}).JSON
+	name := tk["name"].(string)
+	rows := tk["items"].([]any)
+	r0, r1 := rows[0].(map[string]any), rows[1].(map[string]any)
+	n0, n1 := r0["name"].(string), r1["name"].(string)
+	patch := func(st0 string, want0 string) map[string]any {
+		a := map[string]any{"name": n0, "menu": m, "qty": 1, "line_status": st0}
+		b := map[string]any{"name": n1, "menu": m, "qty": 2, "held": true, "line_status": "new"}
+		return map[string]any{"items": []any{a, b}, "_if": map[string]any{"items": map[string]any{
+			n0: map[string]any{"line_status": want0}, n1: map[string]any{"line_status": "new", "held": true}}}}
+	}
+	got := owner.must(200, "PATCH", "/api/v1/r/tiket_dapur/"+name, patch("in_progress", "new")).JSON
+	if s := got["items"].([]any)[0].(map[string]any)["line_status"]; s != "in_progress" {
+		t.Fatalf("row step: %v", got["items"])
+	}
+	// a second tablet still shows the first row as new: refused, nothing changes
+	c := owner.must(409, "PATCH", "/api/v1/r/tiket_dapur/"+name, patch("ready", "new"))
+	if get(c.JSON, "error", "code") != "precondition_failed" {
+		t.Fatalf("stale row step: %s", c.Body)
+	}
+	// a row that no longer exists, and malformed preconditions
+	owner.must(409, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"table_no": "Meja 4",
+		"_if": map[string]any{"items": map[string]any{"ghost-row": map[string]any{"line_status": "new"}}}})
+	owner.must(400, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"table_no": "Meja 4", "_if": map[string]any{"items": "new"}})
+	owner.must(400, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"table_no": "Meja 4",
+		"_if": map[string]any{"items": map[string]any{n0: map[string]any{"ghost": 1}}}})
+	after := owner.must(200, "GET", "/api/v1/r/tiket_dapur/"+name, nil).JSON
+	if after["table_no"] != "Meja 3" || after["items"].([]any)[0].(map[string]any)["line_status"] != "in_progress" {
+		t.Fatalf("after refusals: %v", after)
+	}
+	// a row another device added after this one loaded the record: a PATCH naming only the rows it knew is refused,
+	// so rewriting the table never deletes the new row
+	cur := owner.must(200, "GET", "/api/v1/r/tiket_dapur/"+name, nil).JSON["items"].([]any)
+	owner.must(200, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"items": append(append([]any{}, cur...), map[string]any{"menu": m, "qty": 3})})
+	owner.must(409, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"items": cur,
+		"_if": map[string]any{"items": map[string]any{n0: map[string]any{"line_status": "in_progress"}, n1: map[string]any{"held": true}}}})
+	cur = owner.must(200, "GET", "/api/v1/r/tiket_dapur/"+name, nil).JSON["items"].([]any)
+	if len(cur) != 3 {
+		t.Fatalf("the added row was deleted: %v", cur)
+	}
+	n2 := cur[2].(map[string]any)["name"].(string)
+	// a null expectation is the field's zero value (a row field the device never had a value for)
+	owner.must(200, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"table_no": "Meja 3",
+		"_if": map[string]any{"items": map[string]any{n0: map[string]any{"held": nil}, n1: map[string]any{"held": true}, n2: map[string]any{"held": nil}}}})
+	// the row queue screen opens: its recall set: values are literals, not CEL (contract 0077)
+	owner.must(200, "GET", "/api/v1/screens/dapur", nil)
+}

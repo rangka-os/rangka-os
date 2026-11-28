@@ -1090,7 +1090,9 @@
     // line.amount (0069 §1): the model's amount per line once computed; the plain qty x price struck through when lower
     var lineMeta = doc.line && ((ctx.meta.models || {})[((docMeta.fields || []).filter(function (f) { return f.name === doc.lines; })[0] || {}).of] || {});
     var flagField = doc.line && doc.line.flag ? ((lineMeta.fields || []).filter(function (f) { return f.name === doc.line.flag; })[0] || { name: doc.line.flag }) : null;
-    var holdOn = !!(doc.line && doc.line.hold);
+    // the hold switch only where its field applies (depends_on: a shop without a kitchen never sees it)
+    var holdField = doc.line && doc.line.hold ? (lineMeta.fields || []).filter(function (f) { return f.name === doc.line.hold; })[0] : null;
+    var holdOn = !!holdField && fieldShown(holdField, {});
     function amountView(l, i) {
       var plainAmt = Math.round(l.qty * l.price), modelAmt = fresh ? lineAmount(doc, fresh.rec, i) : null;
       if (modelAmt === null || modelAmt === plainAmt) return h("span", { className: "ap-counter-amt" }, rp(plainAmt));

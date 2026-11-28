@@ -230,6 +230,11 @@
     var ros = useState(false), recallOpen = ros[0], setRecallOpen = ros[1];
     var tos = useState(function () { return !!q.totals && (global.innerWidth || 0) >= 1600; }), totalsOpen = tos[0], setTotalsOpen = tos[1];
     var qns = useState(0), queuedN = qns[0], setQueuedN = qns[1]; // row writes waiting in the outbox (offline)
+    // choose (contract 0077): a station tablet shows one station; the device remembers the choice
+    var chooseKey = "rk-queue-choose:" + s.name;
+    var chs = useState(function () { try { return (q.choose && global.localStorage.getItem(chooseKey)) || ""; } catch (e) { return ""; } }), chosen = chs[0], setChosen = chs[1];
+    var chosenRef = useRef(chosen);
+    function choose(v) { chosenRef.current = v; seenRef.current = null; setChosen(v); try { if (v) global.localStorage.setItem(chooseKey, v); else global.localStorage.removeItem(chooseKey); } catch (e) { /* this device only */ } }
     var seenRef = useRef(null); // every card name loaded so far (alert: new); null until the first load
     var sounds = q.alert === "new";
     var ms = useState(function () { var a = sounds ? audioCtx() : null; return !!a && a.state !== "running"; }), muted = ms[0], setMuted = ms[1];
@@ -248,7 +253,10 @@
     // a row the screen can work on (shown, not muted): a fired held item sounds like a new ticket
     function liveKeys(data) {
       var out = [];
-      data.forEach(function (r) { (r[card.lines] || []).forEach(function (row) { if (showRow(row, r) && !muteRow(row, r)) out.push(r.name + "/" + row.name); }); });
+      data.forEach(function (r) {
+        if (q.choose && chosenRef.current && r[q.choose] !== chosenRef.current) return; // another station's row
+        (r[card.lines] || []).forEach(function (row) { if (showRow(row, r) && !muteRow(row, r)) out.push(r.name + "/" + row.name); });
+      });
       return out;
     }
     function noteArrivals(data) {
@@ -454,6 +462,8 @@
 
     /* ---------------------------------------------------------------- rows (contract 0077) */
     function rowView() {
+      // no row or card steps: a board (a guest's ready screen), cards show their title only
+      var boardOnly = !(q.line_steps || q.bulk_steps || q.steps);
       var badgeField = card.line_badge ? fieldOf(lineModel, card.line_badge) : null;
       var lineNames = card.line && card.line.length ? card.line : lineFields.slice(0, 2).map(function (f) { return f.name; });
       var qtyName = lineNames.filter(function (n) { var f = fieldOf(lineModel, n); return f && (f.type === "float" || f.type === "int"); })[0];
@@ -464,7 +474,11 @@
         var o = (badgeField.options || []).filter(function (x) { return x.value === row[badgeField.name]; })[0];
         return o ? { label: L(o.label), tone: o.tone || "neutral" } : null;
       }
-      var groups = groupsOf(rows, q.group_by).map(function (g) {
+      var choices = [];
+      if (q.choose) (rows || []).forEach(function (r) { var v = r[q.choose]; if (v != null && v !== "" && choices.indexOf(v) < 0) choices.push(v); });
+      if (q.choose && chosen && choices.indexOf(chosen) < 0) choices.push(chosen); // a station with nothing open yet stays chosen
+      var shownRows = q.choose && chosen ? (rows || []).filter(function (r) { return r[q.choose] === chosen; }) : rows;
+      var groups = groupsOf(shownRows, q.group_by).map(function (g) {
         var entries = [], all = [];
         g.recs.forEach(function (rec) {
           (rec[card.lines] || []).forEach(function (row) {
@@ -478,7 +492,7 @@
           return Math.max(m0, a);
         }, 0);
         return { key: g.key, recs: g.recs, entries: entries, all: all, age: oldest };
-      }).filter(function (g) { return g.entries.length; });
+      }).filter(function (g) { return g.entries.length || boardOnly; });
 
       // the header: rows per badge value, muted rows apart, and how a tap works
       var counts = {}, countOrder = [], mutedN = 0;
@@ -527,7 +541,7 @@
             h("b", null, title),
             h("span", { className: "ap-queue-age" }, g.age + " mnt")),
           card.subtitle && !q.group_by ? h("p", { className: "ap-queue-sub" }, text(mm, card.subtitle, rec0g[card.subtitle])) : null,
-          h("div", { className: "ap-qrows" }, g.entries.map(Row)),
+          g.entries.length ? h("div", { className: "ap-qrows" }, g.entries.map(Row)) : null,
           bulk.length ? h("footer", { className: "ap-qfoot" }, bulk.map(function (x, i) {
             return h(R.Button, { key: i, variant: i === bulk.length - 1 && q.group_by ? "primary" : "default", disabled: !!busy[busyKey], loading: !!busy[busyKey],
               onClick: function () {
@@ -570,14 +584,34 @@
         }) : h("p", { className: "ap-work-loading" }, "Belum ada yang selesai."));
       }
 
-      return h("div", { className: "ap-queue ap-queue-rows" + (q.group_by ? " ap-queue-grouped" : "") },
+      // columns (contract 0077): a group sits in the column of its least advanced record
+      var colBy = q.columns && q.columns.by ? fieldOf(mm, q.columns.by) : null;
+      var colVals = colBy ? ((q.columns.values && q.columns.values.length) ? q.columns.values : (colBy.options || []).map(function (o) { return o.value; })) : null;
+      function colOf(g) {
+        var best = -1;
+        g.recs.forEach(function (rec) { var i = colVals.indexOf(rec[colBy.name]); if (i >= 0 && (best < 0 || i < best)) best = i; });
+        return best;
+      }
+      var cardsView = colVals ? h("div", { className: "ap-queue-cols", style: { gridTemplateColumns: "repeat(" + colVals.length + ", minmax(240px, 1fr))" } }, colVals.map(function (v, ci) {
+        var inCol = groups.filter(function (g) { return colOf(g) === ci; });
+        var head = text(mm, colBy.name, v);
+        return h("section", { key: v, className: "ap-queue-col", "aria-label": head },
+          h("h2", null, head, h("span", null, inCol.length)),
+          inCol.length ? inCol.map(Group) : h("p", { className: "ap-work-loading" }, "Kosong"));
+      })) : h("div", { className: "ap-qcards" }, groups.length ? groups.map(Group) : h("p", { className: "ap-work-loading" }, "Belum ada pesanan."));
+      return h("div", { className: "ap-queue ap-queue-rows" + (q.group_by ? " ap-queue-grouped" : "") + (boardOnly ? " ap-queue-board" : "") },
         sounds && muted ? h("div", { className: "ap-work-note ap-queue-sound", role: "status" }, "Suara pesanan baru masih mati di perangkat ini. ",
           h("button", { type: "button", className: "ap-work-link", onClick: unmute }, "Nyalakan suara")) : null,
         stale ? h("p", { className: "ap-work-note" }, "Belum ada koneksi. Data terakhir " + new Date(stale).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + "; ketukan disimpan dan dikirim saat online.") : null,
         queuedN && !stale ? h("p", { className: "ap-work-note" }, queuedN + " perubahan menunggu dikirim.") : null,
         err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
         note ? h("div", { className: "ap-work-err", role: "alert" }, note, " ", h("button", { type: "button", className: "ap-work-link", onClick: function () { setNote(""); } }, "Tutup")) : null,
-        h("div", { className: "ap-qbar" },
+        q.choose && choices.length > 1 || (q.choose && chosen) ? h("div", { className: "ap-qchoose", role: "group", "aria-label": "Tampilkan" },
+          [""].concat(choices).map(function (v) {
+            return h("button", { key: v || "all", type: "button", className: "ap-qtoggle", "aria-pressed": chosen === v,
+              onClick: function () { choose(v); } }, v ? text(mm, q.choose, v) : "Semua");
+          })) : null,
+        boardOnly ? null : h("div", { className: "ap-qbar" },
           countOrder.map(function (k) { return h("span", { key: k }, h("b", null, counts[k]), " " + k.toLowerCase()); }),
           mutedN ? h("span", null, h("b", null, mutedN), " " + mutedLabel.toLowerCase()) : null,
           hint ? h("span", { className: "ap-qbar-hint" }, hint) : null,
@@ -585,7 +619,7 @@
           q.recall ? h("button", { type: "button", className: "ap-qtoggle", "aria-pressed": recallOpen, onClick: function () { setRecallOpen(!recallOpen); } }, "Baru selesai (" + recallRows.length + ")") : null,
           q.totals ? h("button", { type: "button", className: "ap-qtoggle", "aria-pressed": totalsOpen, onClick: function () { setTotalsOpen(!totalsOpen); } }, "Total item") : null),
         h("div", { className: "ap-qbody" + (totalsOpen && q.totals && !recallOpen ? " ap-qbody-side" : "") },
-          recallOpen ? Recall() : h("div", { className: "ap-qcards" }, groups.length ? groups.map(Group) : h("p", { className: "ap-work-loading" }, "Belum ada pesanan.")),
+          recallOpen ? Recall() : cardsView,
           totalsOpen && q.totals && !recallOpen ? Totals() : null),
         undo ? h("div", { className: "ap-qsnack", role: "status" }, h("span", null, rec0(undo)),
           h("button", { type: "button", onClick: doUndo }, "Urungkan")) : null);

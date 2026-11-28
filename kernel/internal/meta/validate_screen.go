@@ -613,6 +613,7 @@ func (v *validator) rowSet(p, at string, set map[string]any, lm *Model, lf map[s
 func (v *validator) queueLines(p string, b, card map[string]any, m *Model, fields map[string]map[string]any, lm *Model, lf map[string]map[string]any) {
 	v.slotField(p, "queue/card/line_tag", m, fields, card["line_tag"], nil)
 	v.slotField(p, "queue/group_by", m, fields, b["group_by"], nil)
+	v.slotField(p, "queue/choose", m, fields, b["choose"], nil)
 	if lm == nil {
 		for _, k := range []string{"line_steps", "bulk_steps", "totals", "recall"} {
 			if _, ok := b[k]; ok {

@@ -272,11 +272,14 @@ func (o *op) checkExpectRows(f *meta.Field, stored any, want any) error {
 			if cf == nil || cf.Type == "table" || o.e.FieldHidden(o.actor, cm, cf) {
 				return badRequest("_if: " + f.Name + "." + k + " is not a field of " + cm.Name + " the caller can compare")
 			}
-			got := row[k]
+			got, want := row[k], fields[k]
 			if got == nil {
 				got = store.Zero(cf)
 			}
-			if !cel.Equal(got, fields[k]) {
+			if want == nil { // a row field the device never had a value for (null) is its zero value
+				want = store.Zero(cf)
+			}
+			if !cel.Equal(got, want) {
 				return conflict("precondition_failed", "Data ini sudah diubah di perangkat lain ("+labelOr(f)+"). Muat ulang lalu coba lagi.")
 			}
 		}

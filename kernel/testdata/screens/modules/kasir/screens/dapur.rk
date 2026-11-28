@@ -17,6 +17,7 @@ queue:
     line_show: "line_status == 'new' || line_status == 'in_progress' || held"
     line_muted: held
     line_badge: line_status
+  choose: table_no
   line_steps:
     - {when: "!held && line_status == 'new'", label: {id: Proses}, set: {line_status: in_progress}}
     - {when: "!held && line_status == 'in_progress'", label: {id: Siap}, set: {line_status: ready, ready_at: "now()"}}

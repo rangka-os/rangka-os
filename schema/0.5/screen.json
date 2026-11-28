@@ -688,6 +688,7 @@
               "when": {"type": "string", "description": "CEL over the row (card. is the record)"},
               "label": {"$ref": "model.json#/$defs/label"},
               "label_field": {"$ref": "model.json#/$defs/name", "description": "A field of the record whose non-empty value replaces the label (a station's own verb)"},
+              "min": {"type": "integer", "minimum": 1, "description": "bulk_steps: the button shows from this many matching rows (default 1)"},
               "set": {
                 "type": "object",
                 "propertyNames": {"$ref": "model.json#/$defs/name"},
@@ -709,6 +710,7 @@
               "when": {"type": "string", "description": "CEL over the row (card. is the record)"},
               "label": {"$ref": "model.json#/$defs/label"},
               "label_field": {"$ref": "model.json#/$defs/name", "description": "A field of the record whose non-empty value replaces the label (a station's own verb)"},
+              "min": {"type": "integer", "minimum": 1, "description": "bulk_steps: the button shows from this many matching rows (default 1)"},
               "set": {
                 "type": "object",
                 "propertyNames": {"$ref": "model.json#/$defs/name"},
@@ -719,6 +721,7 @@
           }
         },
         "group_by": {"$ref": "model.json#/$defs/name", "description": "Records sharing this field's value form one card (an order across stations)"},
+        "choose": {"$ref": "model.json#/$defs/name", "description": "A field of the record: a row of choices (Semua and its values) the device remembers, e.g. a station tablet showing Bar only (contract 0077)"},
         "totals": {
           "type": "object",
           "required": ["by", "qty"],

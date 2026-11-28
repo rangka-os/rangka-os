@@ -157,7 +157,7 @@ func (e *Engine) ScreenSetsFor(a Actor, s *meta.Screen, vars map[string]any) (ma
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			if k == "set" {
+			if k == "set" || (s.Type == "queue" && path == "" && k == "recall") { // a queue's recall set: is literal row values (contract 0077)
 				continue
 			}
 			p := k

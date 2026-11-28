@@ -19,7 +19,8 @@ queue), 0048 (§6 screen theme, §7 rail badge), 0058 (outbox) · Issue: rangka-
 ### 1. `_if` on a table field
 `PATCH /r/<model>/<name>` accepts `_if: {<table field>: {<row name>: {<child field>: value}}}`. Each named row must
 exist in the stored record and each named child field must equal the value (hidden fields are refused as for
-document fields); otherwise 409 `precondition_failed`. A row of the stored record not named is not compared.
+document fields); otherwise 409 `precondition_failed`. A row of the stored record not named is not compared. A `null`
+value compares as the field's zero value (a row written before the field existed).
 
 ### 2. Queue slots (screen.json `queue`)
 ```yaml
@@ -33,8 +34,8 @@ queue:
     line_tag: station             # a field of the record shown on each row (useful with group_by)
   line_steps:                     # a tap on a row runs the first step whose when holds (CEL over the row; card. = record)
     - {when: "status == 'new' && !held", label: {id: Proses}, label_field: start_label, set: {status: in_progress}}
-  bulk_steps:                     # a card button: applies set to every row whose when holds; hidden when none, label + (n)
-    - {when: "!held && (status == 'new' || status == 'in_progress')", label: {id: Semua siap}, set: {status: ready, ready_at: "now()"}}
+  bulk_steps:                     # a card button: set on every row whose when holds; shown from min rows (default 1), "(n)" from 2
+    - {when: "!held && (status == 'new' || status == 'in_progress')", label: {id: Semua siap}, min: 2, set: {status: ready, ready_at: "now()"}}
   group_by: sale                  # optional: one card per value; title and age from the oldest record
   totals: {by: description, qty: qty, when: "status == 'new' || status == 'in_progress'", held: held, split: note}
   recall: {filter: "status == 'ready' && date == today()", sort: -ready_at, limit: 20, label: {id: Kembalikan},
@@ -59,7 +60,17 @@ queue:
 - **Offline.** A step whose write fails for a retryable reason (no connection) is kept in the device outbox (0058)
   with its Idempotency-Key and `_if`, shown as applied with a "antre" mark, and sent when online; a 409 then reloads
   the card and says so. The rail sync pill counts it (0048 §7).
-- A queue still needs at least one of `steps`, `line_steps`, `bulk_steps`, or none (a read-only board).
+- **Header.** The rows' quantities per `line_badge` value ("41 baru · 3 diproses"), muted rows apart, and "Ketuk
+  baris: Proses, lalu Siap" from the line steps' labels.
+- **Choose.** `choose: <field of the record>` shows a row of choices ("Semua" and the values present, as titles); the
+  device remembers the choice (local storage, per screen), so a Bar tablet shows the Bar's tickets only, sounds for
+  them only, and counts and totals follow the choice.
+- **Board.** A row queue without `steps`, `line_steps` and `bulk_steps` is a read-only board: cards show their title
+  only (a guest's "Sedang disiapkan / Siap diambil" screen with `group_by` and `columns`).
+- **Sound.** With `alert: new` (0048 round 1 of rangka-apps#131) a row queue sounds when a row it can work appears (shown and
+  not muted): a new ticket, or a held row fired by the pass.
+- `recall.set` and the steps' `set` are literal values; `GET /screens/<name>` never evaluates them as CEL.
+- A queue needs none of `steps`, `line_steps`, `bulk_steps` (a read-only board).
 
 ### 3. Counter line slot `hold`
 `counter.document.line.hold: <check field of the line>`: a "Tahan" toggle in the line sheet next to the note

@@ -6,6 +6,7 @@ roles: [staf]
 queue:
   source: {model: jam_kerja}
   group_by: ghost_group
+  choose: ghost_choice
   card: {title: staf, lines: breaks, line_badge: minutes, line_tag: nope, line_show: "minutes > (0"}
   line_steps:
     - {when: "true", label: {id: Proses}, label_field: nolabel, set: {ghost: 1, minutes: 2}}

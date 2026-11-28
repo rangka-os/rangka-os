@@ -119,4 +119,9 @@ func TestConditionalPatchRows(t *testing.T) {
 	if after["table_no"] != "Meja 3" || after["items"].([]any)[0].(map[string]any)["line_status"] != "in_progress" {
 		t.Fatalf("after refusals: %v", after)
 	}
+	// a null expectation is the field's zero value (a row field the device never had a value for)
+	owner.must(200, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"table_no": "Meja 3",
+		"_if": map[string]any{"items": map[string]any{n0: map[string]any{"held": nil}, n1: map[string]any{"held": true}}}})
+	// the row queue screen opens: its recall set: values are literals, not CEL (contract 0077)
+	owner.must(200, "GET", "/api/v1/screens/dapur", nil)
 }

@@ -3448,6 +3448,7 @@ def check_queue_lines(rep, p, b, card, mn, fields, ln, lf):
     recall. Row slots need card.lines."""
     slot_field(rep, p, "queue/card/line_tag", mn, fields, card.get("line_tag"))
     slot_field(rep, p, "queue/group_by", mn, fields, b.get("group_by"))
+    slot_field(rep, p, "queue/choose", mn, fields, b.get("choose"))
     rowish = [k for k in ("line_steps", "bulk_steps", "totals", "recall") if k in b] + [f"card/{k}" for k in ("line_show", "line_muted", "line_badge") if k in card]
     if not ln:
         if rowish:

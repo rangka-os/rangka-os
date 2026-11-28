@@ -23,9 +23,9 @@ import rkfile  # noqa: E402
 FIXTURE = os.path.join(HERE, "..", "web", "app", "test", "fixtures", "pos-sale-parity.json")
 
 # the documents computed in full (computes, defaults, options)
-COMPUTED = {"pos_sale": "pos", "pos_sale_item": "pos", "pos_payment": "pos"}
+COMPUTED = {"pos_sale": "pos", "pos_sale_item": "pos", "pos_payment": "pos", "pos_sale_option": "pos"}
 # the models those computes read through links: field names and types only, the fixture's records give the values
-LINKED = {"item": "catalogue", "uom_conversion": "catalogue", "promotion": "promotions", "loyalty_account": "loyalty",
+LINKED = {"item": "catalogue", "item_option": "catalogue", "uom_conversion": "catalogue", "promotion": "promotions", "loyalty_account": "loyalty",
           "outlet": "outlets", "pos_shift": "pos", "customer": "contacts"}
 KEEP = ("name", "type", "to", "of", "compute", "default")
 

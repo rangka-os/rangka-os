@@ -1,6 +1,6 @@
-// Order page of contract 0073 §9: a guest at a table reads the menu, builds a basket and sends it to the cashier,
-// then follows its status. Text only goes through textContent. Prices here are an estimate: the kernel prices every
-// line from the menu row again, and service and tax are added at the cashier.
+// Order page of contract 0073 §9: a guest at a table reads the menu, picks options, builds a basket, sends rounds to the
+// table's bill and follows the table. Text only goes through textContent. Every number shown before sending comes from
+// the kernel's estimate (the model's own computes); the table view shows the bill's own totals.
 (function () {
   "use strict";
   var root = document.getElementById("portal");
@@ -25,80 +25,88 @@
     b.addEventListener("click", onClick);
     return b;
   }
+  function tag(text, kind) { return el("span", "tag" + (kind ? " " + kind : ""), text); }
 
-  // the orders this phone sent from this table, kept only in this browser (no account): names only
-  var store = {
-    key: "rk-order:" + base,
-    read: function () {
-      try { var v = JSON.parse(localStorage.getItem(this.key) || "[]"); return Array.isArray(v) ? v.slice(-10) : []; } catch (e) { return []; }
-    },
-    write: function (names) {
-      try { localStorage.setItem(this.key, JSON.stringify(names.slice(-10))); } catch (e) { /* private mode: status lasts this visit */ }
-    }
-  };
+  // what this phone keeps, only in this browser (no account): its order names, and the basket across a reload
+  function keep(key, fallback) {
+    return {
+      read: function () { try { var v = JSON.parse(localStorage.getItem(key) || "null"); return v == null ? fallback : v; } catch (e) { return fallback; } },
+      write: function (v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* private mode: lasts this visit */ } }
+    };
+  }
+  var mineStore = keep("rk-order:" + base, []);
+  var basketStore = keep("rk-basket:" + base, []);
 
-  var state = { data: null, basket: {}, notes: {}, view: "menu", guest: "", note: "", sending: false, error: "", mine: store.read(), orders: [], timer: null };
+  var S = { data: null, basket: basketStore.read(), view: "menu", guest: "", note: "", sending: false, error: "",
+    mine: mineStore.read().slice(-10), estimate: null, sheet: null, notice: "", timer: null, sendKey: "" };
   var fmt;
   function money(v) {
     var n = Number(v);
     if (!isFinite(n)) return "";
     try { return fmt.format(n); } catch (e) { return "Rp " + n.toLocaleString("id-ID"); }
   }
-
   function menuIndex() {
     var idx = {};
-    (state.data.menu || []).forEach(function (m) { idx[m.name] = m; });
+    (S.data.menu || []).forEach(function (m) { idx[m.name] = m; });
     return idx;
+  }
+  function optionIndex() {
+    var idx = {}, groups = S.data.options || {};
+    Object.keys(groups).forEach(function (g) { groups[g].options.forEach(function (o) { idx[o.name] = { o: o, g: g }; }); });
+    return idx;
+  }
+  function lineTitle(l) {
+    var oi = optionIndex();
+    var labels = (l.options || []).map(function (id) { return oi[id] ? oi[id].o.title : ""; }).filter(Boolean);
+    return labels.join(", ");
+  }
+  function linePrice(l) {
+    var m = menuIndex()[l.item], oi = optionIndex();
+    if (!m) return 0;
+    var extra = (l.options || []).reduce(function (s, id) { return s + (oi[id] ? Number(oi[id].o.price || 0) : 0); }, 0);
+    return (Number(m.price || 0) + extra) * l.qty;
   }
   function basketLines() {
     var idx = menuIndex();
-    return Object.keys(state.basket).filter(function (k) { return state.basket[k] > 0 && idx[k]; })
-      .map(function (k) { return { item: idx[k], qty: state.basket[k], note: state.notes[k] || "" }; });
+    return S.basket.filter(function (l) { return l.qty > 0 && idx[l.item]; });
   }
-  function basketTotal() {
-    return basketLines().reduce(function (s, l) { return s + Number(l.item.price || 0) * l.qty; }, 0);
-  }
-  function basketCount() {
-    return basketLines().reduce(function (s, l) { return s + l.qty; }, 0);
-  }
-  function setQty(name, q) {
-    var lim = state.data.limits || {};
-    q = Math.max(0, Math.min(lim.qty || 50, q));
-    if (q > 0 && !state.basket[name] && basketLines().length >= (lim.lines || 30)) return;
-    if (q === 0) { delete state.basket[name]; delete state.notes[name]; } else state.basket[name] = q;
-    render();
-  }
-
-  function stepper(name, qty, title) {
-    var s = el("div", "stepper");
-    add(s,
-      button("step", "−", function () { setQty(name, qty - 1); }, "Kurangi " + title),
-      el("span", "qty", qty),
-      button("step", "+", function () { setQty(name, qty + 1); }, "Tambah " + title));
-    return s;
-  }
+  function basketCount() { return basketLines().reduce(function (s, l) { return s + l.qty; }, 0); }
+  function saveBasket() { basketStore.write(S.basket); S.estimate = null; S.sendKey = ""; }
+  function sameLine(a, b) { return a.item === b.item && a.note === b.note && !!a.later === !!b.later && (a.options || []).join() === (b.options || []).join(); }
 
   function header() {
-    var d = state.data, org = d.org || {};
-    var h = el("header", "seller");
+    var d = S.data, org = d.org || {};
     var name = d.anchor.outlet || org.name || org.legal_name || "";
+    var h = el("header", "seller");
     var mark = el("div", "seller-mark", (name || "?").trim().charAt(0).toUpperCase());
     mark.setAttribute("aria-hidden", "true");
-    var names = el("div");
-    add(names, el("div", "seller-name", name), el("div", "seller-sub", "Meja " + d.anchor.title));
-    return add(h, mark, names);
+    var sess = d.session;
+    var rounds = sess && sess.rounds ? sess.rounds.filter(function (r) { return !r.kind || r.kind === "order"; }).length : 0;
+    var sub = "Meja " + d.anchor.title + (rounds ? " · " + rounds + " pesanan" : "");
+    add(h, mark, add(el("div", "grow"), el("div", "seller-name", name), el("div", "seller-sub", sub)));
+    if (S.view === "menu" && sess) h.appendChild(button("pill", "Tagihan meja", function () { go("table"); }));
+    if (S.view !== "menu") h.appendChild(button("pill", "Menu", function () { go("menu"); }));
+    return h;
+  }
+  function go(v) { S.view = v; S.error = ""; render(); window.scrollTo(0, 0); }
+
+  function renderIntro() {
+    if (S.data.session || S.mine.length) return;
+    var c = el("section", "card intro");
+    add(c, el("h1", null, "Pesan dari meja " + S.data.anchor.title),
+      el("p", null, "Pilih menu lalu kirim dari HP. Pesanan pertama dicek kasir dulu untuk membuka meja; setelah itu tambahan pesanan langsung ke dapur. Teman semeja bisa scan QR yang sama, semua masuk satu tagihan. Bayar di kasir."));
+    root.appendChild(c);
   }
 
   function groups() {
     var out = [], seen = {};
-    (state.data.menu || []).forEach(function (m) {
+    (S.data.menu || []).forEach(function (m) {
       var g = m.group || "Menu";
       if (!seen[g]) { seen[g] = { title: g, rows: [] }; out.push(seen[g]); }
       seen[g].rows.push(m);
     });
     return out;
   }
-
   function renderMenu() {
     var gs = groups();
     if (gs.length > 1) {
@@ -122,12 +130,10 @@
       sec.appendChild(el("h2", null, g.title));
       g.rows.forEach(function (m) {
         var row = el("div", "menu-row" + (m.sold_out ? " sold" : ""));
-        var info = el("div", "menu-info");
-        add(info, el("div", "menu-title", m.title), el("div", "menu-price", m.sold_out ? "Habis" : money(m.price)));
-        row.appendChild(info);
-        var q = state.basket[m.name] || 0;
+        add(row, add(el("div", "menu-info"), el("div", "menu-title", m.title), el("div", "menu-price", m.sold_out ? "Habis hari ini" : money(m.price))));
+        var inCart = S.basket.filter(function (l) { return l.item === m.name; }).reduce(function (s, l) { return s + l.qty; }, 0);
         if (!m.sold_out) {
-          row.appendChild(q > 0 ? stepper(m.name, q, m.title) : button("add", "Tambah", function () { setQty(m.name, 1); }, "Tambah " + m.title));
+          row.appendChild(inCart ? button("add", inCart + " di keranjang", function () { openSheet(m); }) : button("add", "Tambah", function () { openSheet(m); }, "Tambah " + m.title));
         }
         sec.appendChild(row);
       });
@@ -135,156 +141,299 @@
     });
   }
 
-  function textInput(label, value, max, onInput, placeholder) {
+  // the option sheet: required groups as radio, others as checkboxes up to max; Tambah waits for every required group
+  function openSheet(m) {
+    var hasGroups = (m.groups || []).some(function (g) { return S.data.options && S.data.options[g] && S.data.options[g].options.length; });
+    if (!hasGroups && !S.data.fields.line_note) { addLine({ item: m.name, qty: 1, options: [], note: "", later: false }); return; }
+    S.sheet = { m: m, picked: {}, qty: 1, note: "" };
+    render();
+  }
+  function addLine(l) {
+    var same = S.basket.filter(function (x) { return sameLine(x, l); })[0];
+    if (same) same.qty = Math.min(S.data.limits.qty || 50, same.qty + l.qty);
+    else if (basketLines().length < (S.data.limits.lines || 30)) S.basket.push(l);
+    saveBasket();
+    S.sheet = null;
+    S.notice = l.qty + "× " + menuIndex()[l.item].title + " masuk keranjang";
+    render();
+  }
+  function renderSheet() {
+    var sh = S.sheet, m = sh.m, opts = S.data.options || {};
+    var scrim = el("div", "scrim");
+    scrim.addEventListener("click", function (e) { if (e.target === scrim) { S.sheet = null; render(); } });
+    var body = el("div", "sheet");
+    body.setAttribute("role", "dialog");
+    body.setAttribute("aria-label", m.title);
+    add(body, el("h2", "sheet-title", m.title), el("div", "menu-price", money(m.price)));
+    var missing = false, extra = 0;
+    (m.groups || []).forEach(function (gid) {
+      var g = opts[gid];
+      if (!g || !g.options.length) return;
+      var picked = sh.picked[gid] || [];
+      if (g.required && !picked.length) missing = true;
+      var head = el("div", "group-head");
+      add(head, el("span", "group-title", g.title), el("span", "hint", g.required ? "Wajib, pilih 1" : (g.multi ? (g.max ? "Boleh sampai " + g.max : "Boleh lebih dari 1") : "Boleh pilih 1")));
+      body.appendChild(head);
+      g.options.forEach(function (o) {
+        var on = picked.indexOf(o.name) >= 0;
+        if (on) extra += Number(o.price || 0);
+        var single = !g.multi;
+        var row = button("opt" + (on ? " on" : ""), "", function () {
+          var cur = (sh.picked[gid] || []).slice();
+          if (single) cur = on && !g.required ? [] : [o.name];
+          else if (on) cur.splice(cur.indexOf(o.name), 1);
+          else if (!g.max || cur.length < g.max) cur.push(o.name);
+          sh.picked[gid] = cur;
+          render();
+        });
+        row.setAttribute("role", single ? "radio" : "checkbox");
+        row.setAttribute("aria-checked", on ? "true" : "false");
+        add(row, el("span", single ? "radio" : "check"), el("span", "grow", o.title), Number(o.price) ? el("span", "menu-price", "+" + money(o.price)) : null);
+        body.appendChild(row);
+      });
+    });
+    if (S.data.fields.line_note) {
+      var wrap = el("label", "field");
+      var inp = el("input"); inp.type = "text"; inp.maxLength = S.data.limits.note || 140; inp.value = sh.note; inp.placeholder = "Misalnya tanpa bawang goreng";
+      inp.addEventListener("input", function () { sh.note = inp.value; });
+      add(wrap, el("span", "field-label", "Catatan untuk dapur (boleh kosong)"), inp);
+      body.appendChild(wrap);
+    }
+    var foot = el("div", "sheet-foot");
+    var st = el("div", "stepper");
+    add(st, button("step", "−", function () { sh.qty = Math.max(1, sh.qty - 1); render(); }, "Kurangi"), el("span", "qty", sh.qty),
+      button("step", "+", function () { sh.qty = Math.min(S.data.limits.qty || 50, sh.qty + 1); render(); }, "Tambah"));
+    var ok = button("button grow", (missing ? "Pilih yang wajib dulu" : "Tambah · " + money((Number(m.price || 0) + extra) * sh.qty)), function () {
+      if (missing) return;
+      var chosen = [];
+      Object.keys(sh.picked).forEach(function (g) { chosen = chosen.concat(sh.picked[g]); });
+      addLine({ item: m.name, qty: sh.qty, options: chosen.sort(), note: sh.note.trim(), later: false });
+    });
+    ok.disabled = missing;
+    add(foot, st, ok);
+    body.appendChild(foot);
+    scrim.appendChild(body);
+    return scrim;
+  }
+
+  function estimate() {
+    var lines = basketLines();
+    if (!lines.length || !S.data.fields.estimate || S.estimate) return;
+    S.estimate = "loading";
+    post("/estimate", body()).then(function (r) {
+      S.estimate = r.ok ? r.body.estimate : null;
+      if (!r.ok && r.body.error) S.error = r.body.error.message;
+      if (S.view === "basket") render();
+    }, function () { S.estimate = null; });
+  }
+  function body() {
+    return { lines: basketLines().map(function (l) { return { item: l.item, qty: l.qty, note: l.note, later: !!l.later, options: l.options || [] }; }),
+      guest: S.guest, note: S.note };
+  }
+
+  function renderBasket() {
+    var lines = basketLines(), f = S.data.fields, lim = S.data.limits;
+    var sec = el("section", "card basket");
+    var head = el("div", "basket-head");
+    add(head, el("h2", null, "Keranjang kamu"), button("link", "Tambah menu", function () { go("menu"); }));
+    sec.appendChild(head);
+    lines.forEach(function (l) {
+      var m = menuIndex()[l.item];
+      var row = el("div", "basket-row");
+      var top = el("div", "basket-top");
+      var info = el("div", "menu-info");
+      var sub = [lineTitle(l), l.note].filter(Boolean).join(" · ");
+      add(info, el("div", "menu-title", m.title), sub ? el("div", "hint", sub) : null, el("div", "menu-price", money(linePrice(l))));
+      var st = el("div", "stepper");
+      add(st, button("step", "−", function () { l.qty -= 1; if (l.qty <= 0) S.basket.splice(S.basket.indexOf(l), 1); saveBasket(); render(); }, "Kurangi " + m.title),
+        el("span", "qty", l.qty), button("step", "+", function () { l.qty = Math.min(lim.qty || 50, l.qty + 1); saveBasket(); render(); }, "Tambah " + m.title));
+      add(top, info, st);
+      row.appendChild(top);
+      if (f.later) {
+        var later = el("div", "later");
+        if (l.later) add(later, tag("Antar nanti", "warn"), button("link small", "Antar begitu siap", function () { l.later = false; saveBasket(); render(); }));
+        else later.appendChild(button("link small muted", "Antar nanti?", function () { l.later = true; saveBasket(); render(); }));
+        row.appendChild(later);
+      }
+      sec.appendChild(row);
+    });
+    root.appendChild(sec);
+    if (f.later) root.appendChild(el("p", "hint pad", "Menu bertanda \"Antar nanti\" ditahan dulu. Tekan \"Minta diantar\" di tagihan meja kalau sudah siap."));
+
+    var who = el("section", "card");
+    if (f.guest) who.appendChild(field("Nama kamu (boleh kosong)", S.guest, lim.guest || 40, function (v) { S.guest = v; }, "Supaya pelayan tahu pesanan siapa"));
+    if (f.note) who.appendChild(field("Catatan untuk kasir (boleh kosong)", S.note, lim.note || 140, function (v) { S.note = v; }));
+    var sum = el("div", "sums");
+    if (Array.isArray(S.estimate)) {
+      S.estimate.forEach(function (x, i) {
+        var last = i === S.estimate.length - 1;
+        if (!last && i > 0 && !Number(x.value)) return; // no service or tax at this outlet: no Rp 0 line
+        add(sum, add(el("div", "sum" + (last ? " total" : "")), el("span", null, last ? "Perkiraan" : x.label), el("strong", null, money(x.value))));
+      });
+    } else sum.appendChild(el("div", "hint", S.estimate === "loading" ? "Menghitung perkiraan…" : ""));
+    who.appendChild(sum);
+    who.appendChild(el("p", "hint", "Dihitung dari harga dan tarif outlet ini. Bayar di kasir setelah selesai."));
+    if (S.error) who.appendChild(el("p", "error", S.error));
+    root.appendChild(who);
+    estimate();
+  }
+  function field(label, value, max, onInput, placeholder) {
     var wrap = el("label", "field");
     var inp = el("input");
-    inp.type = "text";
-    inp.maxLength = max;
-    inp.value = value;
-    inp.autocomplete = "off";
+    inp.type = "text"; inp.maxLength = max; inp.value = value; inp.autocomplete = "off";
     if (placeholder) inp.placeholder = placeholder;
     inp.addEventListener("input", function () { onInput(inp.value); });
     add(wrap, el("span", "field-label", label), inp);
     return wrap;
   }
 
-  function renderBasket() {
-    var lines = basketLines(), lim = state.data.limits || {}, f = state.data.fields || {};
-    var sec = el("section", "card basket");
-    var head = el("div", "basket-head");
-    add(head, el("h2", null, "Pesananmu"), button("link", "Tambah menu", function () { state.view = "menu"; render(); }));
-    sec.appendChild(head);
-    lines.forEach(function (l) {
-      var row = el("div", "basket-row");
-      var top = el("div", "basket-top");
-      var info = el("div", "menu-info");
-      add(info, el("div", "menu-title", l.item.title), el("div", "menu-price", money(Number(l.item.price || 0) * l.qty)));
-      add(top, info, stepper(l.item.name, l.qty, l.item.title));
-      row.appendChild(top);
-      if (f.line_note) {
-        row.appendChild(textInput("Catatan", l.note, lim.note || 140, function (v) { state.notes[l.item.name] = v; }, "Misalnya kurang manis, tanpa es"));
-      }
-      sec.appendChild(row);
-    });
-    root.appendChild(sec);
-
-    var who = el("section", "card");
-    if (f.guest) who.appendChild(textInput("Nama kamu (boleh kosong)", state.guest, lim.guest || 40, function (v) { state.guest = v; }, "Supaya mudah dipanggil"));
-    if (f.note) who.appendChild(textInput("Catatan untuk kasir (boleh kosong)", state.note, lim.note || 140, function (v) { state.note = v; }));
-    var est = el("div", "estimate");
-    add(est, el("span", null, "Perkiraan"), el("strong", null, money(basketTotal())));
-    who.appendChild(est);
-    who.appendChild(el("p", "hint", "Biaya layanan dan pajak dihitung di kasir. Bayar di kasir setelah selesai makan."));
-    if (state.error) who.appendChild(el("p", "error", state.error));
-    var send = button("button", state.sending ? "Mengirim…" : "Kirim pesanan", sendOrder);
-    send.disabled = state.sending || !lines.length;
-    who.appendChild(add(el("div", "actions"), send));
-    root.appendChild(who);
-  }
-
-  function renderOrders() {
-    if (!state.orders.length) return;
-    var sec = el("section", "card orders");
-    sec.appendChild(el("h2", null, "Pesanan meja ini dari HP kamu"));
-    state.orders.slice().reverse().forEach(function (o) {
-      var row = el("div", "order");
-      var top = el("div", "order-top");
-      add(top, el("strong", null, o.name), el("span", "state " + stateClass(o), o.label));
-      row.appendChild(top);
-      row.appendChild(el("div", "order-lines", (o.lines || []).map(function (l) { return l.qty + "× " + l.title; }).join(", ")));
+  var LINE_STATE = { new: ["Menunggu kasir", "warn"], accepted: ["Diterima", ""], cooking: ["Sedang disiapkan", "info"], ready: ["Siap diantar", "ok"],
+    served: ["Sudah diantar", ""], rejected: ["Ditolak kasir", "bad"], cancelled: ["Dibatalkan", ""], done: ["Sudah ditangani", ""] };
+  function renderTable() {
+    var sess = S.data.session;
+    var acts = el("div", "actions2");
+    var reqs = S.data.requests || [];
+    if (reqs.indexOf("call") >= 0) acts.appendChild(button("button soft", "Panggil pelayan", function () { request("call"); }));
+    if (reqs.indexOf("bill") >= 0 && sess) acts.appendChild(button("button soft", "Minta tagihan", function () { request("bill"); }));
+    if (acts.childNodes.length) root.appendChild(acts);
+    if (S.notice) root.appendChild(el("p", "notice", S.notice));
+    if (sess) {
+      var t = el("section", "card");
+      t.appendChild(el("h2", null, "Tagihan meja " + S.data.anchor.title));
+      (sess.totals || []).forEach(function (x, i) {
+        if (!Number(x.value) && i !== sess.totals.length - 1) return;
+        var last = i === sess.totals.length - 1;
+        add(t, add(el("div", "sum" + (last ? " total" : "")), el("span", null, last ? "Total sementara" : x.label), el("strong", null, money(x.value))));
+      });
+      t.appendChild(el("p", "hint", "Angka dari kasir. Bayar di kasir; tagihan bisa dibagi di sana."));
+      root.appendChild(t);
+    }
+    var rounds = sess ? sess.rounds.slice() : [];
+    S.orders.forEach(function (o) { if (!rounds.some(function (r) { return r.name === o.name; })) rounds.push(o); });
+    rounds.slice().reverse().forEach(function (o, n) {
+      if (o.kind && o.kind !== "order") return;
+      var c = el("section", "card");
+      var st = LINE_STATE[o.status] || [o.label, ""];
+      var head = el("div", "round-head");
+      var at = new Date(o.created_at), hhmm = isNaN(at.getTime()) ? "" : " · " + ("0" + at.getHours()).slice(-2) + "." + ("0" + at.getMinutes()).slice(-2);
+      add(head, el("h2", null, "Pesanan" + (o.guest ? " · " + o.guest : "") + ((o.mine || S.mine.indexOf(o.name) >= 0) ? " (kamu)" : "") + hhmm), tag(o.label || st[0], st[1]));
+      c.appendChild(head);
+      var held = false;
+      (o.lines || []).forEach(function (l) {
+        var row = el("div", "line");
+        var sub = [(l.options || []).join(", "), l.note].filter(Boolean).join(" · ");
+        add(row, add(el("div", "grow"), el("div", "menu-title", l.qty + "× " + l.title), sub ? el("div", "hint", sub) : null,
+          l.later && o.status !== "new" && o.status !== "rejected" && o.status !== "cancelled" ? tag("Ditahan sampai diminta", "warn") : null));
+        if (l.later) held = true;
+        c.appendChild(row);
+      });
       var age = Date.now() - new Date(o.created_at).getTime();
-      if (o.open && age > LATE_MS) row.appendChild(el("p", "hint", "Belum diterima kasir? Panggil pelayan."));
-      if (o.can_cancel) row.appendChild(button("link", "Batalkan pesanan ini", function () { cancelOrder(o.name); }));
-      sec.appendChild(row);
+      if (o.open && age > LATE_MS) c.appendChild(el("p", "hint", "Belum diterima kasir? Panggil pelayan."));
+      if (o.can_cancel) c.appendChild(button("link", "Batalkan pesanan ini", function () { cancelOrder(o.name); }));
+      if (held && reqs.indexOf("fire") >= 0 && S.mine.indexOf(o.name) >= 0 && !o.open && o.status !== "rejected" && o.status !== "cancelled") {
+        c.appendChild(button("button soft", "Minta diantar", function () { request("fire", o.name); }));
+      }
+      root.appendChild(c);
     });
-    root.appendChild(sec);
-  }
-  function stateClass(o) {
-    if (o.cancelled || o.status === "rejected") return "cancelled";
-    if (o.open) return "open";
-    return "paid";
+    if (!rounds.length) root.appendChild(add(el("section", "card empty"), el("p", null, "Belum ada pesanan dari meja ini.")));
   }
 
   function render() {
     var y = window.scrollY;
     root.textContent = "";
     root.appendChild(header());
-    renderOrders();
-    if (state.view === "basket" && basketLines().length) renderBasket();
-    else { state.view = "menu"; renderMenu(); }
-    var count = basketCount();
+    if (S.view === "basket" && basketLines().length) renderBasket();
+    else if (S.view === "table") renderTable();
+    else { S.view = "menu"; renderIntro(); if (S.notice && !S.sheet) root.appendChild(el("p", "notice", S.notice)); renderMenu(); }
     var bar = document.getElementById("order-bar");
     if (bar) bar.parentNode.removeChild(bar);
-    if (state.view === "menu" && count > 0) {
-      bar = el("div", "order-bar");
-      bar.id = "order-bar";
-      var b = button("bar-button", "", function () { state.view = "basket"; state.error = ""; render(); window.scrollTo(0, 0); });
-      add(b, el("span", null, count + " menu · " + money(basketTotal())), el("span", null, "Lihat pesanan"));
+    var count = basketCount();
+    bar = el("div", "order-bar");
+    bar.id = "order-bar";
+    if (S.view === "menu" && count > 0) {
+      var b = button("bar-button", "", function () { go("basket"); });
+      var total = basketLines().reduce(function (s, l) { return s + linePrice(l); }, 0);
+      add(b, el("span", null, count + " menu · " + money(total)), el("span", null, "Lihat keranjang"));
       bar.appendChild(b);
-      document.body.appendChild(bar);
-      root.classList.add("with-bar");
-    } else root.classList.remove("with-bar");
+    } else if (S.view === "basket") {
+      var send = button("bar-button", "", sendOrder);
+      add(send, el("span", null, S.sending ? "Mengirim…" : "Kirim pesanan"), el("span", null, count + " menu"));
+      send.disabled = S.sending || !count;
+      bar.appendChild(send);
+    } else if (S.view === "table") {
+      var more = button("bar-button", "", function () { go("menu"); });
+      add(more, el("span", null, "Tambah pesanan"), el("span", null, "Menu"));
+      bar.appendChild(more);
+    }
+    if (bar.childNodes.length) { document.body.appendChild(bar); root.classList.add("with-bar"); } else root.classList.remove("with-bar");
+    if (S.sheet) root.appendChild(renderSheet());
     window.scrollTo(0, y);
   }
 
-  function post(path, body) {
-    return fetch(base + path, { method: "POST", credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
-      .then(function (res) {
-        return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, status: res.status, body: b }; });
-      });
+  function post(path, b, key) {
+    var headers = { "Content-Type": "application/json" };
+    if (key) headers["Idempotency-Key"] = key;
+    return fetch(base + path, { method: "POST", credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", headers: headers, body: JSON.stringify(b || {}) })
+      .then(function (res) { return res.json().catch(function () { return {}; }).then(function (x) { return { ok: res.ok, status: res.status, body: x }; }); });
   }
-
+  function remember(o) {
+    S.mine.push(o.name);
+    S.mine = S.mine.slice(-10);
+    mineStore.write(S.mine);
+  }
   function sendOrder() {
-    if (state.sending) return;
-    state.sending = true; state.error = ""; render();
-    var body = { lines: basketLines().map(function (l) { return { item: l.item.name, qty: l.qty, note: l.note }; }), guest: state.guest, note: state.note };
-    post("/order", body).then(function (r) {
-      state.sending = false;
+    if (S.sending) return;
+    S.sending = true; S.error = ""; render();
+    post("/order", body()).then(function (r) {
+      S.sending = false;
       if (!r.ok) {
-        state.error = (r.status === 429 ? "Tunggu sebentar sebelum mengirim lagi." : (r.body.error && r.body.error.message)) || "Pesanan belum terkirim. Coba lagi.";
-        if (r.body.error && /^order_item_/.test(r.body.error.code)) load();
+        S.error = (r.status === 429 ? "Tunggu sebentar sebelum mengirim lagi." : (r.body.error && r.body.error.message)) || "Pesanan belum terkirim. Coba lagi.";
+        if (r.body.error && /^order_(item|option)_/.test(r.body.error.code)) poll();
         render();
         return;
       }
-      state.basket = {}; state.notes = {}; state.note = ""; state.view = "menu";
-      state.mine.push(r.body.order.name);
-      store.write(state.mine);
-      state.orders.push(r.body.order);
-      render();
-      window.scrollTo(0, 0);
-    }, function () { state.sending = false; state.error = "Koneksi terputus. Periksa internet lalu kirim lagi."; render(); });
+      S.basket = []; saveBasket(); S.note = "";
+      remember(r.body.order);
+      S.notice = r.body.order.status === "new" ? "Terkirim. Kasir mengecek pesanan pertama meja ini." : "Terkirim, langsung ke dapur.";
+      S.orders.push(r.body.order);
+      go("table");
+      poll();
+    }, function () { S.sending = false; S.error = "Koneksi terputus. Keranjang tetap tersimpan; kirim lagi setelah internet kembali."; render(); });
   }
-
+  function request(kind, about) {
+    post("/request", { kind: kind, about: about || "", guest: S.guest }).then(function (r) {
+      if (r.ok) { remember(r.body.order); S.notice = { call: "Pelayan dipanggil ke meja " + S.data.anchor.title + ".", bill: "Permintaan tagihan sampai ke kasir.", fire: "Permintaan antar sampai ke kasir." }[kind]; }
+      else S.notice = (r.status === 429 ? "Tunggu sebentar ya." : (r.body.error && r.body.error.message)) || "Belum terkirim. Coba lagi.";
+      render();
+    }, function () { S.notice = "Koneksi terputus. Coba lagi atau panggil pelayan langsung."; render(); });
+  }
   function cancelOrder(name) {
     post("/order/" + encodeURIComponent(name) + "/cancel").then(function (r) {
-      if (!r.ok) state.error = (r.body.error && r.body.error.message) || "";
+      if (!r.ok) S.notice = (r.body.error && r.body.error.message) || "";
       poll();
     });
   }
-
   function poll() {
-    fetch(base + "/data?mine=" + encodeURIComponent(state.mine.join(",")), { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
+    fetch(base + "/data?mine=" + encodeURIComponent(S.mine.join(",")), { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (d) {
         if (!d) return;
-        state.data.menu = d.menu;
-        state.orders = d.orders || [];
-        if (document.activeElement && document.activeElement.tagName === "INPUT") return; // never steal the keyboard
+        S.data = d;
+        S.orders = d.orders || [];
+        if (S.sheet || (document.activeElement && document.activeElement.tagName === "INPUT")) return; // never steal the keyboard
         render();
       }, function () { /* offline: keep what is shown, try again on the next tick */ });
   }
 
-  function load() { poll(); }
-
   window.RKOrderPage = function (d) {
-    state.data = d;
+    S.data = d;
+    S.orders = d.orders || [];
     fmt = new Intl.NumberFormat("id-ID", { style: "currency", currency: d.currency || "IDR", maximumFractionDigits: (d.currency || "IDR") === "IDR" ? 0 : 2 });
-    state.orders = d.orders || [];
     document.title = "Pesan · Meja " + d.anchor.title;
+    if (/#meja$/.test(location.hash)) S.view = "table";
     render();
-    if (state.timer) clearInterval(state.timer);
-    state.timer = setInterval(function () { if (state.mine.length && !document.hidden) poll(); }, POLL_MS);
+    if (S.timer) clearInterval(S.timer);
+    S.timer = setInterval(function () { if (!document.hidden && (S.mine.length || S.view === "table")) poll(); }, POLL_MS);
   };
-  window.RKOrderMine = function () { return store.read().join(","); };
+  window.RKOrderMine = function () { return mineStore.read().join(","); };
 })();

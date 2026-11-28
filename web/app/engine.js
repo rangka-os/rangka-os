@@ -251,10 +251,11 @@
       return rec[n];
     };
   }
-  /* a child row's parent: the document's fields (not its tables) as its own expressions see them (links resolved) */
+  /* a child row's parent: the document's fields as its own expressions see them (links resolved, a table as its rows;
+     a table declared before the row's own one is computed already, as in the kernel's scope.compute) */
   function docVars(m, rec) {
     var sc = scopeFor(m, rec), out = { name: rec.name, docstatus: rec.docstatus };
-    model(m).fields.forEach(function (f) { if (f.type !== "table") out[f.name] = sc(f.name); });
+    model(m).fields.forEach(function (f) { out[f.name] = sc(f.name); });
     return out;
   }
   /* typed: as the kernel's applyDefaults (the value kept as the field's type keeps it; a link default stores the name) */

@@ -303,9 +303,40 @@
     {
      "name": "active",
      "type": "check"
+    },
+    {
+     "name": "option_groups",
+     "of": "item_option_group_row",
+     "type": "table"
     }
    ],
    "name": "item"
+  },
+  "item_option": {
+   "fields": [
+    {
+     "name": "group",
+     "to": "item_option_group",
+     "type": "link"
+    },
+    {
+     "name": "label",
+     "type": "data"
+    },
+    {
+     "name": "price_delta",
+     "type": "currency"
+    },
+    {
+     "name": "sort",
+     "type": "int"
+    },
+    {
+     "name": "active",
+     "type": "check"
+    }
+   ],
+   "name": "item_option"
   },
   "loyalty_account": {
    "fields": [
@@ -734,6 +765,11 @@
      "type": "select"
     },
     {
+     "name": "options",
+     "of": "pos_sale_option",
+     "type": "table"
+    },
+    {
      "name": "items",
      "of": "pos_sale_item",
      "type": "table"
@@ -1000,7 +1036,12 @@
      "type": "float"
     },
     {
-     "compute": "packing == '' ? item.rate : (packing.rate \u003e 0 ? packing.rate : round(item.rate * packing.factor))",
+     "compute": "line_key == '' ? 0 : parent.options.map(o, o.line == line_key ? o.price_delta : 0).sum()",
+     "name": "option_delta",
+     "type": "currency"
+    },
+    {
+     "compute": "(packing == '' ? item.rate : (packing.rate \u003e 0 ? packing.rate : round(item.rate * packing.factor))) + option_delta",
      "name": "rate",
      "type": "currency"
     },
@@ -1085,6 +1126,31 @@
    ],
    "is_child": true,
    "name": "pos_sale_item"
+  },
+  "pos_sale_option": {
+   "fields": [
+    {
+     "name": "line",
+     "type": "data"
+    },
+    {
+     "name": "option",
+     "to": "item_option",
+     "type": "link"
+    },
+    {
+     "compute": "option.label",
+     "name": "label",
+     "type": "data"
+    },
+    {
+     "compute": "option.price_delta",
+     "name": "price_delta",
+     "type": "currency"
+    }
+   ],
+   "is_child": true,
+   "name": "pos_sale_option"
   },
   "pos_shift": {
    "fields": [
@@ -1445,6 +1511,18 @@
     "stock_uom": "Porsi"
    }
   ],
+  "item_option": [
+   {
+    "label": "Extra shot",
+    "name": "OPT-SHOT",
+    "price_delta": 6000
+   },
+   {
+    "label": "Susu oat",
+    "name": "OPT-OAT",
+    "price_delta": 7000
+   }
+  ],
   "loyalty_account": [
    {
     "active": true,
@@ -1692,6 +1770,7 @@
       "amount": 36000,
       "category": "MINUMAN",
       "gross": 36000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -1712,6 +1791,7 @@
       "amount": 3333,
       "category": "MINUMAN",
       "gross": 3333,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -1795,6 +1875,7 @@
       "amount": 45900,
       "category": "MINUMAN",
       "gross": 54000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -1815,6 +1896,7 @@
       "amount": 5000,
       "category": "MINUMAN",
       "gross": 5000,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -1903,6 +1985,7 @@
       "amount": 79992,
       "category": "MINUMAN",
       "gross": 79992,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -1923,6 +2006,7 @@
       "amount": 60000,
       "category": "MINUMAN",
       "gross": 72000,
+      "option_delta": 0,
       "packing_item": "SUSU",
       "promo_buy": 0,
       "promo_discount": 12000,
@@ -1943,6 +2027,7 @@
       "amount": 129375,
       "category": "SEMBAKO",
       "gross": 129375,
+      "option_delta": 0,
       "packing_item": "GULA",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2032,6 +2117,7 @@
       "amount": 19200,
       "category": "MINUMAN",
       "gross": 24000,
+      "option_delta": 0,
       "packing_item": "TEH",
       "promo_buy": 0,
       "promo_discount": 4800,
@@ -2052,6 +2138,7 @@
       "amount": 5000,
       "category": "MAKANAN",
       "gross": 30000,
+      "option_delta": 0,
       "packing_item": "ROTI",
       "promo_buy": 0,
       "promo_discount": 25000,
@@ -2072,6 +2159,7 @@
       "amount": 90000,
       "category": "MAKANAN",
       "gross": 126000,
+      "option_delta": 0,
       "packing_item": "DONAT",
       "promo_buy": 2,
       "promo_discount": 36000,
@@ -2092,6 +2180,7 @@
       "amount": 27500,
       "category": "MINUMAN",
       "gross": 32500,
+      "option_delta": 0,
       "packing_item": "SUSU",
       "promo_buy": 0,
       "promo_discount": 5000,
@@ -2170,6 +2259,7 @@
       "amount": 180000,
       "category": "MINUMAN",
       "gross": 180000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2248,6 +2338,7 @@
       "amount": 36000,
       "category": "MINUMAN",
       "gross": 36000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2331,6 +2422,7 @@
       "amount": 18000,
       "category": "MINUMAN",
       "gross": 18000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2351,6 +2443,7 @@
       "amount": 3333,
       "category": "MINUMAN",
       "gross": 3333,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2430,6 +2523,7 @@
       "amount": 18000,
       "category": "MINUMAN",
       "gross": 18000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2508,6 +2602,7 @@
       "amount": 108000,
       "category": "MINUMAN",
       "gross": 108000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2586,6 +2681,7 @@
       "amount": 18000,
       "category": "MINUMAN",
       "gross": 18000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2669,6 +2765,7 @@
       "amount": 54000,
       "category": "MINUMAN",
       "gross": 54000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2689,6 +2786,7 @@
       "amount": 0,
       "category": "MINUMAN",
       "gross": 8000,
+      "option_delta": 0,
       "packing_item": "TEH",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2768,6 +2866,7 @@
       "amount": 72000,
       "category": "MINUMAN",
       "gross": 72000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2847,6 +2946,7 @@
       "amount": 72000,
       "category": "MINUMAN",
       "gross": 72000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2941,6 +3041,7 @@
       "amount": 54000,
       "category": "MINUMAN",
       "gross": 54000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -2961,6 +3062,7 @@
       "amount": 12800,
       "category": "MINUMAN",
       "gross": 16000,
+      "option_delta": 0,
       "packing_item": "TEH",
       "promo_buy": 0,
       "promo_discount": 3200,
@@ -3044,6 +3146,7 @@
       "amount": 18000,
       "category": "MINUMAN",
       "gross": 18000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3123,6 +3226,7 @@
       "amount": 36000,
       "category": "MINUMAN",
       "gross": 36000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3202,6 +3306,7 @@
       "amount": 3333,
       "category": "MINUMAN",
       "gross": 3333,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3280,6 +3385,7 @@
       "amount": 3333,
       "category": "MINUMAN",
       "gross": 3333,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3358,6 +3464,7 @@
       "amount": 3333,
       "category": "MINUMAN",
       "gross": 3333,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3452,6 +3559,7 @@
       "amount": 12800,
       "category": "MINUMAN",
       "gross": 16000,
+      "option_delta": 0,
       "packing_item": "TEH",
       "promo_buy": 0,
       "promo_discount": 3200,
@@ -3472,6 +3580,7 @@
       "amount": 18000,
       "category": "MINUMAN",
       "gross": 18000,
+      "option_delta": 0,
       "packing_item": "KOPI",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3557,6 +3666,7 @@
       "amount": 1667,
       "category": "MINUMAN",
       "gross": 1667,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3577,6 +3687,7 @@
       "amount": 5558,
       "category": "MINUMAN",
       "gross": 8333,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3656,6 +3767,7 @@
       "amount": 100000,
       "category": "MAKANAN",
       "gross": 100000,
+      "option_delta": 0,
       "packing_item": "PAKET",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3735,6 +3847,7 @@
       "amount": 100000,
       "category": "MAKANAN",
       "gross": 100000,
+      "option_delta": 0,
       "packing_item": "PAKET",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3814,6 +3927,7 @@
       "amount": 100001,
       "category": "MAKANAN",
       "gross": 100001,
+      "option_delta": 0,
       "packing_item": "GANJIL",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3896,6 +4010,7 @@
       "amount": 100000,
       "category": "MAKANAN",
       "gross": 100000,
+      "option_delta": 0,
       "packing_item": "PAKET",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3916,6 +4031,7 @@
       "amount": 3333,
       "category": "MINUMAN",
       "gross": 3333,
+      "option_delta": 0,
       "packing_item": "AIR",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -3995,6 +4111,7 @@
       "amount": 100001,
       "category": "MAKANAN",
       "gross": 100001,
+      "option_delta": 0,
       "packing_item": "GANJIL",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -4083,6 +4200,7 @@
       "amount": 100000,
       "category": "MAKANAN",
       "gross": 100000,
+      "option_delta": 0,
       "packing_item": "PAKET",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -4171,6 +4289,7 @@
       "amount": 100000,
       "category": "MAKANAN",
       "gross": 100000,
+      "option_delta": 0,
       "packing_item": "PAKET",
       "promo_buy": 0,
       "promo_discount": 0,
@@ -4216,6 +4335,139 @@
     "service_charge": 0,
     "service_pct": 0,
     "subtotal": 100000,
+    "wa_number": ""
+   }
+  },
+  {
+   "name": "options priced into the line by line key (table QR, rangka-apps#119)",
+   "sale": {
+    "date": "2026-11-21",
+    "items": [
+     {
+      "item": "KOPI",
+      "line_key": "SO-1:L1",
+      "qty": 2
+     },
+     {
+      "item": "AIR",
+      "line_key": "SO-1:L2",
+      "qty": 1
+     }
+    ],
+    "options": [
+     {
+      "line": "SO-1:L1",
+      "option": "OPT-SHOT"
+     },
+     {
+      "line": "SO-1:L1",
+      "option": "OPT-OAT"
+     },
+     {
+      "line": "GONE",
+      "option": "OPT-SHOT"
+     }
+    ],
+    "shift": "SESI-BTR-K1-2611-0001"
+   },
+   "want": {
+    "amount_due": 65300,
+    "bill_promo": 0,
+    "bill_promo_offer": 0,
+    "cash_amount": 65300,
+    "cash_received": 65300,
+    "change_amount": 0,
+    "deposit_left": 0,
+    "discount_total": 0,
+    "gift_value": 0,
+    "grand_total": 65300,
+    "gross_total": 65333,
+    "items": [
+     {
+      "amount": 62000,
+      "category": "MINUMAN",
+      "gross": 62000,
+      "option_delta": 13000,
+      "packing_item": "KOPI",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 31000,
+      "stock_qty": 2,
+      "uom": "Gelas",
+      "variant_group": ""
+     },
+     {
+      "amount": 3333,
+      "category": "MINUMAN",
+      "gross": 3333,
+      "option_delta": 0,
+      "packing_item": "AIR",
+      "promo_buy": 0,
+      "promo_discount": 0,
+      "promo_get": 0,
+      "promo_kind": "",
+      "promo_name": "",
+      "promo_off": 0,
+      "promo_pct": 0,
+      "promo_slot": "",
+      "promo_until": "",
+      "promotion": "",
+      "rate": 3333,
+      "stock_qty": 1,
+      "uom": "Botol",
+      "variant_group": ""
+     }
+    ],
+    "line_promo_total": 0,
+    "manual_discount_total": 0,
+    "margin": 65300,
+    "member_discount": 0,
+    "member_discount_offer": 0,
+    "method": "cash",
+    "net_before_charges": 65333,
+    "options": [
+     {
+      "label": "Extra shot",
+      "price_delta": 6000
+     },
+     {
+      "label": "Susu oat",
+      "price_delta": 7000
+     },
+     {
+      "label": "Extra shot",
+      "price_delta": 6000
+     }
+    ],
+    "party_first_share": 65300,
+    "party_share": 65300,
+    "pbjt": 0,
+    "pbjt_pct": 0,
+    "points_cap": 0,
+    "points_discount": 0,
+    "points_earned": 0,
+    "points_left": 0,
+    "pph_final": 294,
+    "ppn_in_sales": 6471,
+    "promo_name": "",
+    "promo_shortfall": 0,
+    "promo_total": 0,
+    "qris_amount": 0,
+    "raw_total": 65333,
+    "rounding": -33,
+    "rounding_mode": "nearest",
+    "rounding_unit": 100,
+    "service_charge": 0,
+    "service_pct": 0,
+    "subtotal": 65333,
     "wa_number": ""
    }
   }

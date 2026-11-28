@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -47,6 +46,8 @@ var (
 func (s *Server) portalOrderRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /p/{org}/{page}/{token}/order", s.portalOrderCreate)
 	mux.HandleFunc("POST /p/{org}/{page}/{token}/order/{name}/cancel", s.portalOrderCancel)
+	mux.HandleFunc("POST /p/{org}/{page}/{token}/estimate", s.portalOrderEstimate)
+	mux.HandleFunc("POST /p/{org}/{page}/{token}/request", s.portalOrderRequest)
 	mux.HandleFunc("POST /api/v1/portal/{page}/qr", s.authed(s.portalQRSheet))
 }
 
@@ -90,9 +91,17 @@ func (s *Server) portalOrderData(w http.ResponseWriter, r *http.Request, hit *po
 		"menu":   menu,
 		"limits": map[string]any{"lines": portalOrderMaxLines, "qty": portalOrderMaxQty, "note": portalOrderNoteMax,
 			"guest": portalOrderGuestMax, "cancel_seconds": portalOrderCancelSecs},
-		"fields":   map[string]any{"guest": p.Guest != "", "note": p.Note != "", "line_note": p.LinesNote != ""},
+		"fields": map[string]any{"guest": p.Guest != "", "note": p.Note != "", "line_note": p.LinesNote != "", "later": p.LinesLater != "",
+			"estimate": len(p.Estimate) > 0},
+		"requests": p.ReqValues,
 		"currency": portalCurrency(reg, hit.org),
 		"orders":   s.portalMine(ctx, hit, r.URL.Query().Get("mine")),
+	}
+	if p.Opt.Model != "" {
+		out["options"] = s.portalOptionCatalog(ctx, hit)
+	}
+	if p.Sess.Model != "" {
+		out["session"] = s.portalSession(ctx, hit)
 	}
 	s.portalViewed(ctx, r, hit, "page")
 	writeJSON(w, 200, out)
@@ -120,7 +129,8 @@ func (s *Server) portalMenu(ctx context.Context, hit *portalHit) ([]any, error) 
 		return []any{}, nil
 	}
 	gf, sf := portalShown(mm, p.MenuGroup), portalShown(mm, p.MenuSoldOut)
-	rows, _, err := s.Engine.List(ctx, hit.actor, mm.Name, engine.ListOpts{Filter: p.MenuFilter, Sort: tf.Name, Limit: portalOrderMaxMenu})
+	rows, _, err := s.Engine.List(ctx, hit.actor, mm.Name, engine.ListOpts{Filter: p.MenuFilter, Sort: tf.Name, Limit: portalOrderMaxMenu,
+		Children: p.Opt.GroupsTable != ""})
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +152,9 @@ func (s *Server) portalMenu(ctx context.Context, hit *portalHit) ([]any, error) 
 		}
 		if sf != nil {
 			item["sold_out"] = row[sf.Name] == true
+		}
+		if p.Opt.GroupsTable != "" {
+			item["groups"] = portalRowLinks(row[p.Opt.GroupsTable], p.Opt.GroupsLink)
 		}
 		out = append(out, item)
 	}
@@ -236,6 +249,12 @@ func (s *Server) portalOrderView(ctx context.Context, hit *portalHit, m *meta.Mo
 		if p.LinesNote != "" {
 			line["note"] = row[p.LinesNote]
 		}
+		if p.LinesLater != "" {
+			line["later"] = row[p.LinesLater] == true
+		}
+		if p.LinesKey != "" && p.Opt.Table != "" {
+			line["options"] = s.portalLineOptions(ctx, hit, rec, fmt.Sprint(row[p.LinesKey]))
+		}
 		lines = append(lines, line)
 	}
 	cancel := false
@@ -244,8 +263,15 @@ func (s *Server) portalOrderView(ctx context.Context, hit *portalHit, m *meta.Mo
 			cancel = s.Engine.Now().Sub(at) < portalOrderCancelSecs*time.Second
 		}
 	}
-	return map[string]any{"name": rec["name"], "status": st, "label": label, "open": contains(p.StatusOpen, st),
+	view := map[string]any{"name": rec["name"], "status": st, "label": label, "open": contains(p.StatusOpen, st),
 		"cancelled": p.StatusCancel != "" && st == p.StatusCancel, "can_cancel": cancel, "lines": lines, "created_at": rec["created_at"]}
+	if p.ReqField != "" {
+		view["kind"] = rec[p.ReqField]
+	}
+	if p.Guest != "" {
+		view["guest"] = rec[p.Guest]
+	}
+	return view
 }
 
 // portalOrderBucket applies the order buckets (per link, per address); false means 429 was written.
@@ -278,62 +304,12 @@ func (s *Server) portalOrderCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	p := hit.page
 	ctx := pg.WithOrg(r.Context(), hit.org)
-	bad := func(code, msg string) { writeError(w, http.StatusBadRequest, code, msg) }
-	raw, _ := body["lines"].([]any)
-	if len(raw) == 0 {
-		bad("order_empty", "Pilih minimal satu menu.")
+	input, perr := s.portalOrderInput(ctx, hit, body)
+	if perr != nil {
+		perr.write(w, s)
 		return
 	}
-	if len(raw) > portalOrderMaxLines {
-		bad("order_too_long", fmt.Sprintf("Maksimal %d baris dalam satu pesanan.", portalOrderMaxLines))
-		return
-	}
-	menu, err := s.portalMenuIndex(ctx, hit)
-	if err != nil {
-		s.portalMiss(w, http.StatusInternalServerError, err, nil)
-		return
-	}
-	lines := make([]any, 0, len(raw))
-	for _, x := range raw {
-		l, _ := x.(map[string]any)
-		item, _ := l["item"].(string)
-		qty, isNum := l["qty"].(float64)
-		row := menu[item]
-		switch {
-		case row == nil:
-			writeError(w, http.StatusConflict, "order_item_unavailable", "Ada menu yang sudah tidak tersedia. Muat ulang menu lalu coba lagi.")
-			return
-		case row["sold_out"] == true:
-			writeError(w, http.StatusConflict, "order_item_sold_out", fmt.Sprintf("%v sedang habis.", row["title"]))
-			return
-		case !isNum || qty != math.Trunc(qty) || qty < 1 || qty > portalOrderMaxQty:
-			bad("order_qty", fmt.Sprintf("Jumlah per menu 1 sampai %d.", portalOrderMaxQty))
-			return
-		}
-		line := map[string]any{p.LinesItem: item, p.LinesQty: qty}
-		if p.LinesNote != "" {
-			note, ok := portalText(l["note"], portalOrderNoteMax)
-			if !ok {
-				bad("order_note", fmt.Sprintf("Catatan maksimal %d huruf.", portalOrderNoteMax))
-				return
-			}
-			line[p.LinesNote] = note
-		}
-		lines = append(lines, line)
-	}
-	input := map[string]any{p.AnchorField: hit.rec["name"], p.LinesField: lines}
-	for _, slot := range [][3]any{{p.Guest, "guest", portalOrderGuestMax}, {p.Note, "note", portalOrderNoteMax}} {
-		field, key, max := slot[0].(string), slot[1].(string), slot[2].(int)
-		if field == "" {
-			continue
-		}
-		v, ok := portalText(body[key], max)
-		if !ok {
-			bad("order_"+key, fmt.Sprintf("Maksimal %d huruf.", max))
-			return
-		}
-		input[field] = v
-	}
+	lines, _ := input[p.LinesField].([]any)
 	open, err := s.portalOpenOrders(ctx, hit)
 	if err != nil {
 		s.portalMiss(w, http.StatusInternalServerError, err, nil)

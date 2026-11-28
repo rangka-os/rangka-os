@@ -199,10 +199,30 @@ menu:
   price: rate
   group_by: category                  # a link shows its target's title
   sold_out: ''                        # optional check field: true shows Habis and refuses the row
-lines: {field: items, item: item, qty: qty, note: note}
+lines: {field: items, item: item, qty: qty, note: note, key: line_key, later: later}   # key: L1, L2… by the kernel
+options:                              # optional: the 0048 §1 shape, choices per line by its key
+  table: options                      # order model table of choices
+  line: line                          # its data field naming the line key
+  option: option                      # its link to the option model
+  model: item_option
+  link: group                         # option -> group
+  title: label
+  price: price_delta
+  filter: "active != false"
+  groups: {table: option_groups, link: group}   # the menu row's table of groups and its row's link
+  group: {model: item_option_group, title: group_name, required: required, multi: multi, max: max, filter: "active != false"}
 guest: guest_name                     # optional text fields of the order
 note: note
 status: {field: status, open: [new], cancel: cancelled}
+requests: {field: kind, order: order, values: [call, bill, fire], about: about}   # optional: requests to the staff
+estimate: [subtotal, service_charge, pbjt, estimate]   # optional: number fields shown before sending
+session:                              # optional: the anchor's open document every phone at the table sees
+  model: pos_sale
+  link: table                         # its link to the anchor
+  filter: "docstatus == 0 && !merged && amended_from == ''"
+  order_link: sale                    # the order field that names it (the rounds of the table)
+  lines: {field: items, title: description, qty: qty, amount: amount}
+  totals: [subtotal, discount_total, service_charge, pbjt, rounding, grand_total]
 share: [head_office]
 lifetime_days: 365                    # default 365, at most 3650: a printed QR lives until it is rotated
 ```
@@ -231,6 +251,20 @@ lifetime_days: 365                    # default 365, at most 3650: a printed QR 
   - `POST …/order/{name}/cancel`: an order of this link, still open, at most 2 minutes old: a conditional update of
     the status field to `cancel` (a staff member's write in between turns it into `409 order_not_cancellable`).
     The module's rules and flows see the link's actor (`user.email` is `portal:<link id>`).
+- **Options.** `GET …/data` adds `options` (every live group: `{title, required, multi, max, options: [{name, title,
+  price}]}`) and each menu row its `groups`. A line of `POST …/order` may carry `options: [names]` (at most 12) and
+  `later: bool`. The kernel refuses an option that is not live, not of a group the row lists, twice, a second choice of
+  a single group, more than `max`, or a required group left empty (`409 order_option_*` naming the group and the item),
+  and writes one row per choice (`line` = the line's key). Prices stay the model's.
+- **Estimate.** `POST …/estimate` takes the same body as an order and answers the `estimate` fields of the record the
+  model would compute (contract 0034 Compute: defaults, computes and rules, nothing written, no flow).
+- **Requests.** `POST …/request {kind, about?}` creates a record with the `requests.field` set to one of `values` and
+  no lines; `about` must name an order of this same link (else 404). Same buckets and open cap as orders.
+- **Session.** `GET …/data` adds `session` when the anchor has a document of `session.model` linked to it that passes
+  `filter` (the newest of at most 20): its lines (title, qty, amount as declared), its `totals` (label and value), and
+  its rounds: the orders whose `order_link` names it (at most 50, every phone of the table), each with `mine` when this
+  link made it. No session means the table is not open: the module decides what a round does then (rangka-apps: it
+  waits for the cashier). Every named field goes through §2.
 - **Abuse limits** on top of §6: per link 3 creates or cancels, then one every 20 seconds; per address 20, then one
   every 2 seconds (every guest on a restaurant's WiFi shares one address); both answer `429 rate_limited` with
   `Retry-After`. Audit: `portal.order` and `portal.order.cancel` (actor `portal:<link id>`, target `<model>/<name>`,

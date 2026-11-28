@@ -160,7 +160,7 @@ func (v *validator) portalField(path, where string, m *Model, x any) *Field {
 // portalDocumentOnly and portalOrderOnly are the slots of one page type (contract 0073 §1, §9).
 var (
 	portalDocumentOnly = []string{"customer", "amount", "due", "fields", "print", "payment"}
-	portalOrderOnly    = []string{"anchor", "menu", "guest", "note", "status"}
+	portalOrderOnly    = []string{"anchor", "menu", "guest", "note", "status", "options", "requests", "estimate", "session"}
 )
 
 // portalSlots checks that a page fills the slots of its type and none of another (portal_slot_missing,
@@ -173,7 +173,7 @@ func (v *validator) portalSlots(p *Portal) bool {
 	lines := asMap(raw["lines"])
 	unused := portalOrderOnly
 	need := []string{}
-	lineNeed, lineUnused := []string{"columns"}, []string{"item", "qty", "note"}
+	lineNeed, lineUnused := []string{"columns"}, []string{"item", "qty", "note", "key", "later"}
 	if p.Type == "order_page" {
 		unused, need = portalDocumentOnly, []string{"anchor", "menu", "lines", "status"}
 		lineNeed, lineUnused = []string{"item", "qty"}, []string{"columns"}
@@ -268,6 +268,7 @@ func (v *validator) orderPage(p *Portal, m *Model, all map[string]vis) {
 			}
 		}
 	}
+	v.orderPageMore(p, m, all, typeErr, text)
 	for _, slot := range [][2]string{{"guest", p.Guest}, {"note", p.Note}} {
 		if slot[1] == "" {
 			continue
@@ -285,6 +286,132 @@ func (v *validator) orderPage(p *Portal, m *Model, all map[string]vis) {
 				if s != "" && f.Option(s) == nil {
 					v.rep.extra("error", path, "status", "portal_unknown_field", fmt.Sprintf(`"%s" is not an option of %s.%s`, s, m.Name, f.Name))
 				}
+			}
+		}
+	}
+}
+
+// orderPageMore checks the slots of an order_page beyond the menu and lines: lines.key and lines.later, options,
+// requests, estimate and session (contract 0073 §9). The same checks as check_order_page_more in rangka_validate.py.
+func (v *validator) orderPageMore(p *Portal, m *Model, all map[string]vis, typeErr func(where, name, want, got string), text func(string) bool) {
+	path := p.Doc.Path
+	model := func(where, name string) *Model {
+		if mv, ok := all[name]; ok {
+			return mv.m
+		}
+		v.rep.extra("error", path, where, "portal_unknown_model", fmt.Sprintf(`"%s" is not a model%s`, name, suggest(name, keys(all))))
+		return nil
+	}
+	var line *Model
+	if f := m.Field(p.LinesField); f != nil && f.Type == "table" {
+		if cv, ok := all[f.Of]; ok {
+			line = cv.m
+		}
+	}
+	if line != nil && p.LinesKey != "" {
+		if f := v.portalField(path, "lines/key", line, p.LinesKey); f != nil && f.Type != "data" {
+			typeErr("lines/key", f.Name, "a data field", f.Type)
+		}
+	}
+	if line != nil && p.LinesLater != "" {
+		if f := v.portalField(path, "lines/later", line, p.LinesLater); f != nil && f.Type != "check" {
+			typeErr("lines/later", f.Name, "a check field", f.Type)
+		}
+	}
+	if o := p.Opt; asMap(p.Raw["options"]) != nil {
+		if p.LinesKey == "" {
+			v.rep.extra("error", path, "options", "portal_slot_missing", "options need lines.key")
+		}
+		om, gm := model("options/model", o.Model), model("options/group/model", o.GroupModel)
+		if f := m.Field(o.Table); f == nil || f.Type != "table" {
+			v.rep.extra("error", path, "options/table", "portal_field_type", fmt.Sprintf(`options table "%s" must be a table field of %s`, o.Table, m.Name))
+		} else if cv, ok := all[f.Of]; ok {
+			if lf := cv.m.Field(o.Line); lf == nil || lf.Type != "data" {
+				v.rep.extra("error", path, "options/line", "portal_field_type", fmt.Sprintf(`options line "%s" must be a data field of %s`, o.Line, f.Of))
+			}
+			if lf := cv.m.Field(o.Option); lf == nil || lf.Type != "link" || lf.To != o.Model {
+				v.rep.extra("error", path, "options/option", "portal_field_type", fmt.Sprintf(`options option "%s" must be a link to %s`, o.Option, o.Model))
+			}
+		}
+		if om != nil {
+			if f := om.Field(o.Link); f == nil || f.Type != "link" || f.To != o.GroupModel {
+				v.rep.extra("error", path, "options/link", "portal_field_type", fmt.Sprintf(`options link "%s" must be a link to %s`, o.Link, o.GroupModel))
+			}
+			if f := v.portalField(path, "options/title", om, o.Title); f != nil && !text(f.Type) {
+				typeErr("options/title", f.Name, "a text field", f.Type)
+			}
+			if f := v.portalField(path, "options/price", om, o.Price); f != nil && !f.IsNumeric() {
+				typeErr("options/price", f.Name, "a number field", f.Type)
+			}
+		}
+		if gm != nil {
+			if f := v.portalField(path, "options/group/title", gm, o.GroupTitle); f != nil && !text(f.Type) {
+				typeErr("options/group/title", f.Name, "a text field", f.Type)
+			}
+			for _, c := range [][3]string{{"required", o.GroupRequired, "check"}, {"multi", o.GroupMulti, "check"}, {"max", o.GroupMax, "int"}} {
+				if c[1] == "" {
+					continue
+				}
+				if f := v.portalField(path, "options/group/"+c[0], gm, c[1]); f != nil && f.Type != c[2] {
+					typeErr("options/group/"+c[0], f.Name, "a "+c[2]+" field", f.Type)
+				}
+			}
+		}
+		if mv, ok := all[p.MenuModel]; ok {
+			if f := mv.m.Field(o.GroupsTable); f == nil || f.Type != "table" {
+				v.rep.extra("error", path, "options/groups/table", "portal_field_type", fmt.Sprintf(`options groups "%s" must be a table field of %s`, o.GroupsTable, p.MenuModel))
+			} else if cv, ok := all[f.Of]; ok {
+				if lf := cv.m.Field(o.GroupsLink); lf == nil || lf.Type != "link" || lf.To != o.GroupModel {
+					v.rep.extra("error", path, "options/groups/link", "portal_field_type", fmt.Sprintf(`options groups link "%s" must be a link to %s`, o.GroupsLink, o.GroupModel))
+				}
+			}
+		}
+	}
+	if asMap(p.Raw["requests"]) != nil {
+		if f := m.Field(p.ReqField); f == nil || f.Type != "select" {
+			v.rep.extra("error", path, "requests/field", "portal_field_type", fmt.Sprintf(`requests field "%s" must be a select field of %s`, p.ReqField, m.Name))
+		} else {
+			for _, x := range append([]string{p.ReqOrder}, p.ReqValues...) {
+				if f.Option(x) == nil {
+					v.rep.extra("error", path, "requests", "portal_unknown_field", fmt.Sprintf(`"%s" is not an option of %s.%s`, x, m.Name, f.Name))
+				}
+			}
+		}
+		if p.ReqAbout != "" {
+			if f := v.portalField(path, "requests/about", m, p.ReqAbout); f != nil && f.Type != "data" {
+				typeErr("requests/about", f.Name, "a data field", f.Type)
+			}
+		}
+	}
+	for i, n := range p.Estimate {
+		if f := v.portalField(path, fmt.Sprintf("estimate/%d", i), m, n); f != nil && !f.IsNumeric() {
+			typeErr(fmt.Sprintf("estimate/%d", i), f.Name, "a number field", f.Type)
+		}
+	}
+	if asMap(p.Raw["session"]) != nil {
+		se := p.Sess
+		sm := model("session/model", se.Model)
+		if f := m.Field(se.OrderLink); f == nil || f.Type != "link" || f.To != se.Model {
+			v.rep.extra("error", path, "session/order_link", "portal_field_type", fmt.Sprintf(`session order_link "%s" must be a link of %s to %s`, se.OrderLink, m.Name, se.Model))
+		}
+		if sm == nil {
+			return
+		}
+		if f := sm.Field(se.Link); f == nil || f.Type != "link" || f.To != p.AnchorModel {
+			v.rep.extra("error", path, "session/link", "portal_field_type", fmt.Sprintf(`session link "%s" must be a link of %s to %s`, se.Link, se.Model, p.AnchorModel))
+		}
+		if f := sm.Field(se.LinesField); f == nil || f.Type != "table" {
+			v.rep.extra("error", path, "session/lines/field", "portal_field_type", fmt.Sprintf(`session lines "%s" must be a table field of %s`, se.LinesField, se.Model))
+		} else if cv, ok := all[f.Of]; ok {
+			for _, c := range [][2]string{{"title", se.LinesTitle}, {"qty", se.LinesQty}, {"amount", se.LinesAmount}, {"key", se.LinesKey}} {
+				if c[1] != "" {
+					v.portalField(path, "session/lines/"+c[0], cv.m, c[1])
+				}
+			}
+		}
+		for i, n := range se.Totals {
+			if f := v.portalField(path, fmt.Sprintf("session/totals/%d", i), sm, n); f != nil && !f.IsNumeric() {
+				typeErr(fmt.Sprintf("session/totals/%d", i), f.Name, "a number field", f.Type)
 			}
 		}
 	}

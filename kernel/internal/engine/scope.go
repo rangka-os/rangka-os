@@ -173,7 +173,9 @@ func (s *scope) lookup(name string) (any, bool) {
 		return GlobalVar(s.e.Reg(), s.actor, name)
 	case "parent":
 		// a child row's document (contract 0069 §2): parent.<field> reads the document's value as the document's own
-		// expressions would (a link is a link, so parent.outlet.code works); tables are left out. Only a row computed
+		// expressions would (a link is a link, so parent.outlet.code works). A table reads as its rows; a table declared
+		// before the row's own table is computed already (scope.compute walks tables in field order), so a line can
+		// sum the rows of an earlier table that name it (options by line key, contract 0048 §1). Only a row computed
 		// through its document has one; elsewhere parent is not a name.
 		if s.parent == nil {
 			return nil, false
@@ -192,13 +194,10 @@ func (s *scope) lookup(name string) (any, bool) {
 	return nil, false
 }
 
-// docVars is the document's fields (not its tables) and system names as one map, for a child row's parent.
+// docVars is the document's fields (tables as their rows) and system names as one map, for a child row's parent.
 func (s *scope) docVars() map[string]any {
 	out := map[string]any{}
 	for _, f := range s.m.Fields {
-		if f.Type == "table" {
-			continue
-		}
 		if v, ok := s.lookup(f.Name); ok {
 			out[f.Name] = v
 		}

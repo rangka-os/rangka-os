@@ -24,6 +24,25 @@ const (
 	PortalOrderMaxLifetimeDays = 3650
 )
 
+// PortalOptions is the options slot of an order_page (contract 0073 §9, the shape of 0048 §1): groups listed on the
+// menu row, options of a group, and the order's table that records the chosen ones per line.
+type PortalOptions struct {
+	Table, Line, Option                 string // order model: table of choices, its line-key field, its option link
+	Model, Link, Title, Price, Filter   string // option model, its link to the group, label, price delta, CEL filter
+	GroupsTable, GroupsLink             string // menu model table of groups, its row's link to the group model
+	GroupModel, GroupTitle, GroupFilter string
+	GroupRequired, GroupMulti, GroupMax string
+}
+
+// PortalSession is the session slot of an order_page: the anchor's open document (a table's open bill), whose lines
+// and totals every phone at the table sees, and the order field that names it.
+type PortalSession struct {
+	Model, Link, Filter, OrderLink   string
+	LinesField, LinesTitle, LinesQty string
+	LinesAmount, LinesKey            string
+	Totals                           []string
+}
+
 // Portal is one portal page file.
 type Portal struct {
 	Name, App, Type, Model string
@@ -47,6 +66,12 @@ type Portal struct {
 	Guest, Note                                            string
 	StatusField, StatusCancel                              string
 	StatusOpen                                             []string
+	LinesKey, LinesLater                                   string
+	Opt                                                    PortalOptions
+	ReqField, ReqOrder, ReqAbout                           string
+	ReqValues                                              []string
+	Estimate                                               []string
+	Sess                                                   PortalSession
 	Raw                                                    map[string]any
 	Doc                                                    *rk.Doc
 	File                                                   string // registry Docs key: <unit prefix>/portal/<name>.rk
@@ -63,6 +88,30 @@ func parsePortal(app, stem, file string, doc *rk.Doc) *Portal {
 	if l := asMap(raw["lines"]); l != nil {
 		p.LinesField, p.LinesColumns = str(l, "field"), strList(l["columns"])
 		p.LinesItem, p.LinesQty, p.LinesNote = str(l, "item"), str(l, "qty"), str(l, "note")
+		p.LinesKey, p.LinesLater = str(l, "key"), str(l, "later")
+	}
+	if o := asMap(raw["options"]); o != nil {
+		p.Opt = PortalOptions{Table: str(o, "table"), Line: str(o, "line"), Option: str(o, "option"), Model: str(o, "model"),
+			Link: str(o, "link"), Title: str(o, "title"), Price: str(o, "price"), Filter: str(o, "filter")}
+		if g := asMap(o["groups"]); g != nil {
+			p.Opt.GroupsTable, p.Opt.GroupsLink = str(g, "table"), str(g, "link")
+		}
+		if g := asMap(o["group"]); g != nil {
+			p.Opt.GroupModel, p.Opt.GroupTitle, p.Opt.GroupFilter = str(g, "model"), str(g, "title"), str(g, "filter")
+			p.Opt.GroupRequired, p.Opt.GroupMulti, p.Opt.GroupMax = str(g, "required"), str(g, "multi"), str(g, "max")
+		}
+	}
+	if r := asMap(raw["requests"]); r != nil {
+		p.ReqField, p.ReqOrder, p.ReqAbout, p.ReqValues = str(r, "field"), str(r, "order"), str(r, "about"), strList(r["values"])
+	}
+	p.Estimate = strList(raw["estimate"])
+	if se := asMap(raw["session"]); se != nil {
+		p.Sess = PortalSession{Model: str(se, "model"), Link: str(se, "link"), Filter: str(se, "filter"), OrderLink: str(se, "order_link"),
+			Totals: strList(se["totals"])}
+		if l := asMap(se["lines"]); l != nil {
+			p.Sess.LinesField, p.Sess.LinesTitle, p.Sess.LinesQty = str(l, "field"), str(l, "title"), str(l, "qty")
+			p.Sess.LinesAmount, p.Sess.LinesKey = str(l, "amount"), str(l, "key")
+		}
 	}
 	if a := asMap(raw["anchor"]); a != nil {
 		p.AnchorModel, p.AnchorField, p.AnchorTitle = str(a, "model"), str(a, "field"), str(a, "title")

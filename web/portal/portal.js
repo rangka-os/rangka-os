@@ -84,6 +84,7 @@
   }
 
   function render(d) {
+    if (d.page && d.page.type === "order_page" && window.RKOrderPage) return window.RKOrderPage(d);
     currency = (d.doc.amount && d.doc.amount.currency) || "IDR";
     root.textContent = "";
     var org = d.org || {};
@@ -204,7 +205,8 @@
     root.appendChild(foot);
   }
 
-  fetch(base + "/data", { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
+  var mine = window.RKOrderMine ? window.RKOrderMine() : "";
+  fetch(base + "/data" + (mine ? "?mine=" + encodeURIComponent(mine) : ""), { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
     .then(function (res) {
       if (res.status === 410) {
         // the link was real, so the kernel names its seller; a 404 names nobody

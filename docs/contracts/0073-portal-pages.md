@@ -1,6 +1,6 @@
 # 0073 Portal pages: customer links to one document
 
-Status: proposed, v1 implemented in rangka-os (20 Nov 2026) · Owner of the change: rangka-os (schema, validators,
+Status: proposed, v1 implemented in rangka-os (20 Nov 2026); §9 order_page added 28 Nov 2026 (rangka-apps#119) · Owner of the change: rangka-os (schema, validators,
 kernel routes, `web/portal`) · Affects: rangka-apps (`portal/` in modules, first `invoicing/portal/tagihan.rk`),
 rangka-cloud (nothing in v1: the portal is a path on the kernel host) · Builds on: 0008, 0010, 0017, 0019 §5, 0027,
 0030, 0040 §9 · Issue: rangka-os#264
@@ -24,10 +24,11 @@ rangka-cloud (nothing in v1: the portal is a path on the kernel host) · Builds 
 - A module ships `portal/<name>.rk` (schema `schema/0.5/portal.json`). The file stem is the page name, unique per site
   like screens (0030 §1). A page is active while its module is installed.
 - A page has a `type` from a closed set rendered by the kernel. A module fills slots; it never ships HTML or JS.
-  - v1 builds `document`: one record, opened by a customer link (§3).
+  - v1 builds `document`: one record, opened by a customer link (§3), and `order_page`: a guest orders from the QR
+    of a table (§9).
   - Reserved for later contracts and refused by the validator today (`portal_type_unbuilt`): `documents` (the list of
-    a signed-in customer, v2), `catalogue`, `booking`, `intake` and `order_page` (online store, self booking, self
-    order). They share this contract's link, exposure and abuse rules.
+    a signed-in customer, v2), `catalogue`, `booking` and `intake` (online store, self booking, intake form). They
+    share this contract's link, exposure and abuse rules.
 
 ```yaml
 # modules/invoicing/portal/tagihan.rk
@@ -180,13 +181,77 @@ the browser), so `pdf_month` is not spent by customers.
 - Custom domains (`<bisnis>.rangka.id`); the path `/p/<org>/…` works self-hosted and hosted without extra DNS.
 - Owner settings for which page kinds are on: a page is on while its module is installed.
 
+### 9. Order pages (`order_page`)
+
+A guest at a table scans a QR and orders from the menu without an account; the order lands in the business's own
+model (rangka-apps `self_order`), where staff take it. Payment is not part of v1: it stays at the cashier.
+
+```yaml
+# rangka-apps modules/self_order/portal/pesan.rk
+type: order_page
+model: self_order                     # the record a guest creates
+label: {id: Pesan, en: Order}
+anchor: {model: dining_table, field: table, title: table_name}   # what a link names, and the order field that gets it
+menu:
+  model: item
+  filter: "kind != 'material' && active != false"   # CEL over the menu model, run as the link's actor
+  title: item_name
+  price: rate
+  group_by: category                  # a link shows its target's title
+  sold_out: ''                        # optional check field: true shows Habis and refuses the row
+lines: {field: items, item: item, qty: qty, note: note}
+guest: guest_name                     # optional text fields of the order
+note: note
+status: {field: status, open: [new], cancel: cancelled}
+share: [head_office]
+lifetime_days: 365                    # default 365, at most 3650: a printed QR lives until it is rotated
+```
+
+- **Links.** A link is a §3 link whose record is the anchor (a table), not an order. Its default life is 365 days and
+  at most 3650 (a document keeps 30 and 90). Rotating a sticker is revoking the anchor's links and making a new one.
+  `POST /api/v1/portal/{page}/qr {records?}` (owner and `share` roles, each anchor readable by the caller) does that
+  for the listed anchors, or every anchor with `active` not false (at most 200), and answers
+  `{data: [{record, title, id, url, path, expires_at, qr}]}` with `qr` a `data:image/png` of the URL, for an A4 sheet.
+  It is the only answer besides `POST …/links` that carries tokens.
+- **What a guest can do, and nothing more.**
+  - `GET …/data[?mine=a,b]`: `org`, `page`, `anchor {title, outlet}` (the anchor's title and, when it links an
+    `outlet`, that outlet's title), `menu [{name, title, price, group, sold_out}]` (at most 500 rows that pass `filter`,
+    sorted by title; no other field of a row leaves the kernel), `limits`, `fields` (which text inputs the page has),
+    `currency`, and `orders`: for at most 10 names in `mine`, the orders made by this same link (`created_by` is
+    `portal:<link id>`) on its own anchor in the last 12 hours, as `{name, status, label, open, cancelled,
+    can_cancel, lines [{title, qty, note}], created_at}`. A name of another link, table or day is left out silently.
+  - `POST …/order {lines: [{item, qty, note?}], guest?, note?}`: creates one record of `model` as the actor
+    `portal:<link id>` (a system actor) with the anchor field set to the link's record and only the declared fields.
+    The request never sets a price, the anchor or any other field: prices are the model's computes. Refused: no
+    line or more than 30 (`order_empty`, `order_too_long`), an item not in the menu now (`409
+    order_item_unavailable`) or sold out (`409 order_item_sold_out`), a qty that is not a whole number 1 to 50
+    (`order_qty`), a note over 140 or a guest name over 40 characters, a body over 16 KB, 3 open orders (status in
+    `open`) already on the anchor in the last 12 hours (`409 order_too_many_open`), a refusal of the model
+    (`409 order_refused` with the message of the rule that refused; any other message stays in the kernel's log).
+  - `POST …/order/{name}/cancel`: an order of this link, still open, at most 2 minutes old: a conditional update of
+    the status field to `cancel` (a staff member's write in between turns it into `409 order_not_cancellable`).
+    The module's rules and flows see the link's actor (`user.email` is `portal:<link id>`).
+- **Abuse limits** on top of §6: per link 3 creates or cancels, then one every 20 seconds; per address 20, then one
+  every 2 seconds (every guest on a restaurant's WiFi shares one address); both answer `429 rate_limited` with
+  `Retry-After`. Audit: `portal.order` and `portal.order.cancel` (actor `portal:<link id>`, target `<model>/<name>`,
+  data: page, link, anchor), never a token.
+- **Exposure.** Every named field goes through §2: a `hidden_for` or `hidden: true` field, or a refused type, is
+  refused by the validator and dropped again by the kernel. The guest never reads the anchor record beyond its title,
+  nor any record of the model other than its own orders' status and lines.
+- **Offline.** The page needs the guest's connection. An order waits in the model until staff take it; the page
+  polls its status every 10 seconds and, after 5 minutes still open, tells the guest to call a waiter.
+- **Not in v1.** Pay first (a `pay` action with the payment rail of contract 0063), item photos, options and
+  modifiers (0048 §1), a guest's member lookup, delivery.
+
 ## Validation
 
 Both validators (Go and `tools/rangka_validate.py`) report the same codes:
 
 | Code | When |
 | --- | --- |
-| `schema` | the file breaks `portal.json` (unknown keys, `lifetime_days` outside 1 to 90) |
+| `schema` | the file breaks `portal.json` (unknown keys, `lifetime_days` outside 1 to 90 for `document`, 1 to 3650 for `order_page`) |
+| `portal_slot_missing` | an `order_page` lacks `anchor`, `menu`, `lines` (with `item` and `qty`) or `status`; a `document`'s `lines` lacks `columns` |
+| `portal_slot_unused` | a slot of the other type: `customer`, `amount`, `due`, `fields`, `print`, `payment` or `lines.columns` on an `order_page`; `anchor`, `menu`, `guest`, `note`, `status` or `lines.item`/`qty`/`note` on a `document` |
 | `duplicate_portal` | a second unit ships a page name |
 | `portal_type_unbuilt` | `type` is a reserved type (§1) |
 | `portal_unknown_model` | `model` or `payment.model` is not a model |
@@ -197,10 +262,18 @@ Both validators (Go and `tools/rangka_validate.py`) report the same codes:
 | `portal_print_related` | the `print` format has a related list not matched on the document's `name` |
 | `portal_unknown_role` | a `share` role is not a role of any loaded unit |
 
+On an `order_page`, `portal_unknown_model` also covers `anchor.model` and `menu.model`; `portal_unknown_field` covers
+every named field and a `status` value that is not an option; `portal_field_type`: `anchor.field` not a link to the
+anchor, `anchor.title`, `menu.title`, `guest`, `note`, `lines.note` not text, `menu.price` and `lines.qty` not numbers,
+`menu.group_by` not a link, select or text, `menu.sold_out` not a check, `lines.field` not a table, `lines.item` not a
+link to the menu model, `status.field` not a select.
+
 ## Order of work
 
 1. Contract, schema, both validators (rangka-os). Done with this contract.
 2. Kernel: `rk_portal_links`, member routes, customer routes, audit, rate bucket, tests (rangka-os). Done.
 3. `web/portal`: the `document` page, mobile first, with expired, unknown and cancelled states (rangka-os). Done.
 4. rangka-apps: `invoicing/portal/tagihan.rk`. Done.
-5. Next: CEL `portal_link`, the app's "Salin tautan pelanggan", the WhatsApp template parameter, then `pay` (§8).
+5. `order_page` (§9): schema, both validators, kernel routes, `web/portal/order.js`, rangka-apps `self_order`
+   (rangka-apps#119). Done.
+6. Next: CEL `portal_link`, the app's "Salin tautan pelanggan", the WhatsApp template parameter, then `pay` (§8).

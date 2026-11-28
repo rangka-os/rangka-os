@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: pesanan
+label: {id: Pesanan}
+naming: PS-{#####}
+title_field: tamu
+fields:
+  - {name: meja, type: link, to: meja, label: {id: Meja}, required: true}
+  - {name: tamu, type: data, label: {id: Tamu}}
+  - {name: catatan, type: data, label: {id: Catatan}}
+  - name: status
+    type: select
+    label: {id: Status}
+    default: "'baru'"
+    options:
+      - {value: baru, label: {id: Menunggu kasir}}
+      - {value: terima, label: {id: Diterima}}
+      - {value: batal, label: {id: Dibatalkan}}
+  - {name: baris, type: table, of: pesanan_baris, label: {id: Baris}, min_rows: 1}
+  - {name: total, type: currency, label: {id: Total}, compute: "baris.map(l, l.jumlah).sum()"}
+permissions:
+  - {role: kasir, read: true, write: true}

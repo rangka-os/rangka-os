@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: menu
+label: {id: Menu}
+naming: MN-{###}
+title_field: nama
+fields:
+  - {name: nama, type: data, label: {id: Nama}, required: true}
+  - {name: harga, type: currency, label: {id: Harga}}
+  - {name: grup, type: data, label: {id: Grup}}
+  - {name: habis, type: check, label: {id: Habis}}
+  - {name: dijual, type: check, label: {id: Dijual}, default: 'true'}
+  - {name: modal, type: currency, label: {id: Modal}, hidden_for: [kasir]}
+permissions:
+  - {role: kasir, read: true}
+  - {role: kantor, read: true, create: true, write: true}

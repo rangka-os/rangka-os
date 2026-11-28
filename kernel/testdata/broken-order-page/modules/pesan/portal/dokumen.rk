@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/portal.json
+type: document
+model: pesanan
+label: {id: Dokumen}
+anchor: {model: meja, field: meja}
+lines: {field: baris, columns: [qty], item: menu}
+lifetime_days: 120

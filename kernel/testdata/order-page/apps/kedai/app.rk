@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
+name: kedai
+version: 1.0.0
+title: {id: Kedai}
+summary: {id: App uji halaman pesan dari meja.}
+rangka: '>=0.5'
+modules: {pesan: ^1.0}
+roles: [kasir, kantor]
+menu:
+  - group: {id: Kedai}
+    items: [pesanan, menu, meja]

@@ -261,8 +261,8 @@
     if (f.later) root.appendChild(el("p", "hint pad", "Menu bertanda \"Antar nanti\" ditahan dulu. Tekan \"Minta diantar\" di tagihan meja kalau sudah siap."));
 
     var who = el("section", "card");
-    if (f.guest) who.appendChild(field("Nama kamu (boleh kosong)", S.guest, lim.guest || 40, function (v) { S.guest = v; }, "Supaya pelayan tahu pesanan siapa"));
-    if (f.note) who.appendChild(field("Catatan untuk kasir (boleh kosong)", S.note, lim.note || 140, function (v) { S.note = v; }));
+    if (f.guest) who.appendChild(field("Nama kamu (boleh kosong)", S.guest, lim.guest || 40, function (v) { S.guest = v; S.sendKey = ""; }, "Supaya pelayan tahu pesanan siapa"));
+    if (f.note) who.appendChild(field("Catatan untuk kasir (boleh kosong)", S.note, lim.note || 140, function (v) { S.note = v; S.sendKey = ""; }));
     var sum = el("div", "sums");
     if (Array.isArray(S.estimate)) {
       S.estimate.forEach(function (x, i) {
@@ -376,6 +376,11 @@
     return fetch(base + path, { method: "POST", credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", headers: headers, body: JSON.stringify(b || {}) })
       .then(function (res) { return res.json().catch(function () { return {}; }).then(function (x) { return { ok: res.ok, status: res.status, body: x }; }); });
   }
+  function newKey() {
+    var a = new Uint8Array(16);
+    try { (window.crypto || window.msCrypto).getRandomValues(a); } catch (e) { for (var i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256); }
+    return "so-" + Array.prototype.map.call(a, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+  }
   function remember(o) {
     S.mine.push(o.name);
     S.mine = S.mine.slice(-10);
@@ -384,7 +389,9 @@
   function sendOrder() {
     if (S.sending) return;
     S.sending = true; S.error = ""; render();
-    post("/order", body()).then(function (r) {
+    // one key per basket: a resend after a lost answer returns the first order, never a second round
+    if (!S.sendKey) S.sendKey = newKey();
+    post("/order", body(), S.sendKey).then(function (r) {
       S.sending = false;
       if (!r.ok) {
         S.error = (r.status === 429 ? "Tunggu sebentar sebelum mengirim lagi." : (r.body.error && r.body.error.message)) || "Pesanan belum terkirim. Coba lagi.";
@@ -392,7 +399,7 @@
         render();
         return;
       }
-      S.basket = []; saveBasket(); S.note = "";
+      S.basket = []; saveBasket(); S.note = ""; S.sendKey = "";
       remember(r.body.order);
       S.notice = r.body.order.status === "new" ? "Terkirim. Kasir mengecek pesanan pertama meja ini." : "Terkirim, langsung ke dapur.";
       S.orders.push(r.body.order);

@@ -305,6 +305,10 @@
      "type": "check"
     },
     {
+     "name": "qr_menu",
+     "type": "check"
+    },
+    {
      "name": "option_groups",
      "of": "item_option_group_row",
      "type": "table"
@@ -637,6 +641,10 @@
     },
     {
      "name": "bill_asked",
+     "type": "check"
+    },
+    {
+     "name": "qr_closed",
      "type": "check"
     },
     {

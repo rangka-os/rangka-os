@@ -1,8 +1,14 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"sort"
@@ -303,6 +309,10 @@ func (s *Server) portalOrderEstimate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if _, err := s.portal.Wait(r.Context(), "pe:"+s.clientKey(r), portalEstimateRate); err != nil {
+		s.portalMiss(w, http.StatusTooManyRequests, err, nil)
+		return
+	}
 	ctx := pg.WithOrg(r.Context(), hit.org)
 	input, perr := s.portalOrderInput(ctx, hit, body)
 	if perr != nil {
@@ -315,7 +325,7 @@ func (s *Server) portalOrderEstimate(w http.ResponseWriter, r *http.Request) {
 			s.portalMiss(w, http.StatusInternalServerError, err, nil)
 			return
 		}
-		writeError(w, http.StatusConflict, "order_refused", portalRefusal(err))
+		writeError(w, http.StatusConflict, "order_refused", portalRefusal(s.Engine.Reg(), hit.page, err))
 		return
 	}
 	m := s.Engine.Reg().Model(p.Model)
@@ -377,13 +387,21 @@ func (s *Server) portalOrderRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "order_too_many_open", "Permintaan meja ini sudah sampai ke kasir. Tunggu sebentar ya.")
 		return
 	}
+	if recent, err := s.portalRecentOrders(ctx, hit); err != nil || recent >= portalOrderRecentMax {
+		if err != nil {
+			s.portalMiss(w, http.StatusInternalServerError, err, nil)
+			return
+		}
+		writeError(w, http.StatusConflict, "order_too_many_recent", "Sudah banyak permintaan dari meja ini dalam 10 menit. Panggil pelayan langsung ya.")
+		return
+	}
 	res, err := s.Engine.Create(ctx, hit.actor, p.Model, input)
 	if err != nil {
 		if status, _ := failBody(err); status >= 500 {
 			s.portalMiss(w, http.StatusInternalServerError, err, nil)
 			return
 		}
-		writeError(w, http.StatusConflict, "order_refused", portalRefusal(err))
+		writeError(w, http.StatusConflict, "order_refused", portalRefusal(s.Engine.Reg(), hit.page, err))
 		return
 	}
 	name := fmt.Sprint(res.Record["name"])
@@ -409,17 +427,13 @@ func (s *Server) portalSession(ctx context.Context, hit *portalHit) any {
 	if sm == nil {
 		return nil
 	}
-	names, err := store.FindBy(ctx, s.DB, reg, hit.org, sm, se.Link, fmt.Sprint(hit.rec["name"]))
+	names, err := s.portalNamesBy(ctx, hit.org, sm, se.Link, fmt.Sprint(hit.rec["name"]), portalOrderSessionScan)
 	if err != nil {
 		s.logf("portal: session of %v: %v", hit.rec["name"], err)
 		return nil
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(names)))
 	var doc store.Record
-	for i, n := range names {
-		if i >= portalOrderSessionScan {
-			break
-		}
+	for _, n := range names {
 		rec, err := s.Engine.Get(ctx, hit.actor, sm.Name, n)
 		if err != nil || rec[se.Link] != hit.rec["name"] {
 			continue
@@ -474,12 +488,9 @@ func (s *Server) portalSession(ctx context.Context, hit *portalHit) any {
 	out["totals"] = totals
 	m := reg.Model(p.Model)
 	if lf := m.Field(se.OrderLink); lf != nil {
-		rounds, err := store.FindBy(ctx, s.DB, reg, hit.org, m, lf.Name, fmt.Sprint(doc["name"]))
+		rounds, err := s.portalNamesBy(ctx, hit.org, m, lf.Name, fmt.Sprint(doc["name"]), portalOrderMaxSession)
 		if err == nil {
-			sort.Strings(rounds)
-			if len(rounds) > portalOrderMaxSession {
-				rounds = rounds[len(rounds)-portalOrderMaxSession:]
-			}
+			sort.Strings(rounds) // oldest first; the page shows the newest on top
 			sf := m.Field(p.StatusField)
 			views := []any{}
 			for _, n := range rounds {
@@ -494,4 +505,74 @@ func (s *Server) portalSession(ctx context.Context, hit *portalHit) any {
 	}
 	out["opened"] = strings.TrimSpace(fmt.Sprint(doc["created_at"]))
 	return out
+}
+
+// portalIdempotent runs a guest's write once per Idempotency-Key (contract 0030 §6 keys, scoped to the link's actor
+// portal:<link id>): a resend of the same body answers the first result, another body with the key is refused. Without
+// a key the write simply runs. The order buckets are spent only by the run that claims the key.
+func (s *Server) portalIdempotent(w http.ResponseWriter, r *http.Request, hit *portalHit, run func(http.ResponseWriter, *http.Request)) {
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		run(w, r)
+		return
+	}
+	if !validIdemKey(key) {
+		writeError(w, http.StatusBadRequest, "idempotency_key", "Idempotency-Key must be 1 to 128 printable ASCII characters")
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, portalOrderBodyMax+1))
+	if err != nil || len(body) > portalOrderBodyMax {
+		writeError(w, http.StatusBadRequest, "bad_body", "Pesanan terlalu besar.")
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	s.pruneIdempotency()
+	sum := sha256.Sum256([]byte(r.Method + " " + r.URL.Path + "\n" + string(canonicalBody(body, body))))
+	hash := hex.EncodeToString(sum[:])
+	ctx := pg.WithOrg(r.Context(), hit.org)
+	it, err := store.ClaimIdempotency(ctx, s.DB, hit.org, hit.actor.ID, key, hash)
+	if err != nil && !errors.Is(err, store.ErrIdemTaken) {
+		s.portalMiss(w, http.StatusInternalServerError, err, nil)
+		return
+	}
+	if err != nil {
+		s.idemReplay(w, r.WithContext(ctx), &caller{actor: hit.actor}, it, hash)
+		return
+	}
+	cw := &captureWriter{h: http.Header{}}
+	k := engine.IdemKey{Org: hit.org, Actor: hit.actor.ID, Key: key, Claim: it.Claim}
+	run(cw, r.WithContext(engine.WithIdempotency(r.Context(), k)))
+	bg := context.WithoutCancel(ctx)
+	if cw.status >= 200 && cw.status < 300 {
+		if err := store.FinishIdempotency(bg, s.DB, hit.org, hit.actor.ID, key, it.Claim, cw.status, json.RawMessage(bytes.TrimSpace(cw.buf.Bytes()))); err != nil {
+			s.logf("portal: idempotency answer %s: %v", hit.id, err)
+		}
+	} else if err := store.ReleaseIdempotency(bg, s.DB, hit.org, hit.actor.ID, key, it.Claim); err != nil {
+		s.logf("portal: idempotency release %s: %v", hit.id, err)
+	}
+	cw.flush(w)
+}
+
+// portalNamesBy are the names of the newest records of m whose field equals value, at most limit (store.FindBy reads
+// only the first two rows, which a table with past bills outgrows).
+func (s *Server) portalNamesBy(ctx context.Context, org string, m *meta.Model, field, value string, limit int) ([]string, error) {
+	f := m.Field(field)
+	if f == nil {
+		return nil, fmt.Errorf("model %s has no field %s", m.Name, field)
+	}
+	col := "(x->>" + pg.QuoteLiteral(f.Name) + ")"
+	if store.IsColumn(f) {
+		col = pg.QuoteIdent(f.Name)
+	}
+	q := fmt.Sprintf("select name from %s where org_id = $1 and %s = $2 order by created_at desc, name desc limit %d",
+		pg.QuoteIdent(store.TableName(m.Name)), col, limit)
+	res, err := s.DB.Query(ctx, q, org, value)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(res.Rows))
+	for _, row := range res.Rows {
+		out = append(out, fmt.Sprint(row[0]))
+	}
+	return out, nil
 }

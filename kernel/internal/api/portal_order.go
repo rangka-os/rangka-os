@@ -34,13 +34,17 @@ const (
 	portalOrderMineMax    = 10
 	portalOrderBodyMax    = 16 << 10
 	portalOrderCancelSecs = 120
-	portalOrderMineHours  = 12
+	portalOrderMineHours  = 3  // a phone sees its own orders of the last 3 hours (one visit), not the last party's
+	portalOrderRecentMax  = 10 // orders and requests per anchor in portalOrderRecentWin, any status
+	portalOrderRecentWin  = 10 * time.Minute
 )
 
 // portalOrderRate bounds creates and cancels per link (one table) and per address, on top of the page bucket.
 var (
 	portalOrderLinkRate = ratelimit.Rate{RPS: 1.0 / 20, Burst: 3}
 	portalOrderAddrRate = ratelimit.Rate{RPS: 0.5, Burst: 20} // wide: guests on one restaurant WiFi share an address
+	// estimates write nothing but run the model's computes in a transaction: their own bucket per address
+	portalEstimateRate = ratelimit.Rate{RPS: 1, Burst: 15}
 )
 
 func (s *Server) portalOrderRoutes(mux *http.ServeMux) {
@@ -121,6 +125,9 @@ func (s *Server) portalAnchorOutlet(ctx context.Context, hit *portalHit) string 
 
 // portalMenu lists the menu rows: name, title, price, group title, sold out. Nothing else of a row leaves the kernel.
 func (s *Server) portalMenu(ctx context.Context, hit *portalHit) ([]any, error) {
+	if hit.menu != nil {
+		return hit.menu, nil
+	}
 	reg := s.Engine.Reg()
 	p := hit.page
 	mm := reg.Model(p.MenuModel)
@@ -158,6 +165,7 @@ func (s *Server) portalMenu(ctx context.Context, hit *portalHit) ([]any, error) 
 		}
 		out = append(out, item)
 	}
+	hit.menu = out
 	return out, nil
 }
 
@@ -288,12 +296,17 @@ func (s *Server) portalOrderBucket(w http.ResponseWriter, r *http.Request, hit *
 	return true
 }
 
-// POST /p/{org}/{page}/{token}/order {guest?, note?, lines: [{item, qty, note?}]}: one new order on the anchor.
+// POST /p/{org}/{page}/{token}/order {guest?, note?, lines: [{item, qty, note?}]}: one new order on the anchor. An
+// Idempotency-Key (the page sends one per basket) makes a resend answer the first order instead of a second one.
 func (s *Server) portalOrderCreate(w http.ResponseWriter, r *http.Request) {
 	hit := s.portalOrderHit(w, r)
 	if hit == nil {
 		return
 	}
+	s.portalIdempotent(w, r, hit, func(w http.ResponseWriter, r *http.Request) { s.portalOrderCreateHit(w, r, hit) })
+}
+
+func (s *Server) portalOrderCreateHit(w http.ResponseWriter, r *http.Request, hit *portalHit) {
 	r.Body = http.MaxBytesReader(w, r.Body, portalOrderBodyMax)
 	body, ok := readObject(w, r)
 	if !ok {
@@ -319,6 +332,14 @@ func (s *Server) portalOrderCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "order_too_many_open", "Masih ada pesanan meja ini yang belum diterima kasir. Tunggu sebentar atau panggil pelayan.")
 		return
 	}
+	if recent, err := s.portalRecentOrders(ctx, hit); err != nil || recent >= portalOrderRecentMax {
+		if err != nil {
+			s.portalMiss(w, http.StatusInternalServerError, err, nil)
+			return
+		}
+		writeError(w, http.StatusConflict, "order_too_many_recent", "Sudah banyak pesanan dari meja ini dalam 10 menit. Panggil pelayan ya.")
+		return
+	}
 	res, err := s.Engine.Create(ctx, hit.actor, p.Model, input)
 	if err != nil {
 		status, _ := failBody(err)
@@ -326,7 +347,7 @@ func (s *Server) portalOrderCreate(w http.ResponseWriter, r *http.Request) {
 			s.portalMiss(w, http.StatusInternalServerError, err, nil)
 			return
 		}
-		writeError(w, http.StatusConflict, "order_refused", portalRefusal(err))
+		writeError(w, http.StatusConflict, "order_refused", portalRefusal(s.Engine.Reg(), hit.page, err))
 		return
 	}
 	rec := res.Record
@@ -342,18 +363,27 @@ func (s *Server) portalOrderCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"order": s.portalOrderView(ctx, hit, m, m.Field(p.StatusField), full)})
 }
 
-// portalRefusal is the message of a model rule that refused the order (written by the module for people), else a
-// fixed sentence: a required-field or internal message never reaches the guest.
-func portalRefusal(err error) string {
+// portalRefusal is the message of a rule of the order model, or of a model named <order model>_guard (the module's
+// guard records), that refused the order: written by the module for guests. Any other message (a rule of a document
+// the flows touch, written for staff, a required field, an internal error) never reaches the guest.
+func portalRefusal(reg *meta.Registry, p *meta.Portal, err error) string {
 	var ve *engine.ValidationError
 	if errors.As(err, &ve) {
+		mine := map[string]bool{}
+		for _, mn := range []string{p.Model, p.Model + "_guard"} {
+			if m := reg.Model(mn); m != nil {
+				for _, r := range m.Rules {
+					mine[r.Name] = true
+				}
+			}
+		}
 		for _, i := range ve.Errors {
-			if i.Rule != "" && i.Message != "" {
+			if i.Rule != "" && i.Message != "" && mine[i.Rule] {
 				return i.Message
 			}
 		}
 	}
-	return "Pesanan belum bisa dikirim. Panggil pelayan."
+	return "Pesanan belum bisa dikirim. Panggil pelayan ya."
 }
 
 // portalText is a guest's free text: trimmed, at most max characters, no control characters.
@@ -372,6 +402,27 @@ func portalText(v any, max int) (string, bool) {
 		return r
 	}, s))
 	return s, utf8.RuneCountInString(s) <= max
+}
+
+// portalRecentOrders counts every order and request on the link's anchor in the last 10 minutes, whatever its status:
+// rounds of an open table go straight to the bill and the kitchen, so the open cap alone does not bound them.
+func (s *Server) portalRecentOrders(ctx context.Context, hit *portalHit) (int, error) {
+	m := s.Engine.Reg().Model(hit.page.Model)
+	af := m.Field(hit.page.AnchorField)
+	if af == nil {
+		return 0, fmt.Errorf("order page %s: anchor field missing", hit.page.Name)
+	}
+	col := "(x->>" + pg.QuoteLiteral(af.Name) + ")"
+	if store.IsColumn(af) {
+		col = pg.QuoteIdent(af.Name)
+	}
+	q := fmt.Sprintf("select count(*) from %s where org_id = $1 and %s = $2 and created_at > $3", pg.QuoteIdent(store.TableName(m.Name)), col)
+	res, err := s.DB.Query(ctx, q, hit.org, fmt.Sprint(hit.rec["name"]), s.Engine.Now().UTC().Add(-portalOrderRecentWin))
+	if err != nil || len(res.Rows) != 1 {
+		return 0, err
+	}
+	n, _ := portalNumber(res.Rows[0][0])
+	return int(n), nil
 }
 
 // portalOpenOrders counts the open orders on the link's anchor made in the last 12 hours.
@@ -469,7 +520,7 @@ func (s *Server) portalQRSheet(w http.ResponseWriter, r *http.Request, c *caller
 		if am := reg.Model(p.AnchorModel); am != nil && am.Field("active") != nil {
 			filter = "active != false"
 		}
-		rows, _, err := s.Engine.List(r.Context(), c.actor, p.AnchorModel, engine.ListOpts{Filter: filter, Limit: 200})
+		rows, _, err := s.Engine.List(r.Context(), c.actor, p.AnchorModel, engine.ListOpts{Filter: filter, Limit: 201})
 		if err != nil {
 			fail(w, err)
 			return

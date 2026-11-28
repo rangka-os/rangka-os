@@ -274,8 +274,16 @@ lifetime_days: 365                    # default 365, at most 3650: a printed QR 
   nor any record of the model other than its own orders' status and lines.
 - **Offline.** The page needs the guest's connection. An order waits in the model until staff take it; the page
   polls its status every 10 seconds and, after 5 minutes still open, tells the guest to call a waiter.
-- **Not in v1.** Pay first (a `pay` action with the payment rail of contract 0063), item photos, options and
-  modifiers (0048 §1), a guest's member lookup, delivery.
+- **Resends and floods.** `POST …/order` honours `Idempotency-Key` (contract 0030 §6 keys, scoped to the link's actor):
+  a resend answers the first order; the page sends one key per basket. Besides the open cap, an anchor takes at most
+  10 orders and requests in 10 minutes whatever their status (rounds of an open table do not stay open).
+  `POST …/estimate` has its own bucket per address (15, then 1 a second). A link's `mine` covers 3 hours.
+- **Refusals.** A refused write shows the guest the message of a rule of the order model or of `<model>_guard` only;
+  any other message (a rule of a document a flow touched, written for staff) stays in the kernel.
+- **Anchors.** An anchor with an `active` field set to false answers 404 to every route (a table not in use). The QR
+  sheet refuses more than 200 anchors instead of cutting the list.
+- **Not in v1.** Pay first (a `pay` action with the payment rail of contract 0063), item photos, a guest's member
+  lookup, delivery.
 
 ## Validation
 

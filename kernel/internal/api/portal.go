@@ -256,6 +256,7 @@ type portalHit struct {
 	rec     store.Record
 	expires time.Time
 	actor   engine.Actor
+	menu    []any // an order_page's menu, read once per request
 }
 
 // portalHeaders: nothing of a portal answer is cached, indexed or sent on as a referrer (the token is in the path).
@@ -314,6 +315,10 @@ func (s *Server) portalResolve(r *http.Request) (*portalHit, int, error) {
 		return nil, http.StatusNotFound, nil
 	}
 	if m.IsSubmittable && docstatus(rec) == 0 {
+		return nil, http.StatusNotFound, nil
+	}
+	// an order_page's anchor switched off (a table not in use) takes no guest at all (contract 0073 §9)
+	if p.Type == "order_page" && m.Field("active") != nil && rec["active"] == false {
 		return nil, http.StatusNotFound, nil
 	}
 	return &portalHit{id: id, org: org, page: p, model: m, rec: rec, expires: expires, actor: actor}, http.StatusOK, nil

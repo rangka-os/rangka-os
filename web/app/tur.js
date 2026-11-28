@@ -247,7 +247,7 @@
         return h("div", { key: k, className: "ap-tur-dim", "aria-hidden": "true", style: { top: b.top + "px", left: b.left + "px", width: b.width + "px", height: b.height + "px" },
           onMouseDown: function (e) { e.preventDefault(); } });
       }),
-      hole ? h("div", { className: "ap-tur-hole", "aria-hidden": "true", style: { top: hole.top + "px", left: hole.left + "px", width: hole.width + "px", height: hole.height + "px" } }) : null,
+      hole ? h("div", { key: "hole-" + i, className: "ap-tur-hole", "aria-hidden": "true", style: { top: hole.top + "px", left: hole.left + "px", width: hole.width + "px", height: hole.height + "px" } }) : null,
       // phone: a sheet at the bottom; at the top when the lit element stays in the lower part (a fixed bottom bar)
       h("div", { ref: card, className: "ap-tur-card" + (phone() ? " sheet" + (sheetTop ? " top" + (beside ? " beside-pill" : reserve ? " under-pill" : "") + (scroll ? " fit" : "") : "") : !hole ? " mid" : ""), role: "dialog", "aria-modal": step.use ? "false" : "true",
         "aria-labelledby": titleId, "aria-describedby": titleId + "-b", style: style },

@@ -1193,8 +1193,10 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-tur-dim { position: fixed; background: var(--scrim); pointer-events: auto; opacity: 0; transition: opacity .18s ease; }
 .ap-tur.on .ap-tur-dim { opacity: 1; }
 .ap-tur-hole { position: fixed; border-radius: var(--r-lg); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); pointer-events: none; opacity: 0;
-  transition: opacity .18s ease, top .22s ease, left .22s ease, width .22s ease, height .22s ease; }
-.ap-tur.on .ap-tur-hole { opacity: 1; }
+  transition: opacity .18s ease; }
+/* the ring never slides between steps: each step mounts a fresh ring that fades in on its own element */
+.ap-tur.on .ap-tur-hole { opacity: 1; animation: ap-tur-ring-in .18s ease both; }
+@keyframes ap-tur-ring-in { from { opacity: 0; } to { opacity: 1; } }
 .ap-tur-card { position: fixed; width: 340px; max-width: calc(100vw - 24px); pointer-events: auto; background: var(--surface); color: var(--ink);
   border-radius: var(--r-dialog); box-shadow: var(--shadow-overlay); padding: 16px; display: grid; gap: 8px; opacity: 0; transform: translateY(4px);
   transition: opacity .18s ease, transform .18s ease; }
@@ -1222,7 +1224,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-tur-sp { flex: 1; }
 @media (max-width: 600px) { .ap-tur-acts .rk-btn { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) {
-  .ap-tur-dim, .ap-tur-hole, .ap-tur-card { transition: none; }
+  .ap-tur-dim, .ap-tur-hole, .ap-tur-card { transition: none; animation: none; }
 }
 /* the owner works inside the lit element: no dim, nothing held; the phone sheet becomes a bar with the title and Lanjut */
 .ap-tur.using .ap-tur-dim { opacity: 0 !important; pointer-events: none; }

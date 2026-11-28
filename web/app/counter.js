@@ -572,15 +572,7 @@
     /* the bill's own tables the counter does not edit (options a guest chose on the table QR, contract 0048 §1, by
        line key): carried back as stored, writable fields only, on every preview and save, so the model prices the
        lines the same way here as on the server */
-    function billTables(rec) {
-      var o = {}, models = ctx.meta.models || {};
-      (docMeta.fields || []).forEach(function (f) {
-        if (f.type !== "table" || f.name === doc.lines || (c.payments && f.name === c.payments.table)) return;
-        var cm = models[f.of] || {}, keep = (cm.fields || []).filter(function (x) { return !x.compute && !x.read_only && x.type !== "table"; });
-        o[f.name] = (rec[f.name] || []).map(function (r) { var x = {}; keep.forEach(function (k) { if (r[k.name] !== undefined) x[k.name] = r[k.name]; }); return x; });
-      });
-      return o;
-    }
+    function billTables(rec) { return RA.tables.billTables(ctx.meta.models || {}, doc.model, doc.lines, c.payments && c.payments.table, rec); }
     /* the checkout values a bill record stores (the order type the server gave it, a member picked earlier) */
     function billKept(rec) {
       var o = {};

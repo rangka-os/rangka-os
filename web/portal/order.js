@@ -229,11 +229,17 @@
     var lines = basketLines();
     if (!lines.length || !S.data.fields.estimate || S.estimate) return;
     S.estimate = "loading";
-    post("/estimate", body()).then(function (r) {
-      S.estimate = r.ok ? r.body.estimate : null;
-      if (!r.ok && r.body.error) S.error = r.body.error.message;
+    // a failed estimate waits before the next try (never a loop: guests on one WiFi share the address buckets)
+    var failed = function () {
+      S.estimate = "failed";
+      setTimeout(function () { if (S.estimate === "failed") { S.estimate = null; if (S.view === "basket") render(); } }, 8000);
       if (S.view === "basket") render();
-    }, function () { S.estimate = null; });
+    };
+    post("/estimate", body()).then(function (r) {
+      if (!r.ok) { if (r.body.error && r.status !== 429) S.error = r.body.error.message; failed(); return; }
+      S.estimate = r.body.estimate;
+      if (S.view === "basket") render();
+    }, failed);
   }
   function body() {
     return { lines: basketLines().map(function (l) { return { item: l.item, qty: l.qty, note: l.note, later: !!l.later, options: l.options || [] }; }),
@@ -290,7 +296,7 @@
         if (!last && i > 0 && !Number(x.value)) return; // no service or tax at this outlet: no Rp 0 line
         add(sum, add(el("div", "sum" + (last ? " total" : "")), el("span", null, last ? "Perkiraan" : x.label), el("strong", null, money(x.value))));
       });
-    } else sum.appendChild(el("div", "hint", S.estimate === "loading" ? "Menghitung perkiraan…" : ""));
+    } else sum.appendChild(el("div", "hint", S.estimate === "loading" ? "Menghitung perkiraan…" : (S.estimate === "failed" ? "Perkiraan belum bisa dihitung. Total tetap dihitung kasir." : "")));
     who.appendChild(sum);
     who.appendChild(el("p", "hint", "Dihitung dari harga dan tarif outlet ini. Bayar di kasir setelah selesai."));
     if (S.error) who.appendChild(el("p", "error", S.error));

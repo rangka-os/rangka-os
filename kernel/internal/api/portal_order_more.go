@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -309,7 +310,7 @@ func (s *Server) portalOrderEstimate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := s.portal.Wait(r.Context(), "pe:"+s.clientKey(r), portalEstimateRate); err != nil {
+	if _, err := s.portal.Wait(r.Context(), "pe:"+hit.id, portalEstimateRate); err != nil { // per link: a stuck phone never starves the room
 		s.portalMiss(w, http.StatusTooManyRequests, err, nil)
 		return
 	}
@@ -536,7 +537,7 @@ func (s *Server) portalIdempotent(w http.ResponseWriter, r *http.Request, hit *p
 		return
 	}
 	if err != nil {
-		s.idemReplay(w, r.WithContext(ctx), &caller{actor: hit.actor}, it, hash)
+		s.portalIdemReplay(w, ctx, hit, it, hash)
 		return
 	}
 	cw := &captureWriter{h: http.Header{}}
@@ -575,4 +576,36 @@ func (s *Server) portalNamesBy(ctx context.Context, org string, m *meta.Model, f
 		out = append(out, fmt.Sprint(row[0]))
 	}
 	return out, nil
+}
+
+// portalIdemReplay answers a resent guest write in the page's own shape and words: the stored answer, or the order as a
+// guest sees it when only the record was kept, or "still running". Never a raw record (staff fields) or an English
+// message (idemReplay is for members).
+func (s *Server) portalIdemReplay(w http.ResponseWriter, ctx context.Context, hit *portalHit, it *store.Idem, hash string) {
+	switch {
+	case it.Hash != hash:
+		writeError(w, http.StatusConflict, "idempotency_conflict", "Pesanan ini sudah dikirim dengan isi lain. Muat ulang halaman.")
+	case it.State == "done":
+		w.Header().Set("Idempotency-Replayed", "true")
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(it.Status)
+		w.Write(append(it.Response, '\n'))
+	case it.State == "committed" && time.Since(it.Created) >= store.IdempotencyStale:
+		model, name, ok := strings.Cut(it.Target, "/")
+		m := s.Engine.Reg().Model(hit.page.Model)
+		if !ok || m == nil || model != m.Name {
+			writeError(w, http.StatusConflict, "order_unknown", "Pesanan belum bisa dipastikan. Lihat tagihan meja sebelum mengirim lagi.")
+			return
+		}
+		rec, err := s.Engine.Get(ctx, hit.actor, m.Name, name)
+		if err != nil || !s.portalOwnOrder(hit, rec) {
+			writeError(w, http.StatusConflict, "order_unknown", "Pesanan belum bisa dipastikan. Lihat tagihan meja sebelum mengirim lagi.")
+			return
+		}
+		w.Header().Set("Idempotency-Replayed", "true")
+		writeJSON(w, http.StatusCreated, map[string]any{"order": s.portalOrderView(ctx, hit, m, m.Field(hit.page.StatusField), rec)})
+	default:
+		w.Header().Set("Retry-After", idemRetrySecond)
+		writeError(w, http.StatusConflict, "order_in_progress", "Pesananmu masih diproses. Tunggu sebentar.")
+	}
 }

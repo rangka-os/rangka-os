@@ -1478,6 +1478,7 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 /* queue board (no steps): a pickup counter's ready list, titles large enough to read across the room */
 .ap-queue-board .ap-queue-card header b { font-size: 28px; line-height: 34px; }
 .ap-queue-board .ap-queue-col { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.ap-queue-board .ap-queue-col > h2, .ap-queue-board .ap-queue-col > p { grid-column: 1 / -1; }
 /* a guest board shows who, not how long */
 .ap-queue-board.ap-queue-rows .ap-queue-age { display: none; }
 .ap-queue-board .ap-qcard > header b { overflow-wrap: anywhere; }

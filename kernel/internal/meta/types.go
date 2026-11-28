@@ -172,7 +172,7 @@ type Widget struct {
 	Name, Type, Chart, Model string
 	Aggregate, Field, Filter string
 	GroupBy, Grain, Period   string
-	Sort, If                 string
+	Sort, If, Source         string
 	Limit, Span              int
 	Label                    Label
 	Columns                  []string
@@ -407,7 +407,7 @@ func parseDashboard(app string, doc *rk.Doc) *Dashboard {
 		}
 		d.Widgets = append(d.Widgets, &Widget{Name: str(wm, "name"), Type: str(wm, "type"), Chart: str(wm, "chart"), Model: str(wm, "model"),
 			Aggregate: str(wm, "aggregate"), Field: str(wm, "field"), Filter: celText(wm["filter"]), GroupBy: str(wm, "group_by"),
-			Grain: str(wm, "grain"), Period: str(wm, "period"), Sort: str(wm, "sort"), If: celText(wm["if"]), Limit: integer(wm, "limit"),
+			Grain: str(wm, "grain"), Period: str(wm, "period"), Sort: str(wm, "sort"), If: celText(wm["if"]), Source: str(wm, "source"), Limit: integer(wm, "limit"),
 			Span: integer(wm, "span"), Label: label(wm["label"]), Columns: strList(wm["columns"]), Raw: wm})
 	}
 	return d

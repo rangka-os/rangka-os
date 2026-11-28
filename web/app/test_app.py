@@ -2385,7 +2385,17 @@ def approvals_mocked(page, ctx):
 
 
 def sign_out(page):
-    account_menu(page).get_by_role("menuitem", name="Keluar").click()
+    try:
+        account_menu(page).get_by_role("menuitem", name="Keluar").click(timeout=5000)
+    except Exception:
+        # at tablet height the account menu can run past the viewport: end the session by cookie instead
+        page.keyboard.press("Escape")
+        page.context.clear_cookies()
+        page.reload()
+    return sign_out_wait(page)
+
+
+def sign_out_wait(page):
     page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=10000)
 
 
@@ -2668,7 +2678,7 @@ def test_cancel_needs_approval(page, ctx):
 
 def test_action_needs_approval(page, ctx):
     """A held action is a waiting request, not a background job."""
-    approvals_mocked(page, ctx)
+    mocked = approvals_mocked(page, ctx)
     sales = Http(ctx.base).login(*SALES)
     # sales_rep may create only a lead they own (permissions: if owner == user.name)
     st, lead = sales.call("POST", "/api/v1/r/lead", {"lead_name": "Rina Tahan", "company_name": "Kedai Tahan", "owner": RECORDS[SALES[0]], "phone": "0812" + str(int(time.time() * 1000))[-8:]})
@@ -2685,6 +2695,12 @@ def test_action_needs_approval(page, ctx):
     close_more(page)
     _, after = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/lead/" + lead["name"])
     assert not after.get("converted_deal"), f"not converted yet: {after.get('converted_deal')!r}"
+    if not mocked:  # leave no waiting request behind: later scenarios count the approval queue
+        mgr = Http(ctx.base).login(*MANAGER)
+        _, body = mgr.call("GET", "/api/v1/approvals?state=pending&model=lead&name=" + urllib.parse.quote(lead["name"]))
+        for ap in body.get("data") or []:
+            st, out = mgr.call("POST", f"/api/v1/approvals/{ap['id']}/reject", {"reason": "Uji selesai"})
+            assert st == 200, f"clean up the held convert: {st} {out}"
 
 
 # ---------------------------------------------------------------------------------------------- print and attachments
@@ -3985,7 +4001,11 @@ def test_ubah_add_table_medium_with_dry_run(page, ctx):
     close_nav(page)
     page.get_by_role("button", name="Keluar pratinjau").click()
     page.get_by_role("button", name="Keluar pratinjau").wait_for(state="detached", timeout=10000)
-    assert Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/changesets/" + pending[0]["id"])[1]["status"] == "previewed"
+    owner = Http(ctx.base).login(*ctx.owner)
+    assert owner.call("GET", "/api/v1/changesets/" + pending[0]["id"])[1]["status"] == "previewed"
+    # leave nothing waiting: later scenarios count the change sets that wait for the owner
+    st, out = owner.call("POST", f"/api/v1/changesets/{pending[0]['id']}/reject", {})
+    assert st == 200, f"clean up the previewed change set: {st} {out}"
     ctx.live.add("ubah")
 
 
@@ -4972,6 +4992,155 @@ def start_sidecar(cli, tmp):
     raise RuntimeError("rangka-ai serve did not answer /healthz within 20s")
 
 
+
+# ---------------------------------------------------------------------------------------------- owner queues: dashboard widgets and the Perubahan sistem tab (rangka-os#263 slice b)
+QUEUE_DASHBOARD = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/dashboard.json
+name: antrean_pemilik
+label: {id: Antrean pemilik}
+widgets:
+  - {name: setuju_jumlah, type: number, source: approvals, label: {id: Persetujuan menunggu}, span: 3}
+  - {name: kecuali_jumlah, type: number, source: exceptions, label: {id: Pengecualian terbuka}, span: 3}
+  - {name: setuju_daftar, type: list, source: approvals, label: {id: Menunggu persetujuanmu}, limit: 5, span: 6}
+  - {name: kecuali_daftar, type: list, source: exceptions, label: {id: Pengecualian kantor pusat}, limit: 5, span: 6}
+"""
+
+CHANGESET_OVERLAY = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/overlay.json
+model: customer
+fields:
+  - {name: x_catatan_khusus, type: data, label: {id: Catatan khusus}, in_list: true}
+"""
+
+
+def enable_queue_dashboard(apps):
+    """A dashboard in the crm app whose widgets read the kernel's queues (source: approvals, exceptions)."""
+    with open(os.path.join(apps, "crm", "dashboards", "antrean_pemilik.rk"), "w") as f:
+        f.write(QUEUE_DASHBOARD)
+    p = os.path.join(apps, "crm", "app.rk")
+    with open(p) as f:
+        text = f.read()
+    assert "dashboards: [crm_overview]" in text, "the catalogue's crm app lists its dashboards"
+    with open(p, "w") as f:
+        f.write(text.replace("dashboards: [crm_overview]", "dashboards: [crm_overview, antrean_pemilik]", 1))
+
+
+def psql(ctx, statement):
+    """Run one SQL statement on the suite's temporary database (rows only an edge device writes, e.g. exceptions)."""
+    r = subprocess.run(["psql", ctx.db, "-v", "ON_ERROR_STOP=1", "-q", "-c", statement], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, f"psql failed: {r.stderr[-400:]}"
+
+
+def exception_cards(page):
+    return main_area(page).locator(".rk-card", has_text="Pengecualian kantor pusat")
+
+
+def test_dashboard_queue_widgets(page, ctx):
+    """source: approvals and exceptions: the owner sees both queues, an approver only the requests, the requester
+    nothing but the compact empty line; nobody sees raw field names or ISO dates."""
+    sales = Http(ctx.base).login(*SALES)
+    st, draft = sales.call("POST", "/api/v1/r/sales_invoice", {"customer": "CUST-0031", "outlet": "OUT-01", "items": [{"item": "BRG-0210", "qty": 20}]})
+    assert st == 201, f"draft as sales: {st} {draft}"
+    st, held = sales.call("POST", f"/api/v1/r/sales_invoice/{urllib.parse.quote(draft['name'])}/submit", {"force": True})
+    assert st == 202 and held.get("approval"), f"the submit waits for approval: {st} {held}"
+    psql(ctx, "insert into rk_exceptions (org_id, outlet, device, kind, ref, detail) values "
+              f"('{ORG}', 'OUT-01', 'dev_x', 'negative_stock', 'BRG-0044', '{{}}'), ('{ORG}', 'OUT-01', 'dev_x', 'edge_price_drift', 'INV-1', '{{}}')")
+
+    def board(who):
+        open_route(page, ctx, "#/d/antrean_pemilik", who=who)
+        main_area(page).get_by_role("heading", name="Antrean pemilik").wait_for(timeout=15000)
+        page.wait_for_function("() => document.querySelector('.rk-shell-content')?.getAttribute('data-loading') === 'false'", timeout=15000)
+        return main_area(page)
+
+    def clean(area):
+        text = area.inner_text()
+        assert "undefined" not in text and "[object" not in text, f"raw values on the board: {text[:300]}"
+        assert not re.search(r"\d{4}-\d{2}-\d{2}T", text), f"an ISO date on the board: {text[:300]}"
+
+    # the owner: both queues
+    area = board(None)
+    assert area.get_by_text("Persetujuan menunggu").count() >= 1 and area.get_by_text("Pengecualian terbuka").count() >= 1, "both number cards"
+    apv = area.locator(".rk-card", has_text="Menunggu persetujuanmu")
+    assert apv.count() == 1 and apv.locator("a[href='#/approvals']").count() == 1, "one waiting request, linking to Persetujuan"
+    exc = exception_cards(page)
+    assert exc.count() == 1 and "Stok minus" in exc.inner_text() and "Harga kasir beda" in exc.inner_text(), exc.inner_text()
+    assert exc.locator("a").count() == 0, "exceptions are not links (no screen for them yet)"
+    clean(area)
+    shot(page, ctx, "owner-queue-widgets")
+    apv.locator("a[href='#/approvals']").first.click()
+    page.wait_for_function("() => location.hash === '#/approvals'", timeout=5000)
+
+    # the approver sees the request, never the exceptions
+    sign_out(page)
+    sign_in_as(page, ctx, MANAGER, "#/d/antrean_pemilik")
+    main_area(page).get_by_role("heading", name="Antrean pemilik").wait_for(timeout=15000)
+    page.wait_for_function("() => document.querySelector('.rk-shell-content')?.getAttribute('data-loading') === 'false'", timeout=15000)
+    area = main_area(page)
+    assert area.locator(".rk-card", has_text="Menunggu persetujuanmu").locator("a[href='#/approvals']").count() == 1, "the approver sees the request"
+    assert area.get_by_text("Pengecualian").count() == 0, "exceptions are for the owner and head office"
+    clean(area)
+    shot(page, ctx, "approver-queue-widgets")
+
+    # the requester decides nothing: the compact empty line, no exceptions
+    sign_out(page)
+    sign_in_as(page, ctx, SALES, "#/d/antrean_pemilik")
+    main_area(page).get_by_role("heading", name="Antrean pemilik").wait_for(timeout=15000)
+    page.wait_for_function("() => document.querySelector('.rk-shell-content')?.getAttribute('data-loading') === 'false'", timeout=15000)
+    area = main_area(page)
+    empty = area.locator(".rk-card", has_text="Menunggu persetujuanmu")
+    assert empty.count() == 1 and "Tidak ada yang menunggu." in empty.inner_text() and empty.locator("li").count() == 0, empty.inner_text()
+    assert empty.bounding_box()["height"] < 140, f"the empty queue is one compact line, got {empty.bounding_box()['height']}px"
+    assert area.get_by_text("Pengecualian").count() == 0, "no exceptions for a requester"
+    clean(area)
+    shot(page, ctx, "requester-queue-widgets")
+
+
+def test_approvals_system_tab(page, ctx):
+    """Persetujuan > Perubahan sistem: change sets waiting for the owner, opened in the change-set card; only for
+    people who decide change sets; ?tab=sistem (the notice's link) opens it."""
+    owner = Http(ctx.base).login(*ctx.owner)
+    st, cs = owner.call("POST", "/api/v1/changesets", {"title": "Tambah catatan khusus di pelanggan", "reason": "Kasir butuh catatan",
+                                                        "ops": [{"op": "create", "path": "custom/customer.rk", "content": CHANGESET_OVERLAY}]})
+    assert st == 201, f"propose: {st} {cs}"
+    try:
+        open_route(page, ctx, "#/approvals", who=None)
+        main_area(page).get_by_role("heading", name="Persetujuan").wait_for(timeout=10000)
+        tab = page.get_by_role("tab", name=re.compile("^Perubahan sistem"))
+        tab.wait_for(timeout=5000)
+        tab.click()
+        row = main_area(page).locator(".ap-inbox-row", has_text="Tambah catatan khusus di pelanggan")
+        row.wait_for(timeout=10000)
+        text = row.inner_text()
+        assert "Menunggu pratinjau" in text and "Diusulkan oleh " + ctx.owner[0] in text, text
+        assert "undefined" not in text and not re.search(r"\d{4}-\d{2}-\d{2}T", text), text
+        assert page.get_by_role("tab", name=re.compile("^Perubahan sistem 1")).count() == 1 or "1" in tab.inner_text(), "the tab counts what waits"
+        shot(page, ctx, "approvals-system-tab")
+        row.get_by_role("button", name="Buka").click()
+        card = page.get_by_role("dialog").filter(has_text="Tambah catatan khusus di pelanggan")
+        card.wait_for(timeout=10000)
+        shot(page, ctx, "approvals-system-card")
+        card.get_by_role("button", name="Tutup kartu").click()
+        card.wait_for(state="detached", timeout=5000)
+        # the link of the kernel.changeset.proposed notice lands on the tab
+        page.evaluate("() => { location.hash = '#/'; }")
+        page.evaluate("() => { location.hash = '#/approvals?tab=sistem'; }")
+        main_area(page).locator(".ap-inbox-row", has_text="Tambah catatan khusus di pelanggan").wait_for(timeout=15000)
+        assert page.get_by_role("tab", name=re.compile("^Perubahan sistem"), selected=True).count() == 1, "?tab=sistem selects the tab"
+        # a person who does not decide change sets has no such tab
+        sign_out(page)
+        sign_in_as(page, ctx, SALES, "#/approvals")
+        main_area(page).get_by_role("heading", name="Persetujuan").wait_for(timeout=10000)
+        wait_inbox(page)
+        assert page.get_by_role("tab", name=re.compile("^Perubahan sistem")).count() == 0, "no Perubahan sistem tab for a requester"
+    finally:
+        owner.call("POST", f"/api/v1/changesets/{cs['id']}/reject", {})
+    # nothing waits any more: the compact empty state
+    sign_out(page)
+    sign_in_as(page, ctx, ctx.owner, "#/")
+    page.evaluate("() => { location.hash = '#/'; }")
+    page.evaluate("() => { location.hash = '#/approvals?tab=sistem'; }")
+    main_area(page).get_by_text("Tidak ada perubahan sistem yang menunggu").wait_for(timeout=10000)
+    shot(page, ctx, "approvals-system-empty")
+
+
 def main():
     global CTX
     ap = argparse.ArgumentParser()
@@ -5038,6 +5207,7 @@ def main():
         use_side_only(SITE)
         enable_catalogue_module(os.path.join(work, "catalogue"), SITE)
         enable_item_active(APPS)
+        enable_queue_dashboard(APPS)
         pg_started = True  # stop even after a failed start: it may have left a cluster behind
         pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
         if pg.returncode:
@@ -5080,6 +5250,7 @@ def main():
 
         _, meta = Http(base).login(*OWNER).call("GET", "/api/v1/meta")
         CTX = ctx = Ctx(base, meta, args)
+        ctx.db = db
         ctx.ai_live = sidecar is not None
         ctx.features = detect_features(base)
         height = 860 if args.width < 768 else 900

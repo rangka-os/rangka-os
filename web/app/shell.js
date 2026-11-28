@@ -1366,6 +1366,8 @@
       refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs || offline, offline: offline,
       // a change set built elsewhere (the catalogue's Pasang / Lepas) opens in the same card as Ubah's
       showChangeSet: function (cs) { RA.postChangeset("created", cs); setCard({ cs: cs }); },
+      // an existing change set (Persetujuan › Perubahan sistem) opens in the same card, without telling a framing page it was created
+      openChangeSet: openCs,
       onboarding: { data: ob, hide: hideOnboarding, reload: loadOnboarding }, askRaka: function (q) { askRaka(q); },
       // the guided tour of a Mulai di sini step (mulai.js)
       startTour: function (def) { startTour(def); },

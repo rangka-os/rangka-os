@@ -87,3 +87,13 @@ func (s *Server) runNoticeMailJob(ctx context.Context, j *jobs.Job) (any, error)
 	}
 	return nil, &jobs.RetryAfter{Err: err, After: notices.Backoff(j.Attempt)}
 }
+
+// runExceptionDigestJob raises the hourly head-office notice of new exceptions (contract 0066 as built). The
+// scheduler enqueues one job per organisation and hour; the engine tells nobody when nothing is new.
+func (s *Server) runExceptionDigestJob(ctx context.Context, j *jobs.Job) (any, error) {
+	ctx = pg.WithOrg(ctx, j.Org)
+	if err := s.Engine.NoticeExceptionDigest(ctx, j.Org, s.Engine.Now()); err != nil {
+		return nil, err
+	}
+	return map[string]any{"ok": true}, nil
+}

@@ -152,7 +152,10 @@ offer. It is computed on read and never stored. Unconfirmed guesses are not used
 ```
 
 **Plan.** The packages in order are `mulai` < `juragan` < `pro` < `grup` < `enterprise`. Each answer gives a minimum
-package; the plan is the highest minimum.
+package; the plan is the highest minimum, and never below the first package with `price.per_month` above zero
+(amended 28 Nov 2026: however small the business, Cloud suggests the first paid package; the free package stays in
+`packages` and can still be chosen). When that floor sets the plan, the first reason says what the paid package adds
+over the free one, from the tiers file, and the last says the free package can still be chosen.
 
 | Field | Minimum package |
 | --- | --- |

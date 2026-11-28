@@ -204,7 +204,11 @@
         if (aq.settled && rev >= aq.settled && !aq.running && !aq.next) { aq.settled = 0; setApplying(null); }
         // every card's colours once, so a pick paints without waiting for the server
         ((d && d.themes) || []).forEach(function (c) { if (c.source === "bundled") deriveOf(c).then(null, function () {}); });
-      }, function (e) { if (live) set({ loading: false, data: null, error: e }); });
+      }, function (e) {
+        var aq = applyQ.current;
+        if (aq.settled && rev >= aq.settled && !aq.running && !aq.next) { aq.settled = 0; setApplying(null); } // not stuck on "Menyimpan…"
+        if (live) set({ loading: false, data: null, error: e });
+      });
       return function () { live = false; };
     }, [bizName, meta.theme && meta.theme.path, galleryRev]);
     // leaving the page puts the effective theme back (the newest meta, not the one the page opened with)
@@ -252,10 +256,9 @@
       }).then(function () { if (latest()) setSaving(false); }, function (e) {
         settled = true;
         if (api.isStale && api.isStale(e)) {
-          if (latest()) { // replaced by the account menu: its save is the newest now
+          if (latest()) { // replaced by the account menu: its save is the newest, and it already patched meta
             setSaving(false);
             base.current = null;
-            ctx.reloadMeta().then(null, function () {});
           }
           return;
         }

@@ -163,6 +163,20 @@ func (s *Server) edgePlan(ctx context.Context, d *auth.Device) (*edgePlan, error
 					add(f.To)
 				}
 			}
+			// the records rows of the document's other tables link (contract 0048 §1: options a guest chose on the
+			// table QR, priced into the lines), so a paired device prices a bill that carries them as the kernel does
+			for _, tf := range dm.Fields {
+				if tf.Type != "table" || tf.Name == str(doc["lines"]) {
+					continue
+				}
+				if cm := reg.Model(tf.Of); cm != nil {
+					for _, cf := range cm.Fields {
+						if cf.Type == "link" {
+							add(cf.To)
+						}
+					}
+				}
+			}
 		}
 	}
 	if len(p.screens) > 0 {

@@ -92,6 +92,20 @@
     return (rows || []).map(function (r, i) { return Object.assign({ line_key: cart[i] && cart[i].key }, r); });
   }
 
+  /** A bill's own tables the counter does not edit (options a guest chose on the table QR, contract 0048 §1, by line
+   *  key): every table field of the document except the lines and the payments, rows reduced to their writable fields,
+   *  so a preview and a save price the lines exactly as the stored bill does. */
+  function billTables(models, docModel, linesField, payTable, rec) {
+    var o = {};
+    ((models[docModel] || {}).fields || []).forEach(function (f) {
+      if (f.type !== "table" || f.name === linesField || f.name === payTable) return;
+      var keep = (((models[f.of] || {}).fields) || []).filter(function (x) { return !x.compute && !x.read_only && x.type !== "table"; });
+      o[f.name] = ((rec && rec[f.name]) || []).map(function (r) { var x = {}; keep.forEach(function (k) { if (r[k.name] !== undefined) x[k.name] = r[k.name]; }); return x; });
+    });
+    return o;
+  }
+
+  T.billTables = billTables;
   T.natural = natural; T.matchFilter = matchFilter; T.ageLabel = ageLabel; T.clockLabel = clockLabel;
   T.tableStates = tableStates; T.cartFromBill = cartFromBill; T.billLines = billLines;
 

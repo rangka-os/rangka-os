@@ -50,6 +50,7 @@ func (s *Server) portalRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /p/{org}/{page}/{token}", s.portalShell)
 	mux.HandleFunc("GET /p/{org}/{page}/{token}/data", s.portalData)
 	mux.HandleFunc("GET /p/{org}/{page}/{token}/print", s.portalPrint)
+	s.portalOrderRoutes(mux)
 }
 
 // ---- members ----
@@ -102,7 +103,7 @@ func (s *Server) sharePage(w http.ResponseWriter, r *http.Request, c *caller, re
 		writeError(w, http.StatusBadRequest, "bad_request", "record wajib diisi")
 		return nil, nil, false
 	}
-	rec, err := s.Engine.Get(r.Context(), c.actor, p.Model, record)
+	rec, err := s.Engine.Get(r.Context(), c.actor, p.LinkModel(), record)
 	if err != nil {
 		fail(w, err)
 		return nil, nil, false
@@ -121,21 +122,6 @@ func (s *Server) createPortalLink(w http.ResponseWriter, r *http.Request, c *cal
 	if !ok {
 		return
 	}
-	m := s.Engine.Reg().Model(p.Model)
-	switch ds := docstatus(rec); {
-	case m.IsSubmittable && ds == 0:
-		writeError(w, http.StatusConflict, "portal_not_submitted", "Ajukan dokumen ini dulu sebelum membagikan tautan ke pelanggan.")
-		return
-	case ds == 2:
-		writeError(w, http.StatusConflict, "portal_cancelled", "Dokumen ini sudah dibatalkan; bagikan tautan dokumen penggantinya.")
-		return
-	}
-	// v1 shows amounts in the organisation's currency only: a foreign-currency document keeps its prices in _fx
-	// twins the page does not list (contract 0073 §5)
-	if org := portalCurrency(s.Engine.Reg(), c.actor.Org); portalDocCurrency(s.Engine.Reg(), c.actor.Org, m, rec) != org {
-		writeError(w, http.StatusConflict, "portal_currency_unsupported", "Tautan pelanggan belum bisa untuk dokumen mata uang asing; kirim versi cetaknya.")
-		return
-	}
 	days := p.LifetimeDays
 	if v, has := body["days"]; has {
 		f, isNum := v.(float64)
@@ -145,15 +131,40 @@ func (s *Server) createPortalLink(w http.ResponseWriter, r *http.Request, c *cal
 		}
 		days = int(f)
 	}
-	tok := make([]byte, 32)
-	idb := make([]byte, 9)
-	if _, err := rand.Read(tok); err != nil {
+	if p.Type != "order_page" {
+		m := s.Engine.Reg().Model(p.Model)
+		switch ds := docstatus(rec); {
+		case m.IsSubmittable && ds == 0:
+			writeError(w, http.StatusConflict, "portal_not_submitted", "Ajukan dokumen ini dulu sebelum membagikan tautan ke pelanggan.")
+			return
+		case ds == 2:
+			writeError(w, http.StatusConflict, "portal_cancelled", "Dokumen ini sudah dibatalkan; bagikan tautan dokumen penggantinya.")
+			return
+		}
+		// v1 shows amounts in the organisation's currency only: a foreign-currency document keeps its prices in _fx
+		// twins the page does not list (contract 0073 §5)
+		if org := portalCurrency(s.Engine.Reg(), c.actor.Org); portalDocCurrency(s.Engine.Reg(), c.actor.Org, m, rec) != org {
+			writeError(w, http.StatusConflict, "portal_currency_unsupported", "Tautan pelanggan belum bisa untuk dokumen mata uang asing; kirim versi cetaknya.")
+			return
+		}
+	}
+	link, err := s.portalNewLink(r, c, p, p.LinkModel(), record, days)
+	if err != nil {
 		fail(w, err)
 		return
 	}
+	writeJSON(w, http.StatusCreated, link)
+}
+
+// portalNewLink stores a new link (only its token's hash) and audits it; the answer is the only place the token is.
+func (s *Server) portalNewLink(r *http.Request, c *caller, p *meta.Portal, model, record string, days int) (map[string]any, error) {
+	tok := make([]byte, 32)
+	idb := make([]byte, 9)
+	if _, err := rand.Read(tok); err != nil {
+		return nil, err
+	}
 	if _, err := rand.Read(idb); err != nil {
-		fail(w, err)
-		return
+		return nil, err
 	}
 	token := base64.RawURLEncoding.EncodeToString(tok)
 	sum := sha256.Sum256([]byte(token))
@@ -162,17 +173,15 @@ func (s *Server) createPortalLink(w http.ResponseWriter, r *http.Request, c *cal
 	expires := now.Add(time.Duration(days) * 24 * time.Hour)
 	ctx := r.Context()
 	if _, err := s.DB.Exec(ctx, `insert into rk_portal_links (id, org_id, page, model, record, token_hash, expires_at, created_by, created_at)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, id, c.actor.Org, p.Name, p.Model, record, sum[:], expires, c.actor.ID, now); err != nil {
-		fail(w, err)
-		return
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, id, c.actor.Org, p.Name, model, record, sum[:], expires, c.actor.ID, now); err != nil {
+		return nil, err
 	}
-	if err := store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "portal.link.create", p.Model+"/"+record, p.Name+" ("+strconv.Itoa(days)+" hari)",
+	if err := store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "portal.link.create", model+"/"+record, p.Name+" ("+strconv.Itoa(days)+" hari)",
 		map[string]any{"page": p.Name, "link": id, "expires_at": expires.Format(time.RFC3339)}); err != nil {
 		s.logf("portal: audit create %s: %v", id, err)
 	}
 	path := "/p/" + url.PathEscape(c.actor.Org) + "/" + url.PathEscape(p.Name) + "/" + token
-	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "url": s.publicBase(r) + path, "path": path,
-		"expires_at": expires.Format(time.RFC3339)})
+	return map[string]any{"id": id, "url": s.publicBase(r) + path, "path": path, "expires_at": expires.Format(time.RFC3339)}, nil
 }
 
 // publicBase is the kernel's public address: system.rk auth.issuer when set, else the request's scheme and host.
@@ -247,6 +256,7 @@ type portalHit struct {
 	rec     store.Record
 	expires time.Time
 	actor   engine.Actor
+	menu    []any // an order_page's menu, read once per request
 }
 
 // portalHeaders: nothing of a portal answer is cached, indexed or sent on as a referrer (the token is in the path).
@@ -290,7 +300,7 @@ func (s *Server) portalResolve(r *http.Request) (*portalHit, int, error) {
 	}
 	row := res.Maps()[0]
 	id, model, record := fmt.Sprint(row["id"]), fmt.Sprint(row["model"]), fmt.Sprint(row["record"])
-	if model != p.Model {
+	if model != p.LinkModel() {
 		return nil, http.StatusNotFound, nil
 	}
 	expires, _ := row["expires_at"].(time.Time)
@@ -305,6 +315,10 @@ func (s *Server) portalResolve(r *http.Request) (*portalHit, int, error) {
 		return nil, http.StatusNotFound, nil
 	}
 	if m.IsSubmittable && docstatus(rec) == 0 {
+		return nil, http.StatusNotFound, nil
+	}
+	// an order_page's anchor switched off (a table not in use) takes no guest at all (contract 0073 §9)
+	if p.Type == "order_page" && m.Field("active") != nil && rec["active"] == false {
 		return nil, http.StatusNotFound, nil
 	}
 	return &portalHit{id: id, org: org, page: p, model: m, rec: rec, expires: expires, actor: actor}, http.StatusOK, nil
@@ -362,6 +376,10 @@ func (s *Server) portalData(w http.ResponseWriter, r *http.Request) {
 	hit, status, err := s.portalResolve(r)
 	if status != http.StatusOK {
 		s.portalMiss(w, status, err, hit)
+		return
+	}
+	if hit.page.Type == "order_page" {
+		s.portalOrderData(w, r, hit)
 		return
 	}
 	ctx := pg.WithOrg(r.Context(), hit.org)

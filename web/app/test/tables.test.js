@@ -59,3 +59,17 @@ test("cartFromBill keeps the bill's line keys; billLines adds them to a body", (
   assert.strictEqual(held[0].hold, true);
   assert.deepStrictEqual(plain(T.billLines(doc, cart, [{ item: "M1", qty: 2 }])), [{ line_key: "a1", item: "M1", qty: 2 }]);
 });
+
+
+test("billTables: a bill's option rows travel back with their writable fields only; lines and payments never do", () => {
+  const models = {
+    pos_sale: { fields: [{ name: "options", type: "table", of: "pos_sale_option" }, { name: "items", type: "table", of: "pos_sale_item" },
+      { name: "payments", type: "table", of: "pos_payment" }, { name: "sent_to_kitchen", type: "json" }] },
+    pos_sale_option: { fields: [{ name: "line", type: "data" }, { name: "option", type: "link" }, { name: "label", type: "data", compute: "option.label" },
+      { name: "price_delta", type: "currency", compute: "option.price_delta" }] },
+  };
+  const rec = { options: [{ name: "ROW-1", idx: 1, line: "SO-1:L1", option: "OPT-SHOT", label: "Extra shot", price_delta: 6000 }],
+    items: [{ item: "KOPI" }], payments: [{ method: "cash" }], sent_to_kitchen: [{ key: "SO-1:L1" }] };
+  assert.deepStrictEqual(plain(T.billTables(models, "pos_sale", "items", "payments", rec)), { options: [{ line: "SO-1:L1", option: "OPT-SHOT" }] });
+  assert.deepStrictEqual(plain(T.billTables(models, "pos_sale", "items", "payments", {})), { options: [] });
+});

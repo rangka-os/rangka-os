@@ -1392,6 +1392,7 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 .ap-tp-name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
 .ap-tp-name .rk-pill { margin-left: auto; }
 .ap-tp-desc { color: var(--muted); font-size: var(--font-size-sm); }
+.ap-tp-status { display: inline-flex; align-items: center; gap: var(--space-3, 12px); }
 .ap-tp-mini { display: flex; height: 64px; border-radius: 5px; overflow: hidden; border: 1px solid; }
 .ap-tp-mini-side { width: 30%; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
 .ap-tp-mini-main { flex: 1; padding: 6px; display: flex; flex-direction: column; gap: 5px; }

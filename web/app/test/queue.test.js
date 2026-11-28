@@ -36,3 +36,14 @@ test("linesText: the row fields joined, empty ones left out", () => {
   const t = A.linesText([{ menu: "MNU-1", qty: 2, note: "" }, { menu: "MNU-2", qty: 1, note: "pedas" }], ["menu", "qty", "note"], (f, v) => (f === "qty" ? "×" + v : v));
   assert.deepStrictEqual(plain(t), ["MNU-1 · ×2", "MNU-2 · ×1 · pedas"]);
 });
+
+test("arrivals: new cards in the first column after the first load; never on the first load", () => {
+  const cols = { by: "status", values: ["new", "cooking", "ready"] };
+  const rows = [{ name: "a", status: "new" }, { name: "b", status: "cooking" }];
+  assert.deepStrictEqual(plain(A.arrivals(null, rows, cols)), [], "opening the screen never sounds");
+  const seen = { a: true, b: true };
+  const next = rows.concat([{ name: "c", status: "new" }, { name: "d", status: "ready" }]);
+  assert.deepStrictEqual(plain(A.arrivals(seen, next, cols)), ["c"], "only the first column counts");
+  assert.deepStrictEqual(plain(A.arrivals(seen, [{ name: "b", status: "new" }], cols)), [], "a card moved back is not new");
+  assert.deepStrictEqual(plain(A.arrivals({}, [{ name: "x" }], null)), ["x"], "without columns the one list is the first column");
+});

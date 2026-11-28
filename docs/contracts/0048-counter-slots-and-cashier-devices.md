@@ -269,6 +269,8 @@ hash or a device token. The kernel web app has the same owner page (Pengaturan �
   mode. Use: `theme: dark` on `dapur`.
 - Colours stay the theme's tokens (0038 and `theme.rk` unchanged); only the mode switches.
 - Validator: the enum is checked by the JSON Schema (`schema`); no new code.
+- As built (rangka-apps#131): `screenMode` in `web/app/shell.js`; the queue screens of the work bar show the badge
+  of §7 (`queueBadgeFilter`), and at 1600px and wider queue cards scale up for a TV read from about 3 m.
 
 ### 7. The work frame on a tablet
 Renderer only, no `.rk` key. It extends the work shell of 0030 §3 and applies to the same people (every role

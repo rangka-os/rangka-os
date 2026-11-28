@@ -67,6 +67,13 @@
       },
       "description": "Device capabilities; the screen still opens without them, with a notice"
     },
+    "theme": {
+      "enum": [
+        "light",
+        "dark"
+      ],
+      "description": "Colour mode of the whole page while this screen is open, above the person's pick and the company's theme.mode (contract 0048 §6), e.g. dark on a kitchen display"
+    },
     "offline": {
       "enum": [
         "none",
@@ -528,8 +535,7 @@
       "description": "Work through cards that change state: kitchen tickets, today's jobs (contract 0030 §2)",
       "required": [
         "source",
-        "card",
-        "steps"
+        "card"
       ],
       "additionalProperties": false,
       "properties": {
@@ -594,6 +600,7 @@
         },
         "steps": {
           "type": "array",
+          "description": "The card's buttons; without steps the screen is a read-only board (a pickup counter's ready list)",
           "minItems": 1,
           "items": {
             "type": "object",
@@ -654,6 +661,12 @@
           "minimum": 3,
           "maximum": 300,
           "description": "Seconds between refreshes (default 10)"
+        },
+        "alert": {
+          "enum": [
+            "new"
+          ],
+          "description": "new: one short sound when a card enters the first column after the first load (a kitchen display)"
         }
       }
     },

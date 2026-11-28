@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+# A read-only queue (no steps): the pickup counter's board of ready orders.
+name: siap_ambil
+type: queue
+label: {id: Siap diambil}
+icon: list
+roles: [dapur]
+theme: dark
+queue:
+  source: {model: tiket_dapur, filter: "status == 'ready' && date == today()", sort: created_at}
+  card: {title: table_no}
+  refresh: 5

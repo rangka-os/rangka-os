@@ -12,10 +12,13 @@
  *     set writes literal values with a conditional PATCH (_if: the values the card showed), so a stale card never
  *     moves a ticket back; action runs submit or a model action with an Idempotency-Key kept per card until an answer.
  *     After a step the card moves at once; "Urungkan" for 3 seconds puts the old values back, only if the card still
- *     holds what the step wrote.
+ *     holds what the step wrote. Without steps the screen is a read-only board (a pickup counter's ready list: large
+ *     titles, no buttons).
+ *   alert "new": one short tone when a card enters the first column after the first load (a kitchen display). Browsers
+ *     keep sound off until the page is touched once, so a "Nyalakan suara" button shows while audio is blocked.
  * The screen never computes money or stock: a step is the same write a form would make.
  *
- * Pure helpers (unit-tested in test/queue.test.js): ageMinutes, ageTone, stepFor, columnsOf, linesText.
+ * Pure helpers (unit-tested in test/queue.test.js): ageMinutes, ageTone, stepFor, columnsOf, linesText, arrivals.
  */
 (function (global) {
   "use strict";
@@ -59,17 +62,46 @@
     });
   }
 
+  /** Names of the cards in the first column that seen (a {name: true} map of every card loaded before) does not hold;
+   *  [] on the first load (seen null), so opening the screen never sounds. */
+  function arrivals(seen, rows, columns) {
+    if (!seen) return [];
+    var first = columnsOf(rows, columns)[0];
+    return ((first && first.rows) || []).map(function (r) { return r.name; }).filter(function (n) { return !seen[n]; });
+  }
+
   RA.ageMinutes = ageMinutes;
   RA.ageTone = ageTone;
   RA.stepFor = stepFor;
   RA.columnsOf = columnsOf;
   RA.linesText = linesText;
+  RA.arrivals = arrivals;
 
   /* ================================================================ views */
   var React = global.React, R = global.Rangka;
   if (!React || !R || !global.document) return;
   var h = React.createElement, useState = React.useState, useEffect = React.useEffect, useRef = React.useRef;
   function L(v) { return RA.L ? RA.L(v) : (v && (v.id || v.en)) || String(v || ""); }
+
+  /** One shared audio context for the alert tone (created on first use; null where Web Audio is missing). */
+  var audio = null;
+  function audioCtx() {
+    if (audio) return audio;
+    var AC = global.AudioContext || global.webkitAudioContext;
+    try { audio = AC ? new AC() : null; } catch (e) { audio = null; }
+    return audio;
+  }
+  /** A short two-step tone (about 0.4 s) that cuts through a kitchen's noise; quiet when audio is blocked. */
+  function chime() {
+    var a = audioCtx();
+    if (!a || a.state !== "running") return;
+    [[880, 0], [1320, 0.18]].forEach(function (n) {
+      var o = a.createOscillator(), g = a.createGain(), t = a.currentTime + n[1];
+      o.type = "sine"; o.frequency.value = n[0];
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      o.connect(g); g.connect(a.destination); o.start(t); o.stop(t + 0.22);
+    });
+  }
 
   function QueueScreen(p) {
     var ctx = p.ctx, s = p.screen, q = s.queue || {}, src = q.source || {}, card = q.card || {}, scope = RA.outboxScope(ctx.me);
@@ -85,6 +117,28 @@
     var ts = useState(Date.now()), now = ts[0], setNow = ts[1];
     var cacheKey = "queue:" + scope + ":" + s.name;
     var seq = useRef(0);
+    var seenRef = useRef(null); // every card name loaded so far (alert: new); null until the first load
+    var sounds = q.alert === "new";
+    var ms = useState(function () { var a = sounds ? audioCtx() : null; return !!a && a.state !== "running"; }), muted = ms[0], setMuted = ms[1];
+    function unmute() {
+      var a = audioCtx();
+      if (!a) { setMuted(false); return; }
+      var r = a.resume ? a.resume() : null;
+      (r && r.then ? r : Promise.resolve()).then(function () { setMuted(a.state !== "running"); }, function () { /* stays muted */ });
+    }
+    useEffect(function () {
+      if (!sounds || !muted) return undefined;
+      // the first touch anywhere on the page lets the browser play sound (autoplay rule)
+      global.document.addEventListener("pointerdown", unmute, true);
+      return function () { global.document.removeEventListener("pointerdown", unmute, true); };
+    }, [sounds, muted]);
+    function noteArrivals(data) {
+      if (!sounds) return;
+      var fresh = arrivals(seenRef.current, data, q.columns), seen = seenRef.current || {};
+      data.forEach(function (r) { seen[r.name] = true; });
+      seenRef.current = seen;
+      if (fresh.length) chime();
+    }
 
     function load() {
       var my = ++seq.current;
@@ -92,6 +146,11 @@
         if (my !== seq.current) return;
         var data = (r && r.data) || [];
         setRows(data); setStale(null); setErr("");
+        noteArrivals(data);
+        // the work rail's badge (contract 0048 §7) follows this screen's own load instead of waiting a minute
+        if (q.columns && q.columns.values && q.columns.values.length && global.CustomEvent) {
+          global.dispatchEvent(new global.CustomEvent("rk-queue-count", { detail: { screen: s.name, n: columnsOf(data, q.columns)[0].rows.length } }));
+        }
         RA.outbox.cache.put(cacheKey, data);
       }, function (e) {
         if (my !== seq.current) return;
@@ -184,7 +243,10 @@
         st ? h(R.Button, { variant: "primary", disabled: !!busy[rec.name], loading: !!busy[rec.name], onClick: function () { run(rec, st); } }, L(st.step.label)) : null);
     }
 
-    return h("div", { className: "ap-queue" },
+    var board = !(q.steps && q.steps.length);
+    return h("div", { className: "ap-queue" + (board ? " ap-queue-board" : "") },
+      sounds && muted ? h("div", { className: "ap-work-note ap-queue-sound", role: "status" }, "Suara tiket baru masih mati di perangkat ini. ",
+        h("button", { type: "button", className: "ap-work-link", onClick: unmute }, "Nyalakan suara")) : null,
       stale ? h("p", { className: "ap-work-note" }, "Belum ada koneksi. Data terakhir " + new Date(stale).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + ".") : null,
       err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
       note ? h("div", { className: "ap-work-err", role: "alert" }, note, " ", h("button", { type: "button", className: "ap-work-link", onClick: function () { setNote(""); } }, "Tutup")) : null,

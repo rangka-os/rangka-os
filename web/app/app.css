@@ -685,6 +685,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-queue-card ul { margin: 0; padding: 0 0 0 16px; color: var(--ink-2); font-size: 14px; }
 .ap-queue-sub, .ap-queue-fields { margin: 0; color: var(--muted); font-size: 13px; }
 .ap-queue-card .rk-btn { min-height: 44px; justify-content: center; }
+.ap-work-queue .ap-queue-card .rk-btn { font-size: 15px; font-weight: 600; }
 .ap-counter-done .ap-counter-due { justify-content: center; }
 .ap-counter-tick { justify-self: center; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--ok-tint); color: var(--ok); }
 .ap-counter-tick.queued { background: var(--warn-tint); color: var(--warn); }
@@ -1473,3 +1474,20 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 .ap-tbl-guests { display: grid; gap: 12px; justify-items: start; max-width: 360px; margin-top: 16px; padding: 16px; border: 1px solid var(--line-strong); border-radius: var(--r-dialog); background: var(--surface); }
 .ap-tbl-stepper { display: flex; align-items: center; gap: 16px; }
 .ap-tbl-stepper output { min-width: 32px; text-align: center; font: 700 24px/28px var(--font-sans); color: var(--ink); }
+/* queue board (no steps): a pickup counter's ready list, titles large enough to read across the room */
+.ap-queue-board .ap-queue-card header b { font-size: 28px; line-height: 34px; }
+.ap-queue-board .ap-queue-col { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+/* a TV (1600px and wider): the kitchen display is read from about 3 m, so cards and type scale up */
+@media (min-width: 1600px) {
+  .ap-work-queue { max-width: none; padding: 20px 28px; }
+  .ap-queue-cols { gap: 20px; }
+  .ap-queue-col h2 { font-size: 20px; line-height: 28px; }
+  .ap-queue-card { padding: 18px; gap: 12px; border-left-width: 6px; }
+  .ap-queue-card header b { font-size: 24px; line-height: 30px; }
+  .ap-queue-age { font-size: 18px; line-height: 24px; }
+  .ap-queue-card ul { font-size: 20px; line-height: 30px; padding-left: 22px; }
+  .ap-queue-sub, .ap-queue-fields { font-size: 17px; }
+  .ap-work-queue .ap-queue-card .rk-btn { min-height: 56px; font-size: 20px; }
+  .ap-queue-board .ap-queue-col { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+  .ap-queue-board .ap-queue-card header b { font-size: 44px; line-height: 52px; }
+}

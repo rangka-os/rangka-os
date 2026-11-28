@@ -576,6 +576,85 @@ def test_kitchen_queue_moves_cards_and_undoes(browser, ctx):
     c.close()
 
 
+TV = {"width": 1920, "height": 1080}
+# A Web Audio stand-in: suspended until resume() (the browser's autoplay rule), counts every tone started.
+FAKE_AUDIO = """
+window.__tones = 0;
+window.AudioContext = function () {
+  var self = this; this.state = 'suspended'; this.currentTime = 0; this.destination = {};
+  this.resume = function () { self.state = 'running'; return Promise.resolve(); };
+  var node = function () { return { connect: function () {}, gain: { setValueAtTime: function () {}, exponentialRampToValueAtTime: function () {} },
+    frequency: {}, start: function () { window.__tones++; }, stop: function () {} }; };
+  this.createOscillator = node; this.createGain = node;
+};
+"""
+
+
+def test_kitchen_tv_mode_tone_badge_and_pickup_board(browser, ctx):
+    # rangka-apps#131: the kitchen display on a TV is dark (screen theme, contract 0048 §6), sounds once per new ticket
+    # (queue.alert), counts new tickets on the rail (0048 §7), and the read-only pickup board lists ready tickets
+    o, _ = page_for(browser, ctx, OWNER, DESK)
+    menu = o.request.get("/api/v1/r/menu?limit=1").json()["data"]
+    if not menu:
+        o.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": "Nasi goreng", "category": "Makanan", "price": 25000}), headers={"Content-Type": "application/json"})
+        menu = o.request.get("/api/v1/r/menu?limit=1").json()["data"]
+    o.close()
+    k, _ = page_for(browser, ctx, KASIR, PHONE)
+    def ticket(table):
+        r = k.request.post("/api/v1/r/tiket_dapur", data=json.dumps({"table_no": table, "items": [{"menu": menu[0]["name"], "qty": 1}]}),
+                           headers={"Content-Type": "application/json"})
+        assert r.status == 201, r.text()
+        return r.json().get("name") or r.json().get("data", {}).get("name")
+    ticket("Meja TV 1")
+    c, p = page_for(browser, ctx, DAPUR, TV, allow=("/api/v1/r/tiket_dapur/",))
+    p.add_init_script(FAKE_AUDIO)
+    p.goto("/app/")
+    p.wait_for_url("**/#/w/dapur")
+    p.wait_for_selector(".ap-queue-card")
+    assert p.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    size = p.evaluate("parseFloat(getComputedStyle(document.querySelector('.ap-queue-card header b')).fontSize)")
+    assert size >= 24, f"card title {size}px on a TV"
+    # the rail badge: today's new tickets (the first column)
+    new_n = len([r for r in c.request.get("/api/v1/r/tiket_dapur?limit=200&filter=" + urllib.parse.quote("status == 'new' && date == today()")).json()["data"]])
+    badge = p.locator(".ap-workbar a[href='#/w/dapur'] .ap-tabbar-n")
+    badge.wait_for()
+    assert badge.inner_text() == str(new_n), (badge.inner_text(), new_n)
+    # sound is blocked until a touch; opening the screen never sounds
+    p.get_by_role("button", name="Nyalakan suara").click()
+    p.get_by_role("button", name="Nyalakan suara").wait_for(state="detached")
+    assert p.evaluate("window.__tones") == 0, "the first load does not sound"
+    ticket("Meja TV 2")
+    p.locator(".ap-queue-col").nth(0).locator(".ap-queue-card", has_text="Meja TV 2").wait_for(timeout=12000)
+    p.wait_for_function("window.__tones > 0")
+    badge.filter(has_text=str(new_n + 1)).wait_for(timeout=3000)  # the badge follows the screen's own load
+    tones = p.evaluate("window.__tones")
+    p.wait_for_timeout(6000)  # one more refresh with nothing new: no more tones
+    assert p.evaluate("window.__tones") == tones, "one tone per new ticket"
+    shot(ctx, p, "dapur-tv")
+    # the pickup board: read-only, dark, the ready ticket appears and leaves on served
+    mtv = [r for r in c.request.get("/api/v1/r/tiket_dapur?limit=200").json()["data"] if r["table_no"] == "Meja TV 1"][0]["name"]
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{mtv}", data=json.dumps({"status": "cooking"}), headers={"Content-Type": "application/json"}).status == 200
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{mtv}", data=json.dumps({"status": "ready"}), headers={"Content-Type": "application/json"}).status == 200
+    p.goto("/app/#/w/siap_ambil")
+    p.locator(".ap-queue-board .ap-queue-card", has_text="Meja TV 1").wait_for()
+    assert p.locator(".ap-queue button.rk-btn").count() == 0, "no steps on the board"
+    assert p.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    big = p.evaluate("parseFloat(getComputedStyle(document.querySelector('.ap-queue-board .ap-queue-card header b')).fontSize)")
+    assert big >= 40, f"board title {big}px on a TV"
+    shot(ctx, p, "siap-ambil-tv")
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{mtv}", data=json.dumps({"status": "served"}), headers={"Content-Type": "application/json"}).status == 200
+    p.locator(".ap-queue-card", has_text="Meja TV 1").wait_for(state="detached", timeout=12000)
+    # a tablet: the same screens, standard sizes
+    p.set_viewport_size(TABLET)
+    p.goto("/app/#/w/dapur")
+    p.wait_for_selector(".ap-queue-card")
+    shot(ctx, p, "dapur-tablet")
+    # leaving the themed screens restores the person's mode (here: the company's light)
+    p.goto("/app/#/r/tiket_dapur")
+    p.wait_for_function("document.documentElement.getAttribute('data-theme') !== 'dark'")
+    k.close()
+
+
 def test_owner_keeps_dashboard_home_with_kerja_group(browser, ctx):
     c, p = page_for(browser, ctx, OWNER, DESK)
     p.goto("/app/")

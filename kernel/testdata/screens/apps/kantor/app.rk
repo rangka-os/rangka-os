@@ -18,6 +18,7 @@ work:
   - {screen: antrian, roles: [staf]}
   - {screen: jual, roles: [kasir], home: true}
   - {screen: dapur, roles: [dapur], home: true}
+  - {screen: siap_ambil, roles: [dapur]}
   - {screen: jual_online, roles: [kasir]}
   - {screen: absen_masuk, roles: [pekerja], home: true}
   - {screen: absen_kelas, roles: [pengajar], home: true}

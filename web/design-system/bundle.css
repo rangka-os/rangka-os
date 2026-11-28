@@ -574,6 +574,10 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-account-head { display: flex; gap: 10px; align-items: center; padding: 8px 8px 6px; }
 .rk-account-head b { display: block; font-weight: 600; }
 .rk-account-head small { display: block; font-size: var(--font-size-sm); line-height: 16px; color: var(--muted); }
+/* a long email (guest accounts) wraps inside the menu instead of running past its edge */
+.rk-account-head > span { min-width: 0; }
+.rk-account-head > :first-child { flex: none; }
+.rk-account-head b, .rk-account-head small { overflow-wrap: anywhere; }
 
 .rk-side { width: var(--sidebar); max-width: 100%; box-sizing: border-box; display: flex; flex-direction: column; background: var(--soft); border-right: 1px solid var(--line); height: 100%; }
 .rk-side-head { min-height: var(--header); display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex-shrink: 0; box-sizing: border-box; }

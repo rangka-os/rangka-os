@@ -4591,7 +4591,7 @@ def test_tour_staff_side_shell(page, ctx):
         body = card.locator(".ap-tur-body").inner_text()
         titles.append(title)
         if i > 1 and title not in ("Persetujuan", "Tanya Zafdoz", "Bantuan ada di sini"):
-            # the ring glides to its place (tur CSS); wait for it to settle on the group the step names
+            # each step mounts a fresh ring that fades in (tur CSS); wait for it to sit on the group the step names
             try:
                 page.wait_for_function(f"(t) => JSON.stringify(({lit_group})()) === JSON.stringify([t])", arg=title, timeout=3000)
             except Exception:

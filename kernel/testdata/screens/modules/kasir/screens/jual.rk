@@ -21,7 +21,7 @@ counter:
   document:
     model: penjualan
     lines: items
-    line: {item: menu, qty: qty, price: rate, note: note, amount: amount, flag: is_gift}
+    line: {item: menu, qty: qty, price: rate, note: note, amount: amount, flag: is_gift, hold: hold}
     total: grand_total
     change: change_amount
     summary: [subtotal, service_charge, pbjt, rounding, grand_total]

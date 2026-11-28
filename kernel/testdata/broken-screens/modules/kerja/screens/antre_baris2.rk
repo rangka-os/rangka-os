@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: antre_baris2
+type: queue
+label: {id: Antre baris dua}
+roles: [staf]
+queue:
+  source: {model: jam_kerja}
+  group_by: ghost_group
+  card: {title: staf, lines: breaks, line_badge: minutes, line_tag: nope, line_show: "minutes > (0"}
+  line_steps:
+    - {when: "true", label: {id: Proses}, label_field: nolabel, set: {ghost: 1, minutes: 2}}
+  bulk_steps:
+    - {when: "true", label: {id: Semua}, set: {kind: nope}}
+  totals: {by: ghost, qty: label, held: minutes}
+  recall: {filter: "true", label: {id: Kembali}, when: "true", set: {ghost2: 1}}

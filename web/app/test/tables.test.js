@@ -53,6 +53,9 @@ test("ageLabel and clockLabel", () => {
 test("cartFromBill keeps the bill's line keys; billLines adds them to a body", () => {
   const doc = { lines: "items", line: { item: "item", qty: "qty", price: "rate", note: "note" } };
   const cart = T.cartFromBill(doc, { items: [{ line_key: "a1", item: "M1", description: "Kopi", qty: 2, rate: 18000, note: "" }] });
-  assert.deepStrictEqual(plain(cart), [{ key: "a1", item: "M1", title: "Kopi", price: 18000, qty: 2, note: "", saved: true }]);
+  assert.deepStrictEqual(plain(cart), [{ key: "a1", item: "M1", title: "Kopi", price: 18000, qty: 2, note: "", hold: false, saved: true }]);
+  // contract 0077 §3: a held line stays held when the bill is opened again
+  const held = T.cartFromBill(Object.assign({}, doc, { line: Object.assign({ hold: "hold" }, doc.line) }), { items: [{ line_key: "b1", item: "M2", qty: 1, hold: true }] });
+  assert.strictEqual(held[0].hold, true);
   assert.deepStrictEqual(plain(T.billLines(doc, cart, [{ item: "M1", qty: 2 }])), [{ line_key: "a1", item: "M1", qty: 2 }]);
 });

@@ -520,4 +520,7 @@ test("queueBadgeFilter: the source filter and the first column's value (contract
   assert.strictEqual(A.queueBadgeFilter({ type: "queue", queue: { source: { model: "m" }, columns: { by: "k", values: ["it's"] } } }), "k == 'it\\'s'");
   assert.strictEqual(A.queueBadgeFilter({ type: "queue", queue: { source: { model: "m" } } }), null, "no columns, no badge");
   assert.strictEqual(A.queueBadgeFilter({ type: "counter" }), null);
+  const rows = { type: "queue", queue: { source: { model: "t", filter: "date == today()" }, line_steps: [{}] } };
+  assert.strictEqual(A.queueBadgeFilter(rows), "date == today()", "a row queue counts its open records");
+  assert.strictEqual(A.queueBadgeFilter({ type: "queue", queue: { source: { model: "t" }, group_by: "sale", bulk_steps: [{}] } }), null, "grouped: no list count");
 });

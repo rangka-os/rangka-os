@@ -299,7 +299,9 @@
    *  its source filter and columns.by == the first columns.values; null for another screen or a queue without values. */
   function queueBadgeFilter(s) {
     var q = s && s.type === "queue" && s.queue, c = q && q.columns, v = c && c.by && c.values && c.values[0];
-    if (v == null || !q.source || !q.source.model) return null;
+    if (!q || !q.source || !q.source.model) return null;
+    // a row queue without columns (contract 0077) counts its open records; a grouped one counts on its own load only
+    if (v == null) return !q.group_by && (q.line_steps || q.bulk_steps) ? q.source.filter || "true" : null;
     var own = c.by + " == '" + String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
     return q.source.filter ? "(" + q.source.filter + ") && " + own : own;
   }

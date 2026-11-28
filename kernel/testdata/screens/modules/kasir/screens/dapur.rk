@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+# A station screen per item (contract 0077): a tap moves one row, a card button moves all, held rows wait greyed.
 name: dapur
 type: queue
 label: {id: Dapur}
@@ -8,11 +9,20 @@ device: tablet
 theme: dark
 queue:
   source: {model: tiket_dapur, filter: "status != 'served' && date == today()", sort: created_at}
-  card: {title: table_no, lines: items, line: [menu, qty, note], age_from: created_at}
-  columns: {by: status, values: [new, cooking, ready]}
-  steps:
-    - {when: "status == 'new'", set: {status: cooking}, label: {id: Masak}}
-    - {when: "status == 'cooking'", set: {status: ready}, label: {id: Siap}}
-    - {when: "status == 'ready'", set: {status: served}, label: {id: Diantar}}
+  card:
+    title: table_no
+    lines: items
+    line: [menu, qty, note]
+    age_from: created_at
+    line_show: "line_status == 'new' || line_status == 'in_progress' || held"
+    line_muted: held
+    line_badge: line_status
+  line_steps:
+    - {when: "!held && line_status == 'new'", label: {id: Proses}, set: {line_status: in_progress}}
+    - {when: "!held && line_status == 'in_progress'", label: {id: Siap}, set: {line_status: ready, ready_at: "now()"}}
+  bulk_steps:
+    - {when: "!held && (line_status == 'new' || line_status == 'in_progress')", label: {id: Semua siap}, set: {line_status: ready, ready_at: "now()"}}
+  totals: {by: menu, qty: qty, when: "line_status == 'new' || line_status == 'in_progress'", held: held, split: note}
+  recall: {filter: "status == 'ready' && date == today()", sort: -modified_at, limit: 20, label: {id: Kembalikan}, when: "line_status == 'ready'", set: {line_status: in_progress}}
   refresh: 5
   alert: new

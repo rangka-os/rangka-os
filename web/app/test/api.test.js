@@ -29,6 +29,7 @@ function stub(answer) {
   return fn;
 }
 const rejected = (p) => p.then(() => assert.fail("expected rejection"), (e) => e);
+const plain = (x) => JSON.parse(JSON.stringify(x));
 
 test("parseRupiah", () => {
   assert.strictEqual(RA.parseRupiah("1.250.000"), 1250000);
@@ -628,4 +629,70 @@ test("Tim (contract 0056 §4): team calls and the sign-in link", async () => {
   const g = stub([json(400, { error: { code: "link_invalid", message: "Tautan masuk tidak berlaku lagi." } })]);
   const e = await rejected(RA({ fetch: g }).signinWithLink("x", "rahasia123"));
   assert.deepStrictEqual([e.status, e.code, e.message], [400, "link_invalid", "Tautan masuk tidak berlaku lagi."]);
+});
+
+/* ----- latest-wins save channels (plans: instant theme) */
+function loadWithAbort() {
+  const w = { AbortController };
+  vm.runInNewContext(SRC, { window: w, FormData, Blob, encodeURIComponent, Promise, Object, JSON, Error, Array, RegExp, Math, String, Number }, { filename: "api.js" });
+  return w.RangkaAppAPI;
+}
+/** fetch that answers only when told: pending[i].answer(status, body); an abort rejects it with an AbortError. */
+function heldFetch() {
+  const pending = [];
+  const fn = (url, init) => new Promise((resolve, reject) => {
+    const p = { url, init, body: init.body ? JSON.parse(init.body) : null, aborted: false };
+    p.answer = (status, body) => resolve(new Response(body === undefined ? "" : JSON.stringify(body), { status }));
+    if (init.signal) init.signal.addEventListener("abort", () => { p.aborted = true; const e = new Error("aborted"); e.name = "AbortError"; reject(e); });
+    pending.push(p);
+  });
+  fn.pending = pending;
+  return fn;
+}
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
+test("setAppearance: a newer pick aborts the request in flight and only the newest resolves", async () => {
+  const f = heldFetch();
+  const api = loadWithAbort()({ fetch: f });
+  const first = rejected(api.setAppearance({ mode: "dark" })); // handled now: it is rejected before the end
+  await tick();
+  const second = api.setAppearance({ mode: "light" });
+  await tick();
+  assert.strictEqual(f.pending.length, 2);
+  assert.strictEqual(f.pending[0].aborted, true, "the older PUT is aborted");
+  assert.strictEqual(f.pending[1].aborted, false);
+  assert.deepStrictEqual(f.pending[1].body, { theme: null, mode: "light" });
+  assert.strictEqual(api.isStale(await first), true);
+  f.pending[1].answer(200, { theme: null, mode: "light" });
+  assert.deepStrictEqual(plain(await second), { theme: null, mode: "light" });
+});
+
+test("latest: a late answer of a replaced call is stale even without AbortController", async () => {
+  const api = RA({ fetch: stub([]) }); // this context has no AbortController
+  let release;
+  const slow = rejected(api.latest("k", (signal) => { assert.strictEqual(signal, null); return new Promise((r) => { release = r; }); }));
+  await tick();
+  const fast = api.latest("k", () => Promise.resolve("new"));
+  assert.strictEqual(await fast, "new");
+  release("old");
+  assert.strictEqual(api.isStale(await slow), true);
+});
+
+test("latest: the newest call's own error comes through; other keys are separate channels", async () => {
+  const api = loadWithAbort()({ fetch: stub([json(403, { error: { code: "forbidden", message: "no" } }), json(200, { ok: 1 })]) });
+  const e = await rejected(api.latest("a", () => Promise.reject(Object.assign(new Error("boom"), { status: 500 }))));
+  assert.strictEqual(api.isStale(e), false);
+  assert.strictEqual(e.message, "boom");
+  const put = await rejected(api.setAppearance({ mode: "dark" }));
+  assert.strictEqual(put.status, 403);
+  assert.strictEqual(api.isStale(put), false);
+  assert.deepStrictEqual(plain(await api.latest("b", () => Promise.resolve({ ok: 1 }))), { ok: 1 });
+});
+
+test("latest: the newest call's own AbortError is not swallowed; a GET without a signal still maps an AbortError to network", async () => {
+  const api = loadWithAbort()({ fetch: () => { const e = new Error("gone"); e.name = "AbortError"; return Promise.reject(e); } });
+  const e = await rejected(api.latest("x", () => { const a = new Error("x"); a.name = "AbortError"; return Promise.reject(a); }));
+  assert.strictEqual(api.isStale(e), false);
+  const n = await rejected(api.list("lead"));
+  assert.strictEqual(n.status, 0, "no signal: an AbortError reads as a lost connection (the offline cache path)");
 });

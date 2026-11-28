@@ -19,7 +19,7 @@
  * kept in React state survive; nothing is retried (the user presses the button again).
  *
  * Exposes on window.RangkaApp: route, navigate(hash), toast(tone, title, body), Ctx (React context with
- * {api, meta, eng, me, features, cache, reloadMeta, refreshApprovals, route, navigate, toast}), and the pure helpers
+ * {api, meta, eng, me, features, cache, reloadMeta, patchMeta, refreshApprovals, route, navigate, toast}), and the pure helpers
  * parseRoute, homeHash, navGroups, sideNav, navFromLayout, navId, orgByLabel, hashQuery, withHashQuery, shellKind, densityOf,
  * commandGroups, L (unit-tested in test/shell.test.js).
  */
@@ -1212,8 +1212,11 @@
       })();
     }
 
-    function reloadMeta(who) {
+    /** o.stale (optional) is asked once /meta answers: true drops the answer, because the page has newer local state
+     *  (for example a theme pick made while this reload ran) that a later reload will confirm. */
+    function reloadMeta(who, o) {
       return api.meta().then(function (m) {
+        if (o && o.stale && o.stale()) return m;
         var e = global.RangkaEngine.create(m, cacheRef.current.lookup);
         cacheRef.current.setEngine(e);
         setMeta(m);
@@ -1221,6 +1224,10 @@
         return api.features(m, who || me).then(function (f) { setFeatures(f); return m; });
       });
     }
+
+    /** Changes the page's copy of /meta at once, before the server confirms it (a theme pick paints instantly):
+     *  fn(meta) returns the new meta. A later reloadMeta brings the server's answer. */
+    function patchMeta(fn) { setMeta(function (m) { return fn(m) || m; }); }
 
     /** Recount the pending requests the user may decide (the sidebar badge). Quiet on failure. */
     var countSeq = useRef(0);
@@ -1362,7 +1369,7 @@
     var orgs = (me && me.orgs) || [];
     var current = orgs.filter(function (o) { return o.id === me.org; })[0];
     var companyName = me.orgName || (current ? current.name || current.id : name);
-    var ctx = { api: api, meta: meta, eng: eng, me: me, features: features, cache: cacheRef.current, reloadMeta: reloadMeta,
+    var ctx = { api: api, meta: meta, eng: eng, me: me, features: features, cache: cacheRef.current, reloadMeta: reloadMeta, patchMeta: patchMeta,
       refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs || offline, offline: offline,
       // a change set built elsewhere (the catalogue's Pasang / Lepas) opens in the same card as Ubah's
       showChangeSet: function (cs) { RA.postChangeset("created", cs); setCard({ cs: cs }); },
@@ -1405,6 +1412,12 @@
       else if (k.indexOf("theme:") === 0) {
         var mode = k.slice(6), mine = meta && meta.theme && meta.theme.personal;
         setThemePick(mode); writeThemePick(mode);
+        // the page's meta knows the new mode too, so a theme picked next on Tampilan does not save the old one
+        setMeta(function (m) {
+          if (!m || !m.theme) return m;
+          var t = Object.assign({}, m.theme, { personal: { theme: (mine && mine.theme) || null, mode: mode } });
+          return Object.assign({}, m, { theme: t });
+        });
         // saved for the person's other devices; this page already shows it, so /meta is not reloaded
         if (api.setAppearance) api.setAppearance({ theme: mine && mine.theme, mode: mode }).then(null, function () {});
       }

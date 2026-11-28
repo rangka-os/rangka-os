@@ -1225,6 +1225,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 @media (max-width: 600px) { .ap-tur-acts .rk-btn { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) {
   .ap-tur-dim, .ap-tur-hole, .ap-tur-card { transition: none; animation: none; }
+  .ap-tur.on .ap-tur-hole { animation: none; } /* as specific as the fade-in rule, so reduced motion wins */
 }
 /* the owner works inside the lit element: no dim, nothing held; the phone sheet becomes a bar with the title and Lanjut */
 .ap-tur.using .ap-tur-dim { opacity: 0 !important; pointer-events: none; }

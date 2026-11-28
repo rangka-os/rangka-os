@@ -626,6 +626,16 @@ def test_kitchen_pass_fire_and_hand_over_offline_queue(browser, ctx):
     p.wait_for_timeout(1000)
     assert row_state(c, a)[0][1] == "done", row_state(c, a)
     shot(ctx, p, "pass-tablet")
+    # Urungkan after the step took the card off the list (its last row handed over): the device's own copy is undone
+    e = ticket("Meja P6", [{"qty": 1, "line_status": "ready"}])
+    card6 = p.locator(".ap-qcard", has_text="Meja P6")
+    card6.wait_for(timeout=15000)
+    card6.get_by_role("button", name=re.compile("Serahkan yang siap")).click()
+    p.wait_for_timeout(1000)
+    assert row_state(c, e)[0][1] == "done", row_state(c, e)
+    p.locator(".ap-qsnack").get_by_role("button", name="Urungkan").click()
+    p.wait_for_timeout(1200)
+    assert row_state(c, e)[0][1] == "ready", ("undo after the card left the list", row_state(c, e))
     # offline: the tap is shown at once and waits; back online it is sent
     p.context.set_offline(True)
     rows_b = c.request.get(f"/api/v1/r/tiket_dapur/{b}").json()["items"]

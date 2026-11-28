@@ -320,7 +320,8 @@
           setQueuedN(mine.filter(function (j) { return j.state === "queued"; }).length);
           var failed = mine.filter(function (j) { return j.state === "failed"; });
           if (!failed.length) return;
-          setNote(failed.length + " perubahan dari perangkat ini tidak terkirim karena kartunya sudah diubah di perangkat lain; daftar dimuat ulang.");
+          var other = failed.filter(function (j) { return !/perangkat lain/.test(j.error || ""); })[0];
+          setNote(failed.length + " perubahan dari perangkat ini tidak terkirim: " + (other ? other.error : "kartunya sudah diubah di perangkat lain") + ". Daftar dimuat ulang.");
           return Promise.all(failed.map(function (j) { return RA.outbox.dismiss(j.id); })).then(load);
         }, function () { return null; });
       }
@@ -397,7 +398,10 @@
       var sends = targets.map(function (t) {
         var pt = rowPatch(t.rec, card.lines, t.pick, v, guard);
         if (!pt.n) return null;
-        parts.push({ name: t.rec.name, before: pt.before, after: pt.after });
+        // the device's own copy after the step: an undo still has the card when the step took it off the list (the
+        // last line Siap, Serahkan); the undo's _if on every row keeps that copy safe
+        var mine = Object.assign({}, t.rec); mine[card.lines] = pt.body[card.lines];
+        parts.push({ name: t.rec.name, before: pt.before, after: pt.after, rec: mine });
         var job = RA.outbox.newJob({ scope: scope, screen: s.name, model: src.model, name: t.rec.name, body: pt.body });
         return RA.outbox.send(ctx.api, job, true);
       }).filter(Boolean);
@@ -427,7 +431,7 @@
     function undoRows(u) {
       var byName = {}; (rows || []).forEach(function (r) { byName[r.name] = r; });
       Promise.all(u.parts.map(function (part) {
-        var rec = byName[part.name];
+        var rec = byName[part.name] || part.rec;
         return rec ? ctx.api.update(src.model, rec.name, undoPatch(rec, card.lines, part.before, part.after, guard)) : null;
       })).then(load, function (e) {
         setNote(e && e.code === "precondition_failed" ? "Tidak bisa diurungkan: kartu sudah diubah di perangkat lain." : (e && e.message) || "Tidak bisa diurungkan");

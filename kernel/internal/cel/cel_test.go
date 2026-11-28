@@ -54,6 +54,8 @@ func TestEval(t *testing.T) {
 		{"app_installed('sales')", true},
 		{"app_installed('stock')", false},
 		{"truncate('hello world', 5)", "hello"},
+		{"truncate('ab', size('ab') - 3)", ""},
+		{"truncate('hello', 0)", ""},
 		{"'abc'.contains('b')", true},
 		{"stage in ['proposal', 'won']", true},
 		{"owner == user.name", true},

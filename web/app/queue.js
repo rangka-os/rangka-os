@@ -506,7 +506,12 @@
         });
       });
       var mutedLabel = card.line_muted && fieldOf(lineModel, card.line_muted) ? L(fieldOf(lineModel, card.line_muted).label) : "";
-      var hint = (q.line_steps || []).length ? "Ketuk baris: " + q.line_steps.map(function (st) { return L(st.label); }).filter(function (x, i, a) { return a.indexOf(x) === i; }).join(", lalu ") : "";
+      // how a tap works: the steps that carry the record's own verbs (label_field) when any do (a notice's "Oke" is
+      // not the work), in the verbs of the first card shown
+      var ls = q.line_steps || [], verbSteps = ls.filter(function (st) { return st.label_field; });
+      var firstRec = groups.length ? groups[0].recs[0] : {};
+      var hint = ls.length ? "Ketuk baris: " + (verbSteps.length ? verbSteps : ls).map(function (st) { return stepLabel(st, firstRec); })
+        .filter(function (x, i, a) { return a.indexOf(x) === i; }).join(", lalu ") : "";
 
       function Row(e, i) {
         var row = e.row, rec = e.rec, st = lineStepFor(row, rec), b = badgeOf(row), muted = muteRow(row, rec);

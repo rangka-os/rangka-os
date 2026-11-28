@@ -2,6 +2,9 @@
   "about": "Expressions the kernel (kernel/internal/cel, cel_parity_test.go) and the web app's engine.js (test/engine.test.js) must evaluate to the same value: the dialect a paired device needs to compute pos_sale and its promo lines offline (contracts 0058 §10, 0069 §2). Numbers compare as numbers. Avoid int / int division: the kernel divides integers, engine.js does not.",
   "cases": [
     {"expr": "1 + 2 * 3", "vars": {}, "want": 7},
+    {"expr": "truncate(s, size(s) - 3)", "vars": {"s": "ab"}, "want": ""},
+    {"expr": "s.replace(truncate(s, size(s) - 3), '')", "vars": {"s": "STRK-0001"}, "want": "001"},
+    {"expr": "truncate(s, 0)", "vars": {"s": "hello"}, "want": ""},
     {"expr": "a > 2 ? 'big' : 'small'", "vars": {"a": 3}, "want": "big"},
     {"expr": "a > 2 ? 'big' : a > 1 ? 'mid' : 'small'", "vars": {"a": 2}, "want": "mid"},
     {"expr": "(a == '' ? 0 : 5) + 1", "vars": {"a": ""}, "want": 1},

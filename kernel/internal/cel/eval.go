@@ -1136,6 +1136,9 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 				n = v
 			}
 		}
+		if n < 0 { // a length computed from a short text (size(s) - 3 on "") is empty text, never a panic
+			n = 0
+		}
 		if int64(utf8.RuneCountInString(s)) > n {
 			s = string([]rune(s)[:n])
 		}

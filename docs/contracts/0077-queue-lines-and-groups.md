@@ -73,8 +73,9 @@ queue:
 - A queue needs none of `steps`, `line_steps`, `bulk_steps` (a read-only board).
 
 ### 3. Counter line slot `hold`
-`counter.document.line.hold: <check field of the line>`: a "Tahan" toggle in the line sheet next to the note
-("Tahan dulu, dilepas dari Penyerahan"). The line shows "Ditahan" in the cart. The counter never interprets it; the
+`counter.document.line.hold: <check field of the line>`: a "Sajikan nanti, dilepas dari Penyerahan" switch on the
+line, next to the note; the line shows "Sajikan nanti" in the cart. Not "Tahan": the counter's "Tahan" parks the whole
+bill. The counter never interprets it; the
 module's flows do.
 
 ### 4. Validators

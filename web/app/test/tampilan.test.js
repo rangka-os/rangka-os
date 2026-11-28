@@ -61,3 +61,50 @@ test("themeOf: device pick, then the saved personal mode, then the business mode
   assert.strictEqual(S.themeOf(null, { theme: { mode: "dark", personal: { mode: "light" } } }), "light");
   assert.strictEqual(S.themeOf(null, { theme: { mode: "dark", personal: { mode: null } } }), "dark");
 });
+
+test("withPersonal puts the pick and the effective theme on a copy of meta", () => {
+  const meta = { user: { id: "u" }, theme: { name: "standard", overrides: { primary: { light: "#111", dark: "#eee" } }, personal: { theme: null, mode: "system" } } };
+  const eff = T.cardEffective({ name: "laut", label: { id: "Laut" } }, { light: { primary: "#036" }, dark: { primary: "#9cf" }, overrides: { primary: { light: "#036", dark: "#9cf" } } });
+  const m = T.withPersonal(meta, { theme: "laut", mode: "dark" }, eff);
+  assert.deepStrictEqual(plain(m.theme.personal), { theme: "laut", mode: "dark" });
+  assert.strictEqual(m.theme.effective.name, "laut");
+  assert.deepStrictEqual(plain(m.theme.effective.overrides), { primary: { light: "#036", dark: "#9cf" } });
+  assert.strictEqual(m.user, meta.user, "the rest of meta is shared");
+  assert.deepStrictEqual(plain(meta.theme.personal), { theme: null, mode: "system" }, "the original is untouched");
+  // no effective given: only the pick changes (the mode paints now, the colours once known)
+  const keep = T.withPersonal(m, { theme: "daun", mode: "light" }, null);
+  assert.strictEqual(keep.theme.effective, m.theme.effective);
+  assert.deepStrictEqual(plain(keep.theme.personal), { theme: "daun", mode: "light" });
+});
+
+test("businessEffective takes the business theme keys of meta.theme", () => {
+  const e = plain(T.businessEffective({ name: "senja", mode: "system", overrides: { a: 1 }, font: { sans: "inter" }, personal: { theme: "x" }, effective: { name: "x" }, path: "themes/senja.rk" }));
+  assert.deepStrictEqual(e, { name: "senja", mode: "system", overrides: { a: 1 }, font: { sans: "inter" } });
+});
+
+test("withBusiness makes a card the business theme and the effective one unless the person has their own", () => {
+  const d = { light: { primary: "#036" }, dark: { primary: "#9cf" }, overrides: { primary: { light: "#036", dark: "#9cf" } } };
+  const meta = { theme: { name: "kopi", path: "themes/kopi.rk", font: { sans: "inter" }, overrides: {}, personal: { theme: null, mode: "dark" }, effective: { name: "kopi" } } };
+  const m = T.withBusiness(meta, { name: "laut", label: { id: "Laut" } }, d);
+  assert.strictEqual(m.theme.name, "laut");
+  assert.strictEqual(m.theme.path, undefined, "a bundled theme has no site file");
+  assert.strictEqual(m.theme.font, undefined);
+  assert.deepStrictEqual(plain(m.theme.overrides), d.overrides);
+  assert.strictEqual(m.theme.effective.name, "laut");
+  assert.deepStrictEqual(plain(m.theme.personal), { theme: null, mode: "dark" });
+  const own = T.withBusiness({ theme: Object.assign({}, meta.theme, { personal: { theme: "daun", mode: "system" }, effective: { name: "daun" } }) }, { name: "laut" }, d);
+  assert.strictEqual(own.theme.name, "laut");
+  assert.strictEqual(own.theme.effective.name, "daun", "the person's own theme keeps showing");
+});
+
+test("restorePersonal puts back the person's pick but keeps the business theme as it is now", () => {
+  const now = { theme: { name: "laut", overrides: { primary: 1 }, personal: { theme: "daun", mode: "dark" }, effective: { name: "daun" } } };
+  const back = T.restorePersonal(now, { personal: { theme: null, mode: "light" }, effective: { name: "kopi" } });
+  assert.strictEqual(back.theme.name, "laut", "the business keys are not rolled back");
+  assert.deepStrictEqual(plain(back.theme.personal), { theme: null, mode: "light" });
+  assert.strictEqual(back.theme.effective.name, "laut", "following the business theme shows the current one");
+  const own = T.restorePersonal(now, { personal: { theme: "arang", mode: "system" }, effective: { name: "arang" } });
+  assert.strictEqual(own.theme.effective.name, "arang");
+  const never = T.restorePersonal(now, { personal: undefined, device: "dark" });
+  assert.deepStrictEqual(plain(never.theme.personal), { theme: null, mode: "dark" }, "a mode never saved falls back to the device's");
+});

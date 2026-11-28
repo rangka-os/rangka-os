@@ -68,7 +68,15 @@
   }
   function basketLines() {
     var idx = menuIndex();
-    return S.basket.filter(function (l) { return l.qty > 0 && idx[l.item]; });
+    var gone = goneLines();
+    return S.basket.filter(function (l) { return l.qty > 0 && idx[l.item] && gone.indexOf(l) < 0; });
+  }
+  // lines whose dish (or a chosen option) left the menu while they sat in the basket: shown, never sent
+  function goneLines() {
+    var idx = menuIndex(), oi = optionIndex();
+    return S.basket.filter(function (l) {
+      return l.qty > 0 && (!idx[l.item] || (l.options || []).some(function (id) { return !oi[id]; }));
+    });
   }
   function basketCount() { return basketLines().reduce(function (s, l) { return s + l.qty; }, 0); }
   function saveBasket() { basketStore.write(S.basket); S.estimate = null; S.sendKey = ""; }
@@ -94,7 +102,7 @@
     if (S.data.session || S.mine.length) return;
     var c = el("section", "card intro");
     add(c, el("h1", null, "Pesan dari meja " + S.data.anchor.title),
-      el("p", null, "Pilih menu lalu kirim dari HP. Pesanan pertama dicek kasir dulu untuk membuka meja; setelah itu tambahan pesanan langsung ke dapur. Teman semeja bisa scan QR yang sama, semua masuk satu tagihan. Bayar di kasir."));
+      el("p", null, "Pilih menu lalu kirim dari HP. Pesanan pertama dicek kasir dulu untuk membuka meja; setelah itu tambahan pesanan langsung diproses. Teman semeja bisa scan QR yang sama, semua masuk satu tagihan. Bayar di kasir."));
     root.appendChild(c);
   }
 
@@ -144,7 +152,7 @@
   // the option sheet: required groups as radio, others as checkboxes up to max; Tambah waits for every required group
   function openSheet(m) {
     var hasGroups = (m.groups || []).some(function (g) { return S.data.options && S.data.options[g] && S.data.options[g].options.length; });
-    if (!hasGroups && !S.data.fields.line_note) { addLine({ item: m.name, qty: 1, options: [], note: "", later: false }); return; }
+    if (!hasGroups && !S.data.fields.line_note) { addLine({ item: m.name, title: m.title, qty: 1, options: [], note: "", later: false }); return; }
     S.sheet = { m: m, picked: {}, qty: 1, note: "" };
     render();
   }
@@ -163,6 +171,7 @@
     scrim.addEventListener("click", function (e) { if (e.target === scrim) { S.sheet = null; render(); } });
     var body = el("div", "sheet");
     body.setAttribute("role", "dialog");
+    body.setAttribute("aria-modal", "true");
     body.setAttribute("aria-label", m.title);
     add(body, el("h2", "sheet-title", m.title), el("div", "menu-price", money(m.price)));
     var missing = false, extra = 0;
@@ -196,7 +205,7 @@
       var wrap = el("label", "field");
       var inp = el("input"); inp.type = "text"; inp.maxLength = S.data.limits.note || 140; inp.value = sh.note; inp.placeholder = "Misalnya tanpa bawang goreng";
       inp.addEventListener("input", function () { sh.note = inp.value; });
-      add(wrap, el("span", "field-label", "Catatan untuk dapur (boleh kosong)"), inp);
+      add(wrap, el("span", "field-label", "Catatan (boleh kosong)"), inp);
       body.appendChild(wrap);
     }
     var foot = el("div", "sheet-foot");
@@ -207,7 +216,7 @@
       if (missing) return;
       var chosen = [];
       Object.keys(sh.picked).forEach(function (g) { chosen = chosen.concat(sh.picked[g]); });
-      addLine({ item: m.name, qty: sh.qty, options: chosen.sort(), note: sh.note.trim(), later: false });
+      addLine({ item: m.name, title: m.title, qty: sh.qty, options: chosen.sort(), note: sh.note.trim(), later: false });
     });
     ok.disabled = missing;
     add(foot, st, ok);
@@ -232,7 +241,18 @@
   }
 
   function renderBasket() {
-    var lines = basketLines(), f = S.data.fields, lim = S.data.limits;
+    var lines = basketLines(), f = S.data.fields, lim = S.data.limits, gone = goneLines();
+    if (gone.length) {
+      var g = el("section", "card gone");
+      g.appendChild(el("p", "warn-text", gone.length + " menu baru saja habis. Hapus dulu supaya pesananmu bisa dikirim."));
+      gone.forEach(function (l) {
+        var row = el("div", "basket-top");
+        add(row, add(el("div", "menu-info"), el("div", "menu-title muted", l.title || "Menu"), el("div", "hint", "Habis atau pilihannya berubah")),
+          button("add", "Hapus", function () { S.basket.splice(S.basket.indexOf(l), 1); saveBasket(); render(); }));
+        g.appendChild(row);
+      });
+      root.appendChild(g);
+    }
     var sec = el("section", "card basket");
     var head = el("div", "basket-head");
     add(head, el("h2", null, "Keranjang kamu"), button("link", "Tambah menu", function () { go("menu"); }));
@@ -342,12 +362,13 @@
     var y = window.scrollY;
     root.textContent = "";
     root.appendChild(header());
-    if (S.view === "basket" && basketLines().length) renderBasket();
+    if (S.view === "basket" && (basketLines().length || goneLines().length)) renderBasket();
     else if (S.view === "table") renderTable();
     else { S.view = "menu"; renderIntro(); if (S.notice && !S.sheet) root.appendChild(el("p", "notice", S.notice)); renderMenu(); }
     var bar = document.getElementById("order-bar");
     if (bar) bar.parentNode.removeChild(bar);
     var count = basketCount();
+    if (S.view === "menu" || S.view === "basket") root.appendChild(add(el("div", "help"), button("link", "Butuh bantuan? Panggil pelayan", function () { request("call"); })));
     bar = el("div", "order-bar");
     bar.id = "order-bar";
     if (S.view === "menu" && count > 0) {
@@ -358,7 +379,7 @@
     } else if (S.view === "basket") {
       var send = button("bar-button", "", sendOrder);
       add(send, el("span", null, S.sending ? "Mengirim…" : "Kirim pesanan"), el("span", null, count + " menu"));
-      send.disabled = S.sending || !count;
+      send.disabled = S.sending || !count || goneLines().length > 0;
       bar.appendChild(send);
     } else if (S.view === "table") {
       var more = button("bar-button", "", function () { go("menu"); });
@@ -366,7 +387,11 @@
       bar.appendChild(more);
     }
     if (bar.childNodes.length) { document.body.appendChild(bar); root.classList.add("with-bar"); } else root.classList.remove("with-bar");
-    if (S.sheet) root.appendChild(renderSheet());
+    if (S.sheet) {
+      var sheetEl = renderSheet();
+      root.appendChild(sheetEl);
+      if (!S.sheet.focused) { S.sheet.focused = true; var first = sheetEl.querySelector("button"); if (first) first.focus(); }
+    }
     window.scrollTo(0, y);
   }
 
@@ -401,7 +426,7 @@
       }
       S.basket = []; saveBasket(); S.note = ""; S.sendKey = "";
       remember(r.body.order);
-      S.notice = r.body.order.status === "new" ? "Terkirim. Kasir mengecek pesanan pertama meja ini." : "Terkirim, langsung ke dapur.";
+      S.notice = r.body.order.status === "new" ? "Terkirim. Kasir mengecek pesanan pertama meja ini." : "Terkirim, langsung diproses.";
       S.orders.push(r.body.order);
       go("table");
       poll();

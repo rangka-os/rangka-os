@@ -154,3 +154,14 @@ button.button:disabled { opacity: .5; cursor: default; }
 .bar-button:disabled { opacity: .5; }
 .add:focus-visible, .step:focus-visible, .chip:focus-visible, .link:focus-visible, .bar-button:focus-visible, button.button:focus-visible,
 .pill:focus-visible, .opt:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* the order page keeps the brand colour off: links and focus are the neutral info blue (Zein: Bata only on the logo) */
+.portal .link, .help .link { color: var(--info); }
+.link.muted { color: var(--muted); }
+.add:focus-visible, .step:focus-visible, .chip:focus-visible, .link:focus-visible, .bar-button:focus-visible, button.button:focus-visible,
+.pill:focus-visible, .opt:focus-visible { box-shadow: 0 0 0 2px var(--info); }
+.field input:focus { box-shadow: 0 0 0 2px var(--info); }
+.help { text-align: center; margin-top: 12px; }
+.gone .warn-text { margin: 0 0 8px; color: var(--warn); font-weight: 600; font-size: 14px; }
+.gone .basket-top { padding: 8px 0; border-top: 1px solid var(--line); }
+.menu-title.muted { color: var(--faint); text-decoration: line-through; }

@@ -35,6 +35,11 @@ type Scheduler struct {
 	// unique key per flow and minute. 0 = start from now (rangka serve, where the loop never stops).
 	CatchUp time.Duration
 	polls   []*pollItem
+	// digestLast is the last hour slot whose exception digest was enqueued, per org (digest.go)
+	digestLast  map[string]time.Time
+	digestAsked map[string]time.Time
+	// DigestDue tells whether an org has anything for the hourly exception digest; nil = never enqueue it.
+	DigestDue func(ctx context.Context, org string, now time.Time) bool
 	// Orgs lists the organisations scheduled flows run for (the businesses in rk_orgs, not sandboxes). The default
 	// org is always added. nil = only the org SetFlows names (tests, single-org tools).
 	Orgs func(ctx context.Context) ([]string, error)
@@ -312,6 +317,7 @@ func (s *Scheduler) Tick(ctx context.Context) {
 	}
 	s.pollTick(ctx, now, pause)
 	s.refreshOrgs(ctx, now)
+	s.digestTick(ctx, now, pause)
 	s.mu.Lock()
 	items := append([]*Schedule{}, s.items...)
 	orgs := len(s.orgList())

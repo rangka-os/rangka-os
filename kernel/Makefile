@@ -86,6 +86,8 @@ compare-python: build
 	            "testdata/broken-member-record/apps --site testdata/broken-member-record/site" \
 	            "testdata/notices/apps --site testdata/notices/site" \
 	            "testdata/broken-notices/apps --site testdata/broken-notices/site" \
+	            "testdata/queue-widgets/apps --site testdata/queue-widgets/site" \
+	            "testdata/broken-queue-widgets/apps --site testdata/broken-queue-widgets/site" \
 	            "testdata/broken-limit-scope/apps --site testdata/broken-limit-scope/site" \
 	            "testdata/member-apps/apps --site testdata/member-apps/site" \
 	            "testdata/broken-member-apps/apps --site testdata/broken-member-apps/site" \

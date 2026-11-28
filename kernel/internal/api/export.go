@@ -383,6 +383,9 @@ func (s *Server) exportDashboard(w http.ResponseWriter, r *http.Request, c *call
 		if def != nil && i < len(def.Widgets) {
 			wd = def.Widgets[i]
 		}
+		if wd != nil && wd.Source != "" { // a queue widget (approvals, exceptions) is work to do, not data to export
+			continue
+		}
 		title := ""
 		if wd != nil {
 			title = wd.Label.Text()

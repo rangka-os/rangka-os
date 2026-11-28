@@ -54,6 +54,11 @@ func (e *Engine) DashboardWith(ctx context.Context, a Actor, name string, period
 	// permissions and row scope both decide what the widgets count
 	key := "dash:" + a.Org + ":" + name + ":" + formatInt(int64(period)) + ":" + e.Today() + ":" + permKey(a) + ":" + scopeKey(rs)
 	ttl := cache.ParseTTL(d.Cache)
+	for _, w := range d.Widgets {
+		if w.Source != "" { // approvals and exceptions change without a model write: never serve them from the cache
+			ttl = 0
+		}
+	}
 	if ttl > 0 && e.Cache != nil {
 		if v, ok := e.Cache.Get(key); ok {
 			return v.(map[string]any), true, reg, nil
@@ -199,6 +204,9 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 		if err != nil || !cel.Truthy(v) {
 			return map[string]any{"hidden": true}, nil
 		}
+	}
+	if w.Source != "" {
+		return dc.sourceWidget(w.Source, w.Type, w.Limit)
 	}
 	m := dc.e.Reg().Model(w.Model)
 	if m == nil {

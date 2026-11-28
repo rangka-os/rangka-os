@@ -30,3 +30,11 @@ test("widgetError hides permission_denied and turns other errors into text", () 
     assert.strictEqual(typeof widgetError(r).text, "string");
   }
 });
+
+test("exceptionWord names a head-office exception kind in Indonesian", () => {
+  const { exceptionWord, queueEmpty } = global.RangkaApp;
+  assert.strictEqual(exceptionWord("negative_stock"), "Stok minus");
+  assert.strictEqual(exceptionWord("edge_price_drift"), "Harga kasir beda");
+  assert.strictEqual(exceptionWord("something_new"), "Pengecualian");
+  assert.strictEqual(queueEmpty, "Tidak ada yang menunggu.");
+});

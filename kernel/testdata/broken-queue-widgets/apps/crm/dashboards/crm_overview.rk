@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/dashboard.json
+name: crm_overview
+label: {id: Ringkasan CRM}
+widgets:
+  - name: pipeline
+    type: number
+    label: {id: Nilai pipeline}
+    model: deal
+    aggregate: sum
+    field: value
+    filter: stage != 'won' && stage != 'lost'
+  - name: by_stage
+    type: chart
+    chart: bar
+    label: {id: Per tahap}
+    model: deal
+    group_by: stage
+  - name: with_model
+    type: number
+    source: approvals
+    model: deal
+    label: {id: Model dan sumber}
+  - name: with_columns
+    type: list
+    source: exceptions
+    columns: [name]
+    sort: -name
+    aggregate: sum
+    field: value
+    label: {id: Kolom dan sumber}
+  - name: as_chart
+    type: chart
+    chart: bar
+    group_by: stage
+    source: approvals
+    label: {id: Grafik dari sumber}
+  - name: bad_source
+    type: number
+    source: invoices
+    label: {id: Sumber tak dikenal}
+  - name: no_model
+    type: number
+    label: {id: Tanpa model}

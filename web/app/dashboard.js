@@ -38,6 +38,15 @@
   }
   RA.widgetError = widgetError;
 
+  /** The words for a head-office exception kind (contract 0058 §10); an unknown kind reads "Pengecualian". */
+  var EXCEPTION_WORDS = { edge_price_drift: "Harga kasir beda", negative_stock: "Stok minus", device_number_gap: "Nomor perangkat loncat", rule_overridden: "Aturan dilewati" };
+  function exceptionWord(kind) { return EXCEPTION_WORDS[kind] || "Pengecualian"; }
+  RA.exceptionWord = exceptionWord;
+
+  /** The sentence an empty queue widget (source: approvals | exceptions) shows. */
+  var QUEUE_EMPTY = "Tidak ada yang menunggu.";
+  RA.queueEmpty = QUEUE_EMPTY;
+
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
   if (!React || !R || !global.document) return;
@@ -52,12 +61,50 @@
     return fd ? L(fd.label) : f;
   }
 
+  /* A widget with a source reads the kernel's own queue (approvals waiting for this person, open head-office
+     exceptions). Number: the count, opening Persetujuan for approvals. List: a card per row, or one compact line. */
+  function SourceCard(p) {
+    var w = p.w, r = p.r, span = p.span, title = p.title, loading = p.loading;
+    var rows = r.rows || [], isApv = w.source === "approvals";
+    if (w.type === "number") {
+      var n = Number(r.value) || 0;
+      return h(R.NumberCard, { key: w.name, span: span, loading: loading, label: title, value: n, compact: false,
+        caption: n ? (w.description ? L(w.description) : isApv ? "menunggu keputusanmu" : "belum diselesaikan") : QUEUE_EMPTY,
+        onClick: isApv ? function () { p.open("#/approvals"); } : undefined });
+    }
+    if (!loading && !rows.length) {
+      return h(R.Card, { key: w.name, span: span, title: title, extra: h("span", { className: "rk-card-sub" }, "0") },
+        h("p", { className: "ap-dash-empty" }, L(w.empty) || QUEUE_EMPTY));
+    }
+    return h(R.Card, { key: w.name, span: span, title: title, flush: true, extra: h("span", { className: "rk-card-sub" }, String(r.total || rows.length)) },
+      h("ul", { className: "ap-lc-list ap-dash-lc", "aria-label": title }, rows.map(function (rec) {
+        if (isApv) {
+          var sum = rec.summary || {}, amount = RA.summaryAmount ? RA.summaryAmount(sum) : "";
+          var doc = ((p.ctx.meta.models || {})[rec.model] ? L(p.ctx.meta.models[rec.model].label) : rec.model) + (rec.name ? " " + rec.name : "");
+          return h("li", { key: rec.id, className: "ap-lc-item" },
+            h("a", { className: "ap-lc-link", href: "#/approvals" },
+              h("span", { className: "ap-lc-top" }, h("span", { className: "ap-lc-title" }, sum.title || doc),
+                amount ? h("span", { className: "ap-lc-amt" }, amount) : null),
+              h("span", { className: "ap-lc-sub" }, h("span", { className: "ap-lc-meta" },
+                h("span", null, sum.title ? doc : (RA.policyLabel ? RA.policyLabel(rec) : "Persetujuan")),
+                h("span", null, "diajukan oleh " + (rec.requested_by || "-"))))));
+        }
+        return h("li", { key: rec.id, className: "ap-lc-item" },
+          h("span", { className: "ap-lc-link" },
+            h("span", { className: "ap-lc-top" }, h("span", { className: "ap-lc-title" }, exceptionWord(rec.kind))),
+            h("span", { className: "ap-lc-sub" }, h("span", { className: "ap-lc-meta" },
+              rec.outlet ? h("span", null, rec.outlet) : null, rec.ref ? h("span", null, rec.ref) : null,
+              rec.created_at ? h("span", null, global.RangkaAppAPI ? global.RangkaAppAPI.tanggal(rec.created_at) : String(rec.created_at).slice(0, 10)) : null))));
+      })));
+  }
+
   function widgetCard(ctx, w, r, days, loading, open) {
     var span = w.span || 3, title = L(w.label) || w.name;
     var err = widgetError(r);
     if (err && err.hide) return null;
     if (err) return h(R.Alert, { key: w.name, span: span, tone: "warn", title: title }, err.text);
     r = r || {};
+    if (w.source) return h(SourceCard, { key: w.name, ctx: ctx, w: w, r: r, span: span, title: title, loading: loading, open: open });
     if (w.type === "number") {
       return h(R.NumberCard, { key: w.name, span: span, loading: loading, label: title, value: Number(r.value) || 0, rupiah: !!r.rupiah, compact: w.compact, goodWhen: w.good_when,
         delta: r.delta || undefined, trend: r.delta ? r.trend : undefined,

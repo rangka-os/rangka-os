@@ -152,6 +152,9 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 	if err := s.transition(ctx, cs, a, "proposed", note, true); err != nil {
 		return nil, err
 	}
+	if s.OnProposed != nil {
+		s.OnProposed(ctx, cs, a)
+	}
 	return cs, nil
 }
 

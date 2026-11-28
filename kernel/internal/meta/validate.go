@@ -810,6 +810,9 @@ func contains(l []string, s string) bool {
 	return false
 }
 
+// sourceWidgetBanned are the widget keys a widget with a source cannot carry: they all describe a model.
+var sourceWidgetBanned = []string{"model", "field", "filter", "group_by", "grain", "period", "aggregate", "sort", "columns", "chart"}
+
 func (v *validator) dashboard(d *Dashboard, visible map[string]vis, optional map[string]bool, all map[string]vis, app string) {
 	p := d.Doc.Path
 	seen := map[string]bool{}
@@ -821,6 +824,15 @@ func (v *validator) dashboard(d *Dashboard, visible map[string]vis, optional map
 			v.rep.add("error", p, at+"/name", "duplicate_widget", fmt.Sprintf(`widget "%s" appears twice`, wn))
 		}
 		seen[wn] = true
+		if src, _ := w["source"].(string); src != "" {
+			// a source widget reads the kernel's own queue, not a model (contract 0066 as built)
+			for _, k := range sourceWidgetBanned {
+				if _, has := w[k]; has {
+					v.rep.add("error", p, at+"/"+k, "source_conflict", fmt.Sprintf("a widget with source: %s reads the kernel's queue and takes no %s", src, k))
+				}
+			}
+			continue
+		}
 		mn := pyStr(w["model"])
 		if w["model"] == nil {
 			mn = ""

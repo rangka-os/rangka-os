@@ -518,3 +518,9 @@ test("riskReasonText says the kernel's risk reasons in Bahasa Indonesia", () => 
   assert.strictEqual(RA.riskReasonText("changes menu labels of custom/app.sewa_alat.rk"), "Mengganti nama grup menu di custom/app.sewa_alat.rk");
   assert.strictEqual(RA.riskReasonText("something the kernel says later"), "something the kernel says later");
 });
+
+test("dashDef keeps a queue widget's source and empty sentence, so moving or resizing it in Ubah stays valid", () => {
+  const w = { name: "q", type: "list", source: "approvals", span: 6, limit: 5, empty: { id: "Tidak ada yang menunggu." }, extra: 1 };
+  const meta = { dashboards: { d: { label: { id: "D" }, widgets: [w] } } };
+  assert.deepStrictEqual(RA.dashDef(meta, "d").widgets, [{ name: "q", type: "list", source: "approvals", span: 6, limit: 5, empty: { id: "Tidak ada yang menunggu." } }]);
+});

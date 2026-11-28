@@ -408,6 +408,9 @@ create table if not exists rk_exceptions (
   resolved_at timestamptz
 );
 create index if not exists rk_exceptions_org on rk_exceptions (org_id, resolved_at, created_at);
+-- the hourly head-office digest (contract 0066 as built) marks what it told, so a row committed late is told by the next one
+alter table rk_exceptions add column if not exists notified_at timestamptz;
+create index if not exists rk_exceptions_unnotified on rk_exceptions (org_id) where notified_at is null and resolved_at is null;
 -- edge events (contract 0058 §4, 0006 §3): one row per idempotency key and org, kept 400 days; status accepted or
 -- rejected (with code); ref is the name of the record the event wrote; payload_sha256 covers {kind, payload}
 create table if not exists rk_edge_events (

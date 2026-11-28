@@ -344,6 +344,33 @@ recipients (its spec §3 and §8).
 - **Prefs.** With a host the panel's settings link and Pengaturan › Notifikasi say the host manages mail; the kernel has
   no URL of the host's settings page to link to.
 - Not built: the change-set preview sentence of §1.4.
+- **`kernel.changeset.proposed` (Open 1, built).** Two more built-in kinds join §5.
+  - `kernel.changeset.proposed` is raised when a change set is saved as proposed (`changeset.Service.OnProposed`, so
+    the propose API, Raka and the catalogue all raise it). To: the owner and the roles that may approve it
+    (`ApprovableBy`), never the person who proposed it, so an owner's own proposal tells nobody. A change set Raka proposed (source
+    `ai`) tells the owner too, even in the owner's own chat: the author is then the assistant, not the person. Severity: `high` for a
+    high-risk change set, `warn` for medium, `info` for low. Title "Perubahan sistem menunggu keputusanmu", text
+    "Raka mengusulkan perubahan: <title>" (source `ai`) or "Perubahan baru: <title>". `id`: `<kind>:<change set id>`.
+    Link `/app/#/approvals?tab=sistem`, the "Perubahan sistem" tab of Persetujuan, which lists the change sets that wait
+    for a decision or an apply and opens each in the change-set card. The tab shows only to people who may approve.
+    There is no record, so §6's read check has nothing to narrow.
+  - `kernel.exceptions.new` is the hourly batch of head-office exceptions (0058 §10). The scheduler enqueues one
+    `exception_digest` job per organisation and hour (unique key org + hour, skipped while the scheduler is paused); the
+    job tells the owner and `head_office` how many exceptions were raised since the previous digest and are still open,
+    by kind ("3 pengecualian baru" / "2 stok minus, 1 harga kasir beda"). Nothing new, no notice, and the scheduler
+    enqueues no job for an organisation with nothing new. Each `rk_exceptions` row carries `notified_at`: the digest tells
+    the open rows with none (raised within a day), and marks them in the same transaction once the notice row is
+    written. A row is judged by its own marker, not by a time window, so one that commits late or comes from a skewed
+    clock is told by the next digest, a rerun inside the hour or a retried job never tells twice, and a digest dropped by
+    the rate cap leaves its rows pending. One digest per hour: while this hour's notice exists, news waits for the next
+    hour. `id`: `<kind>:<hour as unix seconds>`. Link `/app/`. Severity `warn`.
+- **Dashboard widgets over the kernel's queues.** `dashboard.json` widgets take `source: approvals | exceptions`
+  instead of `model` (number or list only; `source_conflict` when `model`, `field`, `filter`, `group_by`, `grain`,
+  `period`, `aggregate`, `sort`, `columns` or `chart` is also set). `approvals` is the pending requests the viewer may
+  decide now; `exceptions` is the open head-office exceptions, for a person signed in as owner or `head_office`. A
+  viewer who may act on nothing of the kind gets a hidden widget (tokens never; a PIN session is a person, so it sees `approvals` if it may decide, never `exceptions`), and an empty queue
+  shows "Tidak ada yang menunggu." A dashboard with a source widget is never cached (`cache:` is ignored) and the export
+  leaves those widgets out.
 
 ## Not in this contract
 
@@ -354,5 +381,5 @@ recipients (its spec §3 and §8).
 
 ## Open
 
-1. Whether `kernel.changeset.proposed` (Zafdoz proposed a change set that waits for the owner) is a built-in notice too.
-   It fits §5; left out to keep the first release small.
+None. Open 1 from main (whether `kernel.changeset.proposed` is a built-in notice) is built: see the
+`kernel.changeset.proposed` entry above.

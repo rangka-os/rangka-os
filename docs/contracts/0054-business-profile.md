@@ -154,8 +154,9 @@ offer. It is computed on read and never stored. Unconfirmed guesses are not used
 **Plan.** The packages in order are `mulai` < `juragan` < `pro` < `grup` < `enterprise`. Each answer gives a minimum
 package; the plan is the highest minimum, and never below the first package with `price.per_month` above zero
 (amended 28 Nov 2026: however small the business, Cloud suggests the first paid package; the free package stays in
-`packages` and can still be chosen). When that floor sets the plan, the first reason says what the paid package adds
-over the free one, from the tiers file, and the last says the free package can still be chosen.
+`packages` and can still be chosen where the owner may have it). When that floor sets the plan, the first reason says
+what the paid package adds over the free one, from the tiers file; the reasons never promise the free package, since
+whether it is open depends on the owner (one free business per account, free seats).
 
 | Field | Minimum package |
 | --- | --- |
@@ -173,7 +174,8 @@ over the free one, from the tiers file, and the last says the free package can s
 - With today's `config/tiers.yaml` the limit rows give: outlets 1 → mulai, 2–5 → pro, more → enterprise; staff
   `solo`, `to_5` → mulai, `to_20` → juragan, `to_100` → pro, `over_100` → enterprise. When the file changes, the rows
   follow it.
-- **Reasons.** One reason per field whose minimum equals the plan, in the order of §1, plus the sentence "Harga
+- **Reasons.** When the paid floor sets the plan, first the floor reason (above). Then one reason per field whose
+  minimum equals the plan, in the order of §1, plus the sentence "Harga
   dihitung per usaha, bukan per orang." when `staff` is `to_20` or bigger and did not raise the plan. When
   `customers` is `over_1000`: "Kalau jatah Zafdoz kurang, bisa tambah paket kredit." At most four reasons.
 - **Price.** `price_per_month` is the package's `price.per_month`; `enterprise` has none and the card says "Harga
@@ -195,7 +197,7 @@ The profile never changes the offer itself. It only names the kind for sales.
 The offer card of 0046 gains a "PAKETMU · dari profil usaha" block below the options, built from §5 when the profile
 is complete (board C). Above it, the 0050 block "Masalah yang terjawab" is the card's "SISTEMMU".
 
-- Normal package: "Paket yang cocok", the label, "Rp 249.000 / bulan", "per usaha, sudah termasuk PPN", "Kenapa
+- Normal package: "Paket yang cocok", the label, "Rp 249.000 / bulan", "per usaha, belum termasuk PPN", "Kenapa
   <label>" with the reasons, the actions "Lihat rancangan" and "Bandingkan paket", and the source line "Harga dari
   dokumen paket Rangka Cloud".
 - `enterprise`: "Harga setelah konsultasi", "dihitung per outlet, bukan per orang", the reasons, and the actions

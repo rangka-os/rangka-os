@@ -564,10 +564,15 @@
     function computeBody() {
       if (!bill || !tbl) return saleBody(c, cart, null, shiftName, sets.document, customer, checkout);
       var body = saleBody(c, cart, null, shiftName, sets.document, customer, Object.assign({}, bill.kept || {}, checkout));
+      body[doc.lines] = RA.tables.billLines(doc, cart, body[doc.lines]);
       body[tbl.link] = bill.table;
       if (tbl.guests) body[tbl.guests] = bill.guests;
-      return body;
+      return Object.assign(body, bill.tables || {});
     }
+    /* the bill's own tables the counter does not edit (options a guest chose on the table QR, contract 0048 §1, by
+       line key): carried back as stored, writable fields only, on every preview and save, so the model prices the
+       lines the same way here as on the server */
+    function billTables(rec) { return RA.tables.billTables(ctx.meta.models || {}, doc.model, doc.lines, c.payments && c.payments.table, rec); }
     /* the checkout values a bill record stores (the order type the server gave it, a member picked earlier) */
     function billKept(rec) {
       var o = {};
@@ -700,7 +705,7 @@
       body[doc.lines] = RA.tables.billLines(doc, cart, body[doc.lines]);
       body[tbl.link] = bill.table;
       if (tbl.guests) body[tbl.guests] = bill.guests;
-      return Object.assign(body, extra || {});
+      return Object.assign(body, bill.tables || {}, extra || {});
     }
     function billErr(e) {
       if (e && e.status === 409) return "Tagihan ini sudah diubah di perangkat lain. Buka lagi dari peta meja.";
@@ -720,7 +725,7 @@
       }
       return r0.then(function (r) {
         var rec = r && r.record ? r.record : r;
-        setBill(Object.assign({}, bill, { name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill], kept: billKept(rec) }));
+        setBill(Object.assign({}, bill, { name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill], kept: billKept(rec), tables: billTables(rec) }));
         setCart(RA.tables.cartFromBill(doc, rec));
         return rec;
       });
@@ -757,7 +762,7 @@
         var rec = r && r.data && r.data[0];
         if (!rec) throw new Error("Tagihan tidak ditemukan");
         billKey.current = null;
-        setBill({ table: x.name, title: x.title, guests: Number(rec[tbl.guests]) || 1, name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill], kept: billKept(rec) });
+        setBill({ table: x.name, title: x.title, guests: Number(rec[tbl.guests]) || 1, name: rec.name, rev: Number(rec.rev) || 0, asked: !!rec[tbl.bill], kept: billKept(rec), tables: billTables(rec) });
         setCart(RA.tables.cartFromBill(doc, rec)); setCustomer(rec[c.customer.field] || ""); setTmode(null);
       }, function (e) { setErr(errText(e)); }).then(function () { setBusy(false); });
     }

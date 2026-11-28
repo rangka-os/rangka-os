@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/portal.json
+# the optional order_page slots, each wrong once
+type: order_page
+model: pesanan
+label: {id: Lebih}
+anchor: {model: meja, field: meja, title: nama}
+menu: {model: menu, title: nama, price: harga}
+lines: {field: baris, item: menu, qty: qty, later: catatan}
+options:
+  table: baris
+  line: qty
+  option: menu
+  model: menu
+  link: grup
+  title: harga
+  price: nama
+  groups: {table: baris, link: menu}
+  group: {model: meja, title: active, required: nama}
+status: {field: status, open: [baru]}
+requests: {field: tamu, order: pesan, values: [panggil]}
+estimate: [tamu]
+session: {model: meja, link: nama, order_link: tamu, lines: {field: nama, title: nama, qty: nama}, totals: [nama]}

@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/portal.json
+type: order_page
+model: pesanan
+label: {id: Pesan}
+anchor: {model: meja, field: meja, title: nama}
+menu: {model: menu, filter: "dijual != false", title: nama, price: harga, group_by: grup, sold_out: habis}
+lines: {field: baris, item: menu, qty: qty, note: catatan}
+guest: tamu
+note: catatan
+status: {field: status, open: [baru], cancel: batal}
+share: [kantor]

@@ -23,9 +23,9 @@ import rkfile  # noqa: E402
 FIXTURE = os.path.join(HERE, "..", "web", "app", "test", "fixtures", "pos-sale-parity.json")
 
 # the documents computed in full (computes, defaults, options)
-COMPUTED = {"pos_sale": "pos", "pos_sale_item": "pos", "pos_payment": "pos"}
+COMPUTED = {"pos_sale": "pos", "pos_sale_item": "pos", "pos_payment": "pos", "pos_sale_option": "pos"}
 # the models those computes read through links: field names and types only, the fixture's records give the values
-LINKED = {"item": "catalogue", "uom_conversion": "catalogue", "promotion": "promotions", "loyalty_account": "loyalty",
+LINKED = {"item": "catalogue", "item_option": "catalogue", "uom_conversion": "catalogue", "promotion": "promotions", "loyalty_account": "loyalty",
           "outlet": "outlets", "pos_shift": "pos", "customer": "contacts"}
 KEEP = ("name", "type", "to", "of", "compute", "default")
 
@@ -41,16 +41,23 @@ def field_of(f, full):
 
 
 def models(apps):
-    out = {}
+    """The fixture models as rangka-apps defines them, and the names it does not define (yet): a model this kernel's
+    fixture already knows may land in rangka-apps after the kernel change that needs it (rangka-apps#119 options), so
+    a checkout without it is not an error."""
+    out, missing = {}, []
     for name, mod in list(COMPUTED.items()) + list(LINKED.items()):
-        data, _ = rkfile.load(os.path.join(apps, "modules", mod, "models", name + ".rk"))
+        path = os.path.join(apps, "modules", mod, "models", name + ".rk")
+        if not os.path.exists(path):
+            missing.append(name)
+            continue
+        data, _ = rkfile.load(path)
         full = name in COMPUTED
         m = {"name": name, "fields": [field_of(f, full) for f in data["fields"]]}
         for k in ("is_submittable", "is_child"):
             if data.get(k):
                 m[k] = True
         out[name] = m
-    return out
+    return out, missing
 
 
 def main():
@@ -61,7 +68,9 @@ def main():
     a = ap.parse_args()
     with open(FIXTURE) as fh:
         fx = json.load(fh)
-    now = models(a.apps)
+    now, missing = models(a.apps)
+    if missing:
+        print("pos parity fixture: not in this rangka-apps checkout (kept as the fixture has them): " + ", ".join(missing))
     if a.check:
         changed = sorted(n for n in now if now[n] != fx["models"].get(n))
         if not changed:
@@ -71,7 +80,7 @@ def main():
               + ", ".join(changed) + ". Regenerate it in rangka-os (tools/pos_parity_models.py) so a paired device keeps "
               "computing the kernel's totals (contract 0058 §10).")
         return 1 if a.strict else 0
-    fx["models"] = now
+    fx["models"] = dict(now, **{n: fx["models"][n] for n in missing if n in fx["models"]})
     with open(FIXTURE, "w") as fh:
         json.dump(fx, fh, indent=1, ensure_ascii=False)
         fh.write("\n")

@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/portal.json
+# every order_page check fails once
+type: order_page
+model: pesanan
+label: {id: Salah}
+amount: total
+anchor: {model: meja, field: tamu, title: active}
+menu: {model: menu, title: harga, price: nama, group_by: modal, sold_out: grup}
+lines: {field: baris, item: catatan, qty: catatan, columns: [qty]}
+guest: total
+status: {field: tamu, open: [baru]}

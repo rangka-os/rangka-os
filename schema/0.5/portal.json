@@ -2,53 +2,485 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rangka-os.github.io/rangka-os/schema/0.5/portal.json",
   "title": "Rangka portal page",
-  "description": "One customer-facing page of a module, portal/<name>.rk (contract 0073). v1 builds the document type.",
+  "description": "One customer-facing page of a module, portal/<name>.rk (contract 0073). Built types: document, order_page.",
   "type": "object",
-  "required": ["type", "model", "label"],
+  "required": [
+    "type",
+    "model",
+    "label"
+  ],
   "additionalProperties": false,
   "properties": {
-    "$schema": {"type": "string"},
-    "type": {"enum": ["document", "documents", "catalogue", "booking", "intake", "order_page"],
-             "description": "Page type (contract 0073 §1); only document is built, the others are reserved"},
-    "model": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
-    "label": {"type": "object", "additionalProperties": {"type": "string", "maxLength": 80}},
-    "customer": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$",
-                 "description": "Link field to the customer; the page shows its title"},
-    "amount": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$",
-               "description": "Number field shown as the headline amount; 0 or less reads as paid"},
-    "due": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Date field shown as the due date"},
-    "fields": {"type": "array", "maxItems": 20, "uniqueItems": true,
-               "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
-               "description": "Fields shown to the customer (contract 0073 §2); nothing else is"},
+    "$schema": {
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "document",
+        "documents",
+        "catalogue",
+        "booking",
+        "intake",
+        "order_page"
+      ],
+      "description": "Page type (contract 0073 §1); document and order_page are built, the others are reserved"
+    },
+    "model": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "label": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 80
+      }
+    },
+    "customer": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Link field to the customer; the page shows its title"
+    },
+    "amount": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Number field shown as the headline amount; 0 or less reads as paid"
+    },
+    "due": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Date field shown as the due date"
+    },
+    "fields": {
+      "type": "array",
+      "maxItems": 20,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "description": "Fields shown to the customer (contract 0073 §2); nothing else is"
+    },
     "lines": {
       "type": "object",
-      "required": ["field", "columns"],
+      "required": [
+        "field"
+      ],
       "additionalProperties": false,
       "properties": {
-        "field": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "A table field of the model"},
-        "columns": {"type": "array", "minItems": 1, "maxItems": 8, "uniqueItems": true,
-                    "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}}
+        "field": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "A table field of the model"
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "item": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "order_page: the link field of a line to the menu model"
+        },
+        "qty": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "order_page: the number field of a line for the quantity"
+        },
+        "note": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "order_page: a text field of a line for the guest's note"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "order_page: the data field of a line the kernel fills with L1, L2…; options name it"
+        },
+        "later": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "order_page: a check field of a line: the guest wants it brought later"
+        }
       }
     },
-    "print": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "A print format of the model"},
+    "print": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "A print format of the model"
+    },
     "payment": {
       "type": "object",
-      "required": ["model", "link"],
+      "required": [
+        "model",
+        "link"
+      ],
       "additionalProperties": false,
       "properties": {
-        "model": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
-        "link": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$",
-                 "description": "Link field of the payment model that names the document"},
-        "fields": {"type": "array", "maxItems": 12, "uniqueItems": true,
-                   "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
-        "qris": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$",
-                 "description": "Text field holding a static QRIS string, shown as a QR image"},
-        "qris_label": {"type": "array", "maxItems": 3, "uniqueItems": true,
-                       "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}}
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "link": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Link field of the payment model that names the document"
+        },
+        "fields": {
+          "type": "array",
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "qris": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "Text field holding a static QRIS string, shown as a QR image"
+        },
+        "qris_label": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        }
       }
     },
-    "share": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
-              "description": "Roles besides owner that make and revoke links"},
-    "lifetime_days": {"type": "integer", "minimum": 1, "maximum": 90, "description": "Link lifetime; default 30"}
+    "share": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "description": "Roles besides owner that make and revoke links"
+    },
+    "anchor": {
+      "type": "object",
+      "required": [
+        "model",
+        "field"
+      ],
+      "additionalProperties": false,
+      "description": "order_page: the record a link names (a table) and the order's link field that gets it",
+      "properties": {
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "field": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "title": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        }
+      }
+    },
+    "menu": {
+      "type": "object",
+      "required": [
+        "model",
+        "title",
+        "price"
+      ],
+      "additionalProperties": false,
+      "description": "order_page: the rows a guest orders from",
+      "properties": {
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "filter": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "title": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "price": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "group_by": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "sold_out": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "A check field; true shows the row as Habis and refuses it"
+        }
+      }
+    },
+    "guest": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "order_page: the order's text field for the guest's name"
+    },
+    "note": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "order_page: the order's text field for a note to the whole order"
+    },
+    "status": {
+      "type": "object",
+      "required": [
+        "field",
+        "open"
+      ],
+      "additionalProperties": false,
+      "description": "order_page: the order's select field shown to the guest",
+      "properties": {
+        "field": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "open": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "cancel": {
+          "type": "string",
+          "description": "The value a guest's cancel sets (within 2 minutes, while open)"
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "line",
+        "option",
+        "model",
+        "link",
+        "title",
+        "price",
+        "groups",
+        "group"
+      ],
+      "description": "order_page: options chosen per line (contract 0048 §1 shape)",
+      "properties": {
+        "table": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "line": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "option": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "link": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "title": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "price": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "filter": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "groups": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "table",
+            "link"
+          ],
+          "properties": {
+            "table": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "link": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            }
+          }
+        },
+        "group": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model",
+            "title"
+          ],
+          "properties": {
+            "model": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "title": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "required": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "multi": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "max": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "filter": {
+              "type": "string",
+              "maxLength": 500
+            }
+          }
+        }
+      }
+    },
+    "requests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "order",
+        "values"
+      ],
+      "description": "order_page: the select field of the order model that tells an order from a request to the staff",
+      "properties": {
+        "field": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "order": {
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "maxItems": 6,
+          "items": {
+            "type": "string"
+          }
+        },
+        "about": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        }
+      }
+    },
+    "estimate": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      },
+      "maxItems": 6,
+      "description": "order_page: number fields of the order model shown as the estimate before sending"
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "link",
+        "lines",
+        "order_link"
+      ],
+      "description": "order_page: the anchor's open document (a table's open bill) every phone at the table sees",
+      "properties": {
+        "model": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "link": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "filter": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "order_link": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "lines": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "field",
+            "title",
+            "qty"
+          ],
+          "properties": {
+            "field": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "title": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "qty": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "amount": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            }
+          }
+        },
+        "totals": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "maxItems": 8
+        }
+      }
+    },
+    "lifetime_days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3650,
+      "description": "Link lifetime; default 30 (at most 90) for document, 365 (at most 3650) for order_page"
+    }
   }
 }

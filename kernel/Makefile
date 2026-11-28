@@ -58,6 +58,7 @@ compare-python: build
 	            "testdata/modules-apps/apps --site testdata/broken-host-connector/site --connectors testdata/broken-host-connector/connectors" \
 	            "$(APPS) --site testdata/rate-site --connectors $(CONN)" "$(APPS) --site testdata/theme-site --connectors $(CONN)" "$(APPS) --site testdata/broken-rate-site --connectors $(CONN)" \
 	            "testdata/broken-apps --site testdata/broken-site --connectors testdata/broken-connectors" \
+	            "testdata/order-page/apps --site testdata/order-page/site" "testdata/broken-order-page/apps --site testdata/broken-order-page/site" \
 	            "testdata/modules-apps/apps --site testdata/modules-apps/site" \
 	            "testdata/broken-modules-apps/apps --site testdata/broken-modules-apps/site" \
 	            "testdata/nav-apps/apps --site testdata/nav-apps/site" \

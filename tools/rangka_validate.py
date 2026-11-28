@@ -2986,7 +2986,10 @@ SCREEN_TYPES = ["counter", "queue", "roll", "route", "handover", "clock", "entry
 OFFLINE_TYPES = {"counter", "roll", "route", "clock", "entry"}
 
 PORTAL_TYPES = ["document", "documents", "catalogue", "booking", "intake", "order_page"]
-PORTAL_BUILT = {"document"}
+PORTAL_BUILT = {"document", "order_page"}
+PORTAL_DOCUMENT_ONLY = ["customer", "amount", "due", "fields", "print", "payment"]
+PORTAL_ORDER_ONLY = ["anchor", "menu", "guest", "note", "status", "options", "requests", "estimate", "session"]
+PORTAL_TEXT = {"data", "text", "small_text"}
 PORTAL_REFUSED = {"attach", "image", "json", "signature", "geo", "dynamic_link", "table", "password"}
 PORTAL_NUMERIC = {"currency", "int", "float", "percent", "rating"}
 
@@ -3058,10 +3061,14 @@ def check_portal(rep, V, allmodels, roles, p, d, prints):
     mn = raw.get("model") if isinstance(raw.get("model"), str) else ""
     if isinstance(raw.get("model"), str) and mn not in allmodels:
         rep.add("error", p, "model", "portal_unknown_model", f'"{mn}" is not a model{suggest(mn, allmodels)}')
-    if mn not in allmodels:
+    slots_ok = portal_slots(rep, p, raw)
+    if not slots_ok or mn not in allmodels:
         return
     m = allmodels[mn][2]
     ftype = lambda f: f.get("type") if isinstance(f.get("type"), str) else ""
+    if raw.get("type") == "order_page":
+        check_order_page(rep, p, raw, m, allmodels)
+        return
     f = portal_field(rep, p, "customer", m, raw.get("customer"))
     if f is not None and ftype(f) != "link":
         rep.add("error", p, "customer", "portal_field_type", f'customer "{f["name"]}" must be a link field, not {ftype(f)}')
@@ -3112,6 +3119,228 @@ def check_portal(rep, V, allmodels, roles, p, d, prints):
         rep.add("error", p, "payment/qris", "portal_field_type", f'qris "{f["name"]}" must be a text field, not {ftype(f)}')
     for i, x in enumerate(pay.get("qris_label") if isinstance(pay.get("qris_label"), list) else []):
         portal_field(rep, p, f"payment/qris_label/{i}", pm, x)
+
+
+def portal_slots(rep, p, raw):
+    """The slots of a page's type and none of another (contract 0073 §1, §9); the document lifetime cap."""
+    t = raw.get("type")
+    if not isinstance(t, str):
+        return False
+    lines = raw.get("lines") if isinstance(raw.get("lines"), dict) else None
+    if t == "order_page":
+        unused, need, line_need, line_unused = PORTAL_DOCUMENT_ONLY, ["anchor", "menu", "lines", "status"], ["item", "qty"], ["columns"]
+    else:
+        unused, need, line_need, line_unused = PORTAL_ORDER_ONLY, [], ["columns"], ["item", "qty", "note", "key", "later"]
+        n = raw.get("lifetime_days")
+        if isinstance(n, int) and not isinstance(n, bool) and n > 90:
+            rep.add("error", p, "lifetime_days", "schema", "a document link lives at most 90 days")
+    ok = True
+    for k in unused:
+        if k in raw:
+            rep.add("error", p, k, "portal_slot_unused", f'"{k}" is not a slot of {t} pages')
+    for k in need:
+        if k not in raw:
+            rep.add("error", p, "(root)", "portal_slot_missing", f'{t} pages need "{k}"')
+            ok = False
+    if lines is not None:
+        for k in line_unused:
+            if k in lines:
+                rep.add("error", p, "lines/" + k, "portal_slot_unused", f'"lines.{k}" is not a slot of {t} pages')
+        for k in line_need:
+            if k not in lines:
+                rep.add("error", p, "lines", "portal_slot_missing", f'{t} pages need "lines.{k}"')
+                ok = False
+    return ok
+
+
+def check_order_page(rep, p, raw, m, allmodels):
+    """The slots of an order_page (contract 0073 §9): the same checks as orderPage in validate_portal.go."""
+    ftype = lambda f: f.get("type") if isinstance(f.get("type"), str) else ""
+    sget = lambda d, k: d.get(k) if isinstance(d, dict) and isinstance(d.get(k), str) else ""
+    def type_err(where, name, want, got):
+        rep.add("error", p, where, "portal_field_type", f'{where} "{name}" must be {want}, not {got}')
+    anchor = raw.get("anchor") if isinstance(raw.get("anchor"), dict) else {}
+    amn = sget(anchor, "model")
+    if amn not in allmodels:
+        rep.add("error", p, "anchor/model", "portal_unknown_model", f'"{amn}" is not a model{suggest(amn, allmodels)}')
+    else:
+        f = portal_field(rep, p, "anchor/field", m, sget(anchor, "field") or None)
+        if f is not None and (ftype(f) != "link" or f.get("to") != amn):
+            type_err("anchor/field", f["name"], "a link to " + amn, ftype(f))
+        if sget(anchor, "title"):
+            f = portal_field(rep, p, "anchor/title", allmodels[amn][2], sget(anchor, "title"))
+            if f is not None and ftype(f) not in PORTAL_TEXT:
+                type_err("anchor/title", f["name"], "a text field", ftype(f))
+    menu = raw.get("menu") if isinstance(raw.get("menu"), dict) else {}
+    mmn = sget(menu, "model")
+    if mmn not in allmodels:
+        rep.add("error", p, "menu/model", "portal_unknown_model", f'"{mmn}" is not a model{suggest(mmn, allmodels)}')
+    else:
+        mm = allmodels[mmn][2]
+        f = portal_field(rep, p, "menu/title", mm, sget(menu, "title") or None)
+        if f is not None and ftype(f) not in PORTAL_TEXT:
+            type_err("menu/title", f["name"], "a text field", ftype(f))
+        f = portal_field(rep, p, "menu/price", mm, sget(menu, "price") or None)
+        if f is not None and ftype(f) not in PORTAL_NUMERIC:
+            type_err("menu/price", f["name"], "a number field", ftype(f))
+        if sget(menu, "group_by"):
+            f = portal_field(rep, p, "menu/group_by", mm, sget(menu, "group_by"))
+            if f is not None and ftype(f) not in PORTAL_TEXT | {"link", "select"}:
+                type_err("menu/group_by", f["name"], "a link, select or text field", ftype(f))
+        if sget(menu, "sold_out"):
+            f = portal_field(rep, p, "menu/sold_out", mm, sget(menu, "sold_out"))
+            if f is not None and ftype(f) != "check":
+                type_err("menu/sold_out", f["name"], "a check field", ftype(f))
+    lines = raw.get("lines") if isinstance(raw.get("lines"), dict) else {}
+    lfn = sget(lines, "field")
+    f = fields_of(m).get(lfn)
+    if f is None:
+        rep.add("error", p, "lines/field", "portal_unknown_field", f'"{lfn}" is not a field of {m.get("name")}')
+    elif ftype(f) != "table":
+        type_err("lines/field", f["name"], "a table field", ftype(f))
+    elif f.get("of") in allmodels:
+        cm = allmodels[f["of"]][2]
+        lf = portal_field(rep, p, "lines/item", cm, sget(lines, "item") or None)
+        if lf is not None and (ftype(lf) != "link" or lf.get("to") != mmn):
+            type_err("lines/item", lf["name"], "a link to " + mmn, ftype(lf))
+        lf = portal_field(rep, p, "lines/qty", cm, sget(lines, "qty") or None)
+        if lf is not None and ftype(lf) not in PORTAL_NUMERIC:
+            type_err("lines/qty", lf["name"], "a number field", ftype(lf))
+        if sget(lines, "note"):
+            lf = portal_field(rep, p, "lines/note", cm, sget(lines, "note"))
+            if lf is not None and ftype(lf) not in PORTAL_TEXT:
+                type_err("lines/note", lf["name"], "a text field", ftype(lf))
+    check_order_page_more(rep, p, raw, m, allmodels, mmn, amn, type_err)
+    for slot in ("guest", "note"):
+        if sget(raw, slot):
+            f = portal_field(rep, p, slot, m, sget(raw, slot))
+            if f is not None and ftype(f) not in PORTAL_TEXT:
+                type_err(slot, f["name"], "a text field", ftype(f))
+    status = raw.get("status") if isinstance(raw.get("status"), dict) else {}
+    f = portal_field(rep, p, "status/field", m, sget(status, "field") or None)
+    if f is not None:
+        if ftype(f) != "select":
+            type_err("status/field", f["name"], "a select field", ftype(f))
+        else:
+            opts = {o.get("value") if isinstance(o, dict) else o for o in (f.get("options") or [])}
+            vals = [v for v in (status.get("open") if isinstance(status.get("open"), list) else []) if isinstance(v, str)]
+            if sget(status, "cancel"):
+                vals.append(sget(status, "cancel"))
+            for v in vals:
+                if v not in opts:
+                    rep.add("error", p, "status", "portal_unknown_field", f'"{v}" is not an option of {m.get("name")}.{f["name"]}')
+
+
+def check_order_page_more(rep, p, raw, m, allmodels, menu_model, anchor_model, type_err):
+    """lines.key/later, options, requests, estimate, session of an order_page: orderPageMore in validate_portal.go."""
+    ftype = lambda f: f.get("type") if isinstance(f, dict) and isinstance(f.get("type"), str) else ""
+    sget = lambda d, k: d.get(k) if isinstance(d, dict) and isinstance(d.get(k), str) else ""
+    fields = lambda mm: fields_of(mm)
+    def model(where, name):
+        if name in allmodels:
+            return allmodels[name][2]
+        rep.add("error", p, where, "portal_unknown_model", f'"{name}" is not a model{suggest(name, allmodels)}')
+        return None
+    lines = raw.get("lines") if isinstance(raw.get("lines"), dict) else {}
+    lf = fields(m).get(sget(lines, "field"))
+    line = allmodels[lf["of"]][2] if lf is not None and ftype(lf) == "table" and lf.get("of") in allmodels else None
+    if line is not None and sget(lines, "key"):
+        f = portal_field(rep, p, "lines/key", line, sget(lines, "key"))
+        if f is not None and ftype(f) != "data":
+            type_err("lines/key", f["name"], "a data field", ftype(f))
+    if line is not None and sget(lines, "later"):
+        f = portal_field(rep, p, "lines/later", line, sget(lines, "later"))
+        if f is not None and ftype(f) != "check":
+            type_err("lines/later", f["name"], "a check field", ftype(f))
+    o = raw.get("options") if isinstance(raw.get("options"), dict) else None
+    if o is not None:
+        g = o.get("group") if isinstance(o.get("group"), dict) else {}
+        gs = o.get("groups") if isinstance(o.get("groups"), dict) else {}
+        if not sget(lines, "key"):
+            rep.add("error", p, "options", "portal_slot_missing", "options need lines.key")
+        om, gm = model("options/model", sget(o, "model")), model("options/group/model", sget(g, "model"))
+        t = fields(m).get(sget(o, "table"))
+        if t is None or ftype(t) != "table":
+            rep.add("error", p, "options/table", "portal_field_type", f'options table "{sget(o, "table")}" must be a table field of {m.get("name")}')
+        elif t.get("of") in allmodels:
+            cf = fields(allmodels[t["of"]][2])
+            x = cf.get(sget(o, "line"))
+            if x is None or ftype(x) != "data":
+                rep.add("error", p, "options/line", "portal_field_type", f'options line "{sget(o, "line")}" must be a data field of {t["of"]}')
+            x = cf.get(sget(o, "option"))
+            if x is None or ftype(x) != "link" or x.get("to") != sget(o, "model"):
+                rep.add("error", p, "options/option", "portal_field_type", f'options option "{sget(o, "option")}" must be a link to {sget(o, "model")}')
+        if om is not None:
+            x = fields(om).get(sget(o, "link"))
+            if x is None or ftype(x) != "link" or x.get("to") != sget(g, "model"):
+                rep.add("error", p, "options/link", "portal_field_type", f'options link "{sget(o, "link")}" must be a link to {sget(g, "model")}')
+            f = portal_field(rep, p, "options/title", om, sget(o, "title") or None)
+            if f is not None and ftype(f) not in PORTAL_TEXT:
+                type_err("options/title", f["name"], "a text field", ftype(f))
+            f = portal_field(rep, p, "options/price", om, sget(o, "price") or None)
+            if f is not None and ftype(f) not in PORTAL_NUMERIC:
+                type_err("options/price", f["name"], "a number field", ftype(f))
+        if gm is not None:
+            f = portal_field(rep, p, "options/group/title", gm, sget(g, "title") or None)
+            if f is not None and ftype(f) not in PORTAL_TEXT:
+                type_err("options/group/title", f["name"], "a text field", ftype(f))
+            for key, want in (("required", "check"), ("multi", "check"), ("max", "int")):
+                if sget(g, key):
+                    f = portal_field(rep, p, "options/group/" + key, gm, sget(g, key))
+                    if f is not None and ftype(f) != want:
+                        type_err("options/group/" + key, f["name"], "a " + want + " field", ftype(f))
+        if menu_model in allmodels:
+            t = fields(allmodels[menu_model][2]).get(sget(gs, "table"))
+            if t is None or ftype(t) != "table":
+                rep.add("error", p, "options/groups/table", "portal_field_type", f'options groups "{sget(gs, "table")}" must be a table field of {menu_model}')
+            elif t.get("of") in allmodels:
+                x = fields(allmodels[t["of"]][2]).get(sget(gs, "link"))
+                if x is None or ftype(x) != "link" or x.get("to") != sget(g, "model"):
+                    rep.add("error", p, "options/groups/link", "portal_field_type", f'options groups link "{sget(gs, "link")}" must be a link to {sget(g, "model")}')
+    rq = raw.get("requests") if isinstance(raw.get("requests"), dict) else None
+    if rq is not None:
+        f = fields(m).get(sget(rq, "field"))
+        if f is None or ftype(f) != "select":
+            rep.add("error", p, "requests/field", "portal_field_type", f'requests field "{sget(rq, "field")}" must be a select field of {m.get("name")}')
+        else:
+            opts = {x.get("value") if isinstance(x, dict) else x for x in (f.get("options") or [])}
+            vals = [rq.get("order")] + [v for v in (rq.get("values") if isinstance(rq.get("values"), list) else [])]
+            for v in vals:
+                if v not in opts:
+                    rep.add("error", p, "requests", "portal_unknown_field", f'"{v}" is not an option of {m.get("name")}.{f["name"]}')
+        if sget(rq, "about"):
+            f = portal_field(rep, p, "requests/about", m, sget(rq, "about"))
+            if f is not None and ftype(f) != "data":
+                type_err("requests/about", f["name"], "a data field", ftype(f))
+    for i, n in enumerate(raw.get("estimate") if isinstance(raw.get("estimate"), list) else []):
+        f = portal_field(rep, p, f"estimate/{i}", m, n)
+        if f is not None and ftype(f) not in PORTAL_NUMERIC:
+            type_err(f"estimate/{i}", f["name"], "a number field", ftype(f))
+    se = raw.get("session") if isinstance(raw.get("session"), dict) else None
+    if se is not None:
+        smn = sget(se, "model")
+        sm = model("session/model", smn)
+        f = fields(m).get(sget(se, "order_link"))
+        if f is None or ftype(f) != "link" or f.get("to") != smn:
+            rep.add("error", p, "session/order_link", "portal_field_type", f'session order_link "{sget(se, "order_link")}" must be a link of {m.get("name")} to {smn}')
+        if sm is None:
+            return
+        f = fields(sm).get(sget(se, "link"))
+        if f is None or ftype(f) != "link" or f.get("to") != anchor_model:
+            rep.add("error", p, "session/link", "portal_field_type", f'session link "{sget(se, "link")}" must be a link of {smn} to {anchor_model}')
+        sl = se.get("lines") if isinstance(se.get("lines"), dict) else {}
+        f = fields(sm).get(sget(sl, "field"))
+        if f is None or ftype(f) != "table":
+            rep.add("error", p, "session/lines/field", "portal_field_type", f'session lines "{sget(sl, "field")}" must be a table field of {smn}')
+        elif f.get("of") in allmodels:
+            cm = allmodels[f["of"]][2]
+            for key in ("title", "qty", "amount", "key"):
+                if sget(sl, key):
+                    portal_field(rep, p, "session/lines/" + key, cm, sget(sl, key))
+        for i, n in enumerate(se.get("totals") if isinstance(se.get("totals"), list) else []):
+            f = portal_field(rep, p, f"session/totals/{i}", sm, n)
+            if f is not None and ftype(f) not in PORTAL_NUMERIC:
+                type_err(f"session/totals/{i}", f["name"], "a number field", ftype(f))
 
 
 def load_screens(rep, screens, app, root):

@@ -177,7 +177,7 @@
       return doFetch(base + path, init).then(function (res) {
         return res;
       }, function (err) {
-        if (err && err.name === "AbortError") throw err;
+        if (signal && err && err.name === "AbortError") throw err; // the caller's own abort, not a lost connection
         throw ApiError(0, "network", "Tidak bisa terhubung ke server", { cause: String(err && err.message || err) });
       });
     }
@@ -254,7 +254,7 @@
         return v;
       }, function (e) {
         done();
-        if (seq !== ch.seq || (e && e.name === "AbortError")) throw staleError();
+        if (seq !== ch.seq) throw staleError(); // replaced: also covers the AbortError this channel caused
         throw e;
       });
     };

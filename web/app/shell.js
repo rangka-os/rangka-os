@@ -1412,6 +1412,12 @@
       else if (k.indexOf("theme:") === 0) {
         var mode = k.slice(6), mine = meta && meta.theme && meta.theme.personal;
         setThemePick(mode); writeThemePick(mode);
+        // the page's meta knows the new mode too, so a theme picked next on Tampilan does not save the old one
+        setMeta(function (m) {
+          if (!m || !m.theme) return m;
+          var t = Object.assign({}, m.theme, { personal: { theme: (mine && mine.theme) || null, mode: mode } });
+          return Object.assign({}, m, { theme: t });
+        });
         // saved for the person's other devices; this page already shows it, so /meta is not reloaded
         if (api.setAppearance) api.setAppearance({ theme: mine && mine.theme, mode: mode }).then(null, function () {});
       }

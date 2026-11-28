@@ -122,7 +122,17 @@
     return Object.assign({}, meta, { theme: t });
   }
 
-  RA.tampilan = { withBusiness: withBusiness, slug: slug, themeYaml: themeYaml, themeOps: themeOps, checkSummary: checkSummary, deriveSpec: deriveSpec,
+  /** meta with the person's earlier pick was {personal, effective, device} put back; the business keys stay as they are
+   *  now. A pick never saved has no mode: the device's mode then (or system), so the shell repaints that mode too. */
+  function restorePersonal(meta, was) {
+    var t = Object.assign({}, (meta && meta.theme) || {});
+    var p = (was && was.personal) || {};
+    t.personal = { theme: p.theme || null, mode: p.mode || ({ light: 1, dark: 1, system: 1 }[was && was.device] ? was.device : "system") };
+    t.effective = p.theme && p.theme !== t.name && was.effective ? was.effective : businessEffective(t);
+    return Object.assign({}, meta, { theme: t });
+  }
+
+  RA.tampilan = { restorePersonal: restorePersonal, withBusiness: withBusiness, slug: slug, themeYaml: themeYaml, themeOps: themeOps, checkSummary: checkSummary, deriveSpec: deriveSpec,
     withPersonal: withPersonal, businessEffective: businessEffective, cardEffective: cardEffective };
 
   if (!global.React || !global.Rangka) return;
@@ -193,7 +203,7 @@
         var aq = applyQ.current;
         if (aq.settled && rev >= aq.settled && !aq.running && !aq.next) { aq.settled = 0; setApplying(null); }
         // every card's colours once, so a pick paints without waiting for the server
-        ((d && d.themes) || []).forEach(function (c) { deriveOf(c).then(null, function () {}); });
+        ((d && d.themes) || []).forEach(function (c) { if (c.source === "bundled") deriveOf(c).then(null, function () {}); });
       }, function (e) { if (live) set({ loading: false, data: null, error: e }); });
       return function () { live = false; };
     }, [bizName, meta.theme && meta.theme.path, galleryRev]);
@@ -218,33 +228,46 @@
     }
 
     // Paint first, save behind: the pick shows at once; PUT /me/appearance runs latest wins; /meta is reloaded
-    // quietly once the newest pick is saved; on an error the last saved look comes back.
+    // quietly once the newest pick is saved; on an error the person's last saved pick comes back (the business keys of
+    // meta.theme are never rolled back: they may have changed meanwhile). Only a bundled theme paints its colours ahead
+    // of the server: a site theme's font, radius, extends and colour edits are known to the server alone.
     function savePersonal(next) {
       var body = { theme: next.theme !== undefined ? next.theme : personal.theme || null, mode: next.mode || modeNow };
-      var seq = ++saveSeq.current;
-      if (!base.current) base.current = { theme: meta.theme, device: devicePick };
+      var seq = ++saveSeq.current, settled = false;
+      if (!base.current) base.current = { personal: meta.theme && meta.theme.personal, effective: meta.theme && meta.theme.effective, device: devicePick };
       function latest() { return seq === saveSeq.current; }
-      function paint(eff) { if (latest()) ctx.patchMeta(function (m) { return RA.tampilan.withPersonal(m, body, eff); }); }
+      function paint(eff) { if (latest() && !settled) ctx.patchMeta(function (m) { return RA.tampilan.withPersonal(m, body, eff); }); }
       var card = body.theme ? cardOf(body.theme) : null;
-      if (!body.theme || body.theme === bizName || !card) paint(RA.tampilan.businessEffective(meta.theme));
-      else {
+      if (!body.theme || body.theme === bizName) paint(RA.tampilan.businessEffective(meta.theme));
+      else if (card && card.source === "bundled") {
         paint(null); // the mode at once; the colours as soon as the card's are known (usually already)
         deriveOf(card).then(function (d) { paint(RA.tampilan.cardEffective(card, d)); }, function () {});
-      }
+      } else paint(null);
       setSaving(true);
       api.setAppearance(body).then(function () {
+        settled = true;
         if (!latest()) return null;
         base.current = null;
         return ctx.reloadMeta(undefined, { stale: function () { return !latest(); } }).then(null, function () {});
       }).then(function () { if (latest()) setSaving(false); }, function (e) {
-        if (api.isStale && api.isStale(e)) { if (latest()) setSaving(false); return; } // replaced by the account menu
+        settled = true;
+        if (api.isStale && api.isStale(e)) {
+          if (latest()) { // replaced by the account menu: its save is the newest now
+            setSaving(false);
+            base.current = null;
+            ctx.reloadMeta().then(null, function () {});
+          }
+          return;
+        }
+        if (!latest()) return;
         setSaving(false);
         var was = base.current;
         base.current = null;
         if (was) {
-          ctx.patchMeta(function (m) { return Object.assign({}, m, { theme: was.theme }); });
+          ctx.patchMeta(function (m) { return RA.tampilan.restorePersonal(m, was); });
           try { if (was.device) global.localStorage.setItem("rk.app.theme", was.device); else global.localStorage.removeItem("rk.app.theme"); } catch (x) { /* private window */ }
         }
+        ctx.reloadMeta().then(null, function () {});
         ctx.toast("bad", "Tampilan tidak bisa disimpan", errText(e));
       });
     }
@@ -291,10 +314,12 @@
       setApplying(card.name);
       setTrying(null);
       q.want = card.name;
-      var tried = { overrides: trying.overrides };
-      deriveOf(card).then(null, function () { return tried; }).then(function (d) {
-        if (q.want === card.name) ctx.patchMeta(function (m) { return RA.tampilan.withBusiness(m, card, d); });
-      });
+      if (card.source === "bundled") {
+        var tried = { overrides: trying.overrides };
+        deriveOf(card).then(null, function () { return tried; }).then(function (d) {
+          if (q.want === card.name) ctx.patchMeta(function (m) { return RA.tampilan.withBusiness(m, card, d); });
+        });
+      } // a site theme keeps the page's try paint until /meta brings the real one
       if (!q.running) drainApply();
     }
 
@@ -320,6 +345,7 @@
       }, function (e) { return { fail: RA.ubahError ? RA.ubahError(e) : errText(e) }; }).then(function (res) {
         q.running = false;
         if (q.next) { drainApply(); return; } // a newer pick: apply it; this one's result no longer shows
+        q.want = null; // a colour answer that lands from now on must not paint over the server's
         var was = q.confirmed;
         q.confirmed = null;
         if (res.fail || !res.applied) {

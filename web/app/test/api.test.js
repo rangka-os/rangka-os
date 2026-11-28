@@ -688,3 +688,11 @@ test("latest: the newest call's own error comes through; other keys are separate
   assert.strictEqual(api.isStale(put), false);
   assert.deepStrictEqual(plain(await api.latest("b", () => Promise.resolve({ ok: 1 }))), { ok: 1 });
 });
+
+test("latest: the newest call's own AbortError is not swallowed; a GET without a signal still maps an AbortError to network", async () => {
+  const api = loadWithAbort()({ fetch: () => { const e = new Error("gone"); e.name = "AbortError"; return Promise.reject(e); } });
+  const e = await rejected(api.latest("x", () => { const a = new Error("x"); a.name = "AbortError"; return Promise.reject(a); }));
+  assert.strictEqual(api.isStale(e), false);
+  const n = await rejected(api.list("lead"));
+  assert.strictEqual(n.status, 0, "no signal: an AbortError reads as a lost connection (the offline cache path)");
+});

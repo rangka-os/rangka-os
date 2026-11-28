@@ -96,3 +96,15 @@ test("withBusiness makes a card the business theme and the effective one unless 
   assert.strictEqual(own.theme.name, "laut");
   assert.strictEqual(own.theme.effective.name, "daun", "the person's own theme keeps showing");
 });
+
+test("restorePersonal puts back the person's pick but keeps the business theme as it is now", () => {
+  const now = { theme: { name: "laut", overrides: { primary: 1 }, personal: { theme: "daun", mode: "dark" }, effective: { name: "daun" } } };
+  const back = T.restorePersonal(now, { personal: { theme: null, mode: "light" }, effective: { name: "kopi" } });
+  assert.strictEqual(back.theme.name, "laut", "the business keys are not rolled back");
+  assert.deepStrictEqual(plain(back.theme.personal), { theme: null, mode: "light" });
+  assert.strictEqual(back.theme.effective.name, "laut", "following the business theme shows the current one");
+  const own = T.restorePersonal(now, { personal: { theme: "arang", mode: "system" }, effective: { name: "arang" } });
+  assert.strictEqual(own.theme.effective.name, "arang");
+  const never = T.restorePersonal(now, { personal: undefined, device: "dark" });
+  assert.deepStrictEqual(plain(never.theme.personal), { theme: null, mode: "dark" }, "a mode never saved falls back to the device's");
+});

@@ -542,6 +542,10 @@
     if (!s) return [];
     var out = [];
     if (s.updateReady) out.push("update");
+    // web push through Rangka Cloud (contract 0074 §6): only offered when the parent says it can; "blocked" explains
+    if (s.push === "off") out.push("push");
+    else if (s.push === "on") out.push("push-off");
+    else if (s.push === "blocked") out.push("push-blocked");
     if (!s.standalone) {
       if (s.installable) out.push("install");
       else if (s.iosHint) out.push("ios");
@@ -574,6 +578,9 @@
     var app = (o.pwa || []).map(function (k) {
       return k === "update" ? { key: "app:update", icon: "download", label: "Muat versi baru" }
         : k === "install" ? { key: "app:install", icon: "phone", label: "Pasang aplikasi" }
+        : k === "push" ? { key: "app:push", icon: "bell", label: "Nyalakan notifikasi" }
+        : k === "push-off" ? { key: "app:push-off", icon: "bell", label: "Matikan notifikasi" }
+        : k === "push-blocked" ? { key: "app:push-blocked", icon: "bell", label: "Notifikasi diblokir" }
         : { key: "app:ios", icon: "phone", label: "Pasang di layar utama" };
     });
     if (app.length) out.push({ heading: "Aplikasi", items: app });
@@ -1388,6 +1395,12 @@
       }
       else if (k === "app:update") RA.pwa.applyUpdate();
       else if (k === "app:install") RA.pwa.install().then(function (r) { if (r === "accepted") toast("ok", "Rangka terpasang", "Buka dari layar utama HP-mu."); });
+      else if (k === "app:push") RA.pwa.push.enable().then(function (r) {
+        if (r === "on") toast("ok", "Notifikasi menyala", "Kabar penting sampai ke HP-mu, walau aplikasi ditutup.");
+        else if (r === "blocked") toast("info", "Notifikasi diblokir", "Izinkan notifikasi untuk situs ini di pengaturan browser, lalu coba lagi.");
+      });
+      else if (k === "app:push-off") RA.pwa.push.disable().then(function (r) { if (r === "off") toast("info", "Notifikasi dimatikan", "Kamu tetap bisa melihat kabar di lonceng."); });
+      else if (k === "app:push-blocked") toast("info", "Notifikasi diblokir", "Izinkan notifikasi untuk situs ini di pengaturan browser, lalu nyalakan lagi dari menu ini.");
       else if (k === "app:ios") toast("info", "Pasang di iPhone atau iPad", "Di Safari, ketuk Bagikan lalu Tambahkan ke Layar Utama.");
       else if (k.indexOf("theme:") === 0) {
         var mode = k.slice(6), mine = meta && meta.theme && meta.theme.personal;

@@ -114,9 +114,63 @@
     return "shell";
   }
 
-  self.RangkaSW = { classify: classify, PRECACHE: PRECACHE, VERSION: VERSION, SHELL: SHELL, FONTS: FONTS };
+  /**
+   * What a push shows (contract 0074 §6). The body is JSON {title, body, url, tag, severity} as Rangka Cloud sends it
+   * (rangka-cloud internal/notify/push.go). Anything else shows a generic notice. url is kept only when it is a path
+   * inside this worker's scope ("/app/..."); otherwise the notification opens the app's home.
+   */
+  function pushView(raw, scopePath) {
+    var d = raw && typeof raw === "object" ? raw : {};
+    var url = typeof d.url === "string" ? d.url : "";
+    // one leading "/", no backslash or whitespace (browsers read "/\\host" as "//host"), inside the scope
+    var ok = url.charAt(0) === "/" && url.charAt(1) !== "/" && !/[\\\s]/.test(url) && url.indexOf(scopePath) === 0;
+    if (ok) {
+      // resolve dot segments ("/app/../x", "/app/%2e%2e/x") the way the browser will, and keep the resolved path
+      try {
+        var u = new URL(url, "https://scope.invalid");
+        ok = u.origin === "https://scope.invalid" && u.pathname.indexOf(scopePath) === 0;
+        if (ok) url = u.pathname + u.search + u.hash;
+      } catch (e) { ok = false; }
+    }
+    return {
+      title: typeof d.title === "string" && d.title ? d.title : "Kabar baru",
+      options: {
+        body: typeof d.body === "string" ? d.body : "",
+        tag: typeof d.tag === "string" && d.tag ? d.tag : undefined,
+        icon: "icons/icon-192.png",
+        badge: "icons/icon-192.png",
+        requireInteraction: d.severity === "high",
+        data: { url: ok ? url : scopePath }
+      }
+    };
+  }
+
+  self.RangkaSW = { classify: classify, pushView: pushView, PRECACHE: PRECACHE, VERSION: VERSION, SHELL: SHELL, FONTS: FONTS };
 
   if (typeof self.addEventListener !== "function" || !self.caches) return; // loaded by a unit test
+
+  // Web push. Hosted businesses subscribe through Rangka Cloud (the page relays the ask, contract 0074 §6), and the
+  // push arrives here when this worker owns the subscription. It only shows the notice and opens the app on click.
+  self.addEventListener("push", function (e) {
+    var d = null;
+    try { d = e.data ? e.data.json() : null; } catch (err) { d = null; }
+    var v = pushView(d, scopePath());
+    e.waitUntil(self.registration.showNotification(v.title, v.options));
+  });
+  self.addEventListener("notificationclick", function (e) {
+    e.notification.close();
+    var url = new URL((e.notification.data && e.notification.data.url) || scopePath(), self.location.origin).href;
+    e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (list) {
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        if (new URL(c.url).origin === self.location.origin && "focus" in c) {
+          return (c.navigate ? c.navigate(url) : Promise.resolve(c)).then(function (w) { return (w || c).focus(); },
+            function () { return self.clients.openWindow(url); });
+        }
+      }
+      return self.clients.openWindow(url);
+    }));
+  });
 
   // The paired device's queue (contract 0058 §5): the same file as the page, so Background Sync can send it after the
   // tab is closed. The page asks for the "rangka-device-outbox" sync after each new event.

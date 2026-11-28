@@ -604,6 +604,8 @@ func (v *validator) rowSet(p, at string, set map[string]any, lm *Model, lf map[s
 			if val := pyStr(set[k]); !optionSet(f)[val] {
 				v.rep.extra("error", p, at+"/set/"+k, "screen_slot_type", fmt.Sprintf(`"%s" is not an option of %s`, val, k))
 			}
+		case set[k] == "now()" && str(f, "type") != "date" && str(f, "type") != "datetime":
+			v.rep.extra("error", p, at+"/set/"+k, "screen_slot_type", fmt.Sprintf(`"now()" fills a date or datetime field; %s is not one`, k))
 		}
 	}
 }

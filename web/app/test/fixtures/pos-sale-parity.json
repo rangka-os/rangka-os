@@ -1128,6 +1128,10 @@
      "type": "data"
     },
     {
+     "name": "kitchen_hold",
+     "type": "check"
+    },
+    {
      "name": "cogs",
      "type": "currency"
     }

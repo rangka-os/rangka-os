@@ -84,7 +84,7 @@ func TestConditionalPatch(t *testing.T) {
 	}
 }
 
-// _if on a table field (contract 0077 §1): {row name: {child field: value}}; rows not named are not compared.
+// _if on a table field (contract 0077 §1): {row name: {child field: value}}; a stored row not named is a conflict.
 func TestConditionalPatchRows(t *testing.T) {
 	owner, _, _ := screensEnv(t)
 	m := owner.must(201, "POST", "/api/v1/r/menu", map[string]any{"menu_name": "Soto", "price": 20000}).JSON["name"].(string)
@@ -119,9 +119,20 @@ func TestConditionalPatchRows(t *testing.T) {
 	if after["table_no"] != "Meja 3" || after["items"].([]any)[0].(map[string]any)["line_status"] != "in_progress" {
 		t.Fatalf("after refusals: %v", after)
 	}
+	// a row another device added after this one loaded the record: a PATCH naming only the rows it knew is refused,
+	// so rewriting the table never deletes the new row
+	cur := owner.must(200, "GET", "/api/v1/r/tiket_dapur/"+name, nil).JSON["items"].([]any)
+	owner.must(200, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"items": append(append([]any{}, cur...), map[string]any{"menu": m, "qty": 3})})
+	owner.must(409, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"items": cur,
+		"_if": map[string]any{"items": map[string]any{n0: map[string]any{"line_status": "in_progress"}, n1: map[string]any{"held": true}}}})
+	cur = owner.must(200, "GET", "/api/v1/r/tiket_dapur/"+name, nil).JSON["items"].([]any)
+	if len(cur) != 3 {
+		t.Fatalf("the added row was deleted: %v", cur)
+	}
+	n2 := cur[2].(map[string]any)["name"].(string)
 	// a null expectation is the field's zero value (a row field the device never had a value for)
 	owner.must(200, "PATCH", "/api/v1/r/tiket_dapur/"+name, map[string]any{"table_no": "Meja 3",
-		"_if": map[string]any{"items": map[string]any{n0: map[string]any{"held": nil}, n1: map[string]any{"held": true}}}})
+		"_if": map[string]any{"items": map[string]any{n0: map[string]any{"held": nil}, n1: map[string]any{"held": true}, n2: map[string]any{"held": nil}}}})
 	// the row queue screen opens: its recall set: values are literals, not CEL (contract 0077)
 	owner.must(200, "GET", "/api/v1/screens/dapur", nil)
 }

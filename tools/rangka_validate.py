@@ -3670,6 +3670,8 @@ def check_row_set(rep, p, at, sset, ln, lf):
             val = pystr(sset[k])
             if val not in option_values(lf[k]):
                 rep.add("error", p, f"{at}/set/{k}", "screen_slot_type", f'"{val}" is not an option of {k}')
+        elif sset[k] == "now()" and lf[k].get("type") not in ("date", "datetime"):
+            rep.add("error", p, f"{at}/set/{k}", "screen_slot_type", f'"now()" fills a date or datetime field; {k} is not one')
 
 
 def check_queue_lines(rep, p, b, card, mn, fields, ln, lf):

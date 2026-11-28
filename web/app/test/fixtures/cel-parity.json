@@ -5,6 +5,8 @@
     {"expr": "truncate(s, size(s) - 3)", "vars": {"s": "ab"}, "want": ""},
     {"expr": "s.replace(truncate(s, size(s) - 3), '')", "vars": {"s": "STRK-0001"}, "want": "001"},
     {"expr": "truncate(s, 0)", "vars": {"s": "hello"}, "want": ""},
+    {"expr": "truncate(s, 2.5)", "vars": {"s": "hello"}, "want": "hello"},
+    {"expr": "truncate(s, 2.0)", "vars": {"s": "hello"}, "want": "he"},
     {"expr": "a > 2 ? 'big' : 'small'", "vars": {"a": 3}, "want": "big"},
     {"expr": "a > 2 ? 'big' : a > 1 ? 'mid' : 'small'", "vars": {"a": 2}, "want": "mid"},
     {"expr": "(a == '' ? 0 : 5) + 1", "vars": {"a": ""}, "want": 1},

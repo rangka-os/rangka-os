@@ -54,10 +54,10 @@ test("groupsOf: records joined by a field in first-seen order; without by one gr
   assert.deepStrictEqual(plain(A.groupsOf(rows, null)).map((g) => g.recs.length), [1, 1, 1]);
 });
 
-test("guardFields and withNow: set fields without stamps; now() on date and datetime only", () => {
+test("guardFields and withNow: every writable row field and set field, without stamps; now() on date and datetime only", () => {
   const q = { line_steps: [{ set: { status: "ready", ready_at: "now()" } }], bulk_steps: [{ set: { held: false } }], recall: { set: { status: "in_progress" } } };
-  const lf = [{ name: "status", type: "select" }, { name: "ready_at", type: "datetime" }, { name: "held", type: "check" }, { name: "day", type: "date" }, { name: "note", type: "data" }];
-  assert.deepStrictEqual(plain(A.guardFields(q, lf)), ["held", "status"]);
+  const lf = [{ name: "status", type: "select" }, { name: "ready_at", type: "datetime" }, { name: "held", type: "check" }, { name: "day", type: "date" }, { name: "note", type: "data" }, { name: "item", type: "link", read_only: true }, { name: "badge", type: "select", compute: "x" }];
+  assert.deepStrictEqual(plain(A.guardFields(q, lf)), ["held", "note", "status"]);
   assert.deepStrictEqual(plain(A.withNow({ ready_at: "now()", day: "now()", note: "now()", status: "x" }, lf, "2026-11-28T10:00:00.000Z")),
     { ready_at: "2026-11-28T10:00:00.000Z", day: "2026-11-28", note: "now()", status: "x" });
 });
@@ -70,9 +70,10 @@ test("rowPatch: every row sent, set on picked rows, _if on every row's guard fie
   assert.deepStrictEqual(plain(pt.body._if), { items: { r1: { held: false, status: "new" }, r2: { held: true, status: "new" } } });
   assert.deepStrictEqual(plain(pt.before), { r1: { status: "new" } });
   const now = { name: "T1", items: [{ name: "r1", item: "A", status: "in_progress", held: false, ready_at: null }, rec.items[1]] };
-  const u = A.undoPatch(now, "items", { r1: { status: "new" } }, { r1: { status: "in_progress", ready_at: "2026-11-28T10:00:00Z" } });
+  const u = A.undoPatch(now, "items", { r1: { status: "new" } }, { r1: { status: "in_progress", ready_at: "2026-11-28T10:00:00Z" } }, ["held", "status"]);
   assert.deepStrictEqual(plain(u.items).map((r) => r.status), ["new", "new"]);
-  assert.deepStrictEqual(plain(u._if), { items: { r1: { status: "in_progress" } } }, "a stamp is not a precondition");
+  // every row is a precondition (another device's change to r2 makes the undo a 409); a stamp is not
+  assert.deepStrictEqual(plain(u._if), { items: { r1: { held: false, status: "in_progress" }, r2: { held: true, status: "new" } } });
 });
 
 test("totalsOf: qty per key where when holds, held apart, split values, largest first", () => {

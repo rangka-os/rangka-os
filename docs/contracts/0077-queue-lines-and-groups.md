@@ -18,9 +18,10 @@ queue), 0048 (§6 screen theme, §7 rail badge), 0058 (outbox) · Issue: rangka-
 
 ### 1. `_if` on a table field
 `PATCH /r/<model>/<name>` accepts `_if: {<table field>: {<row name>: {<child field>: value}}}`. Each named row must
-exist in the stored record and each named child field must equal the value (hidden fields are refused as for
-document fields); otherwise 409 `precondition_failed`. A row of the stored record not named is not compared. A `null`
-value compares as the field's zero value (a row written before the field existed).
+exist in the stored record, each named child field must equal the value (hidden fields are refused as for document
+fields), and every row of the stored record must be named; otherwise 409 `precondition_failed`. So a row another
+device added after the caller loaded the record is a conflict, never deleted by a PATCH that rewrites the table. A
+`null` value compares as the field's zero value (a row written before the field existed).
 
 ### 2. Queue slots (screen.json `queue`)
 ```yaml
@@ -42,11 +43,13 @@ queue:
            when: "status == 'ready'", set: {status: in_progress}}
 ```
 - **Writes.** A line or bulk step is one conditional `PATCH` per record: every row of the record as loaded, the
-  step's `set` applied to the matching rows, and `_if` naming every row with the values of the fields any line or bulk
-  step of the screen sets (§1). A set value `"now()"` on a date or datetime field is the device's current time. Only
+  step's `set` applied to the matching rows, and `_if` naming every row with the values of every row field a client may
+  write (not computed, not read_only, not a date or datetime: a stamp moves with the state it stamps) and every field a
+  step sets (§1). Any change another device made to any row since the load is then a 409, never overwritten. A set value `"now()"` on a date or datetime field is the device's current time. Only
   fields a client may write change (0030: read_only child fields keep their stored values).
-- **Undo.** After a line or bulk step, "Urungkan" for 5 seconds writes the previous values back with `_if` on what
-  the step wrote (as 0030 steps, 3 → 5 seconds for all queue steps).
+- **Undo.** After a line or bulk step, "Urungkan" for 5 seconds writes the previous values back with `_if` on every
+  row as this device last saw it (what the step wrote on the changed rows), so another device's change meanwhile makes
+  the undo a 409 (as 0030 steps, 3 → 5 seconds for all queue steps).
 - **Labels.** `label_field` names a field of the record whose non-empty value replaces the step label (a station's own
   verb: "Kemas" instead of "Proses").
 - **Group.** With `group_by`, records sharing the value form one card: rows of all records in record order, each
@@ -58,8 +61,10 @@ queue:
 - **Recall.** A "Baru selesai" tab lists `recall.filter` records (sort, limit); its button runs `recall.set` on the
   rows where `recall.when` holds, like a bulk step.
 - **Offline.** A step whose write fails for a retryable reason (no connection) is kept in the device outbox (0058)
-  with its Idempotency-Key and `_if`, shown as applied with a "antre" mark, and sent when online; a 409 then reloads
-  the card and says so. The rail sync pill counts it (0048 §7).
+  with its `_if`, shown as applied, and sent when online. The `_if` makes a replay safe without an Idempotency-Key: a
+  PATCH that already reached the server finds the rows changed and gets a 409. The screen counts the device's waiting
+  writes ("n perubahan menunggu dikirim"); a replay refused with a 409 is said once, dropped from the outbox, and the
+  list reloads. The rail sync pill counts them (0048 §7).
 - **Header.** The rows' quantities per `line_badge` value ("41 baru · 3 diproses"), muted rows apart, and "Ketuk
   baris: Proses, lalu Siap" from the line steps' labels.
 - **Choose.** `choose: <field of the record>` shows a row of choices ("Semua" and the values present, as titles); the
@@ -81,7 +86,8 @@ module's flows do.
 ### 4. Validators
 Both validators check: `line_show`, `line_muted`, `when` (parens, as other CEL slots); `line_badge` a select field of
 the line model; `line_tag`, `label_field`, `group_by` fields of the model; `set` keys fields of the line model
-(`line_steps`, `bulk_steps`, `recall`) with option values for selects; `totals.by`, `qty`, `held`, `split` fields of
+(`line_steps`, `bulk_steps`, `recall`) a client may write, with option values for selects and `"now()"` only on a
+date or datetime field; `totals.by`, `qty`, `held`, `split` fields of
 the line model; `counter.document.line.hold` a check field of the line model. Codes as 0030 (`unknown_field`,
 `screen_slot_type`).
 

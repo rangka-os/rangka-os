@@ -87,14 +87,17 @@
     return out;
   }
 
-  /** The row fields the screen's row steps set (line_steps, bulk_steps, recall), without dates and times (a stamp
-   *  the device writes is not a precondition): the fields a row write compares with _if. */
+  /** The row fields a row write compares with _if (contract 0077 §1): every field a client may write on a row (not
+   *  computed, not read_only), and any field a step sets, without dates and times (a stamp moves with the state it
+   *  stamps). A stale device then gets a 409 for any change another device made to a row, never a silent overwrite. */
   function guardFields(q, lineFields) {
     var seen = {}, out = [];
     var kind = {}; (lineFields || []).forEach(function (f) { kind[f.name] = f.type; });
-    function add(set) { Object.keys(set || {}).forEach(function (k) { if (!seen[k] && kind[k] !== "date" && kind[k] !== "datetime") { seen[k] = true; out.push(k); } }); }
-    (q.line_steps || []).concat(q.bulk_steps || []).forEach(function (st) { add(st.set); });
-    if (q.recall) add(q.recall.set);
+    function add(k) { if (!seen[k] && kind[k] !== "date" && kind[k] !== "datetime" && kind[k] !== "table" && k !== "name") { seen[k] = true; out.push(k); } }
+    (lineFields || []).forEach(function (f) { if (!f.compute && !f.read_only) add(f.name); });
+    function addSet(set) { Object.keys(set || {}).forEach(add); }
+    (q.line_steps || []).concat(q.bulk_steps || []).forEach(function (st) { addSet(st.set); });
+    if (q.recall) addSet(q.recall.set);
     return out.sort();
   }
 
@@ -131,19 +134,18 @@
     return { body: body, n: n, before: before, after: after };
   }
 
-  /** The PATCH body that puts before back on the named rows of the record now (rows as loaded), only if they still
-   *  hold after (_if on after's fields of those rows). */
-  function undoPatch(rec, lines, before, after) {
+  /** The PATCH body that puts before back on the named rows of the record now (rows as loaded), only if every row
+   *  still holds what this device last saw (_if on the guard fields of every row, after's values on the changed rows):
+   *  a change another device made meanwhile, on any row, makes the undo a 409. */
+  function undoPatch(rec, lines, before, after, guard) {
+    var cond = {};
     var rowsOut = (rec[lines] || []).map(function (row) {
       var out = {}; Object.keys(row).forEach(function (k) { out[k] = row[k]; });
+      var c = {}; (guard || []).forEach(function (k) { c[k] = row[k] == null ? null : row[k]; });
+      if (after[row.name]) Object.keys(after[row.name]).forEach(function (k) { var v = after[row.name][k]; if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(v)) c[k] = v; });
+      if (row.name) cond[row.name] = c;
       if (before[row.name]) Object.keys(before[row.name]).forEach(function (k) { out[k] = before[row.name][k]; });
       return out;
-    });
-    var cond = {};
-    Object.keys(after).forEach(function (n) {
-      var c = {};
-      Object.keys(after[n]).forEach(function (k) { if (typeof after[n][k] !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(after[n][k])) c[k] = after[n][k]; });
-      cond[n] = c;
     });
     var body = {}; body[lines] = rowsOut;
     var ifs = {}; ifs[lines] = cond; body._if = ifs;
@@ -308,6 +310,23 @@
       var t = global.setInterval(function () { if (!global.document.hidden) load(); setNow(Date.now()); }, every);
       return function () { global.clearInterval(t); };
     }, [s.name]);
+    // row writes kept offline (contract 0077 §2 Offline): the count follows the device outbox, and a replay the server
+    // refused (another device changed the card meanwhile: 409) is said once, dropped and the list reloaded
+    useEffect(function () {
+      if (!rowMode || !RA.outbox || !RA.outbox.subscribe) return;
+      function recount() {
+        RA.outbox.list(scope).then(function (jobs) {
+          var mine = (jobs || []).filter(function (j) { return j.screen === s.name; });
+          setQueuedN(mine.filter(function (j) { return j.state === "queued"; }).length);
+          var failed = mine.filter(function (j) { return j.state === "failed"; });
+          if (!failed.length) return;
+          setNote(failed.length + " perubahan dari perangkat ini tidak terkirim karena kartunya sudah diubah di perangkat lain; daftar dimuat ulang.");
+          return Promise.all(failed.map(function (j) { return RA.outbox.dismiss(j.id); })).then(load);
+        }, function () { return null; });
+      }
+      recount();
+      return RA.outbox.subscribe(recount);
+    }, [s.name]);
 
     // a link's title is looked up only when the user may read its model (else the stored code, no 403 per render)
     function canRead(model) { var x = (ctx.meta.models || {})[model]; return !!x && !(x.can && x.can.read === false); }
@@ -395,7 +414,6 @@
       Promise.all(sends.map(function (p0) { return p0.then(function (res) { return res; }, function (e) { return { error: e }; }); })).then(function (res) {
         var bad = res.filter(function (x) { return x && x.error; })[0];
         var queued = res.filter(function (x) { return x && x.queued; }).length;
-        if (queued) setQueuedN(function (n0) { return n0 + queued; });
         if (bad) {
           var e = bad.error;
           setNote(e && e.code === "precondition_failed" ? "Kartu ini sudah diubah di perangkat lain; daftar dimuat ulang." : (e && e.message) || "Langkah gagal");
@@ -410,7 +428,7 @@
       var byName = {}; (rows || []).forEach(function (r) { byName[r.name] = r; });
       Promise.all(u.parts.map(function (part) {
         var rec = byName[part.name];
-        return rec ? ctx.api.update(src.model, rec.name, undoPatch(rec, card.lines, part.before, part.after)) : null;
+        return rec ? ctx.api.update(src.model, rec.name, undoPatch(rec, card.lines, part.before, part.after, guard)) : null;
       })).then(load, function (e) {
         setNote(e && e.code === "precondition_failed" ? "Tidak bisa diurungkan: kartu sudah diubah di perangkat lain." : (e && e.message) || "Tidak bisa diurungkan");
         return load();

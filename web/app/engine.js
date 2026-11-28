@@ -170,7 +170,7 @@
       if (e.call === "duration") return { days: Number(a[0]) || 0 };
       if (e.call === "size") return a[0] == null ? 0 : (typeof a[0] === "object" && !Array.isArray(a[0]) ? Object.keys(a[0]).length : a[0].length);
       // as the kernel: a negative length is 0 (never "all but the last n"), 0 is empty, no length is 80
-      if (e.call === "truncate") return String(a[0] == null ? "" : a[0]).slice(0, a.length > 1 && a[1] != null ? Math.max(0, Math.trunc(Number(a[1]) || 0)) : 80);
+      if (e.call === "truncate") return String(a[0] == null ? "" : a[0]).slice(0, Math.max(0, a.length > 1 && typeof a[1] === "number" && Number.isInteger(a[1]) ? a[1] : 80)); // a length that is not a whole number is the default 80, as the kernel
       if (e.call === "app_installed") return installed().indexOf(a[0]) >= 0;
       if (e.call === "option") { var cf = CURRENT && field(CURRENT.m, a[0]), ov = CURRENT && CURRENT.rec[a[0]]; var op = cf && (cf.options || []).filter(function (o) { return o.value === ov; })[0]; return op ? op[a[1]] : null; }
       throw new Error("Unknown function " + e.call);

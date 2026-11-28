@@ -236,8 +236,9 @@ func (o *op) checkExpect(m *meta.Model, cur store.Record) error {
 }
 
 // checkExpectRows compares the stored rows of a table field with a precondition {row name: {child field: value}}
-// (contract 0077 §1): every named row must exist and every named child field must hold the value; rows not named
-// are not compared. A field the caller cannot see is refused like a document field.
+// (contract 0077 §1): every named row must exist, every named child field must hold the value, and every stored row
+// must be named (a row another device added since the caller loaded the record is a conflict, not a silent delete by
+// a PATCH that rewrites the table). A field the caller cannot see is refused like a document field.
 func (o *op) checkExpectRows(f *meta.Field, stored any, want any) error {
 	cm := o.registry().Models[f.Of]
 	byRow, ok := want.(map[string]any)
@@ -282,6 +283,11 @@ func (o *op) checkExpectRows(f *meta.Field, stored any, want any) error {
 			if !cel.Equal(got, want) {
 				return conflict("precondition_failed", "Data ini sudah diubah di perangkat lain ("+labelOr(f)+"). Muat ulang lalu coba lagi.")
 			}
+		}
+	}
+	for n := range have {
+		if _, named := byRow[n]; !named {
+			return conflict("precondition_failed", "Data ini sudah diubah di perangkat lain ("+labelOr(f)+"). Muat ulang lalu coba lagi.")
 		}
 	}
 	return nil

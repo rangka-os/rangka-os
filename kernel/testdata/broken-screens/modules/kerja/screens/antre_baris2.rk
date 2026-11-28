@@ -10,6 +10,7 @@ queue:
   card: {title: staf, lines: breaks, line_badge: minutes, line_tag: nope, line_show: "minutes > (0"}
   line_steps:
     - {when: "true", label: {id: Proses}, label_field: nolabel, set: {ghost: 1, minutes: 2}}
+    - {when: "true", label: {id: Jam}, set: {minutes: "now()"}}
   bulk_steps:
     - {when: "true", label: {id: Semua}, set: {kind: nope}}
   totals: {by: ghost, qty: label, held: minutes}

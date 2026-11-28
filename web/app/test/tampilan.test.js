@@ -81,3 +81,18 @@ test("businessEffective takes the business theme keys of meta.theme", () => {
   const e = plain(T.businessEffective({ name: "senja", mode: "system", overrides: { a: 1 }, font: { sans: "inter" }, personal: { theme: "x" }, effective: { name: "x" }, path: "themes/senja.rk" }));
   assert.deepStrictEqual(e, { name: "senja", mode: "system", overrides: { a: 1 }, font: { sans: "inter" } });
 });
+
+test("withBusiness makes a card the business theme and the effective one unless the person has their own", () => {
+  const d = { light: { primary: "#036" }, dark: { primary: "#9cf" }, overrides: { primary: { light: "#036", dark: "#9cf" } } };
+  const meta = { theme: { name: "kopi", path: "themes/kopi.rk", font: { sans: "inter" }, overrides: {}, personal: { theme: null, mode: "dark" }, effective: { name: "kopi" } } };
+  const m = T.withBusiness(meta, { name: "laut", label: { id: "Laut" } }, d);
+  assert.strictEqual(m.theme.name, "laut");
+  assert.strictEqual(m.theme.path, undefined, "a bundled theme has no site file");
+  assert.strictEqual(m.theme.font, undefined);
+  assert.deepStrictEqual(plain(m.theme.overrides), d.overrides);
+  assert.strictEqual(m.theme.effective.name, "laut");
+  assert.deepStrictEqual(plain(m.theme.personal), { theme: null, mode: "dark" });
+  const own = T.withBusiness({ theme: Object.assign({}, meta.theme, { personal: { theme: "daun", mode: "system" }, effective: { name: "daun" } }) }, { name: "laut" }, d);
+  assert.strictEqual(own.theme.name, "laut");
+  assert.strictEqual(own.theme.effective.name, "daun", "the person's own theme keeps showing");
+});

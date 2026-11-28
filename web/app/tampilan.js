@@ -106,7 +106,23 @@
     return Object.assign({}, meta, { theme: t });
   }
 
-  RA.tampilan = { slug: slug, themeYaml: themeYaml, themeOps: themeOps, checkSummary: checkSummary, deriveSpec: deriveSpec,
+  /** meta with card (and its /themes/derive answer d) as the business theme; the effective theme follows it unless
+   *  the person has a theme of their own. */
+  function withBusiness(meta, card, d) {
+    var t = Object.assign({}, (meta && meta.theme) || {});
+    var eff = cardEffective(card, d);
+    t.name = card.name;
+    if (card.label !== undefined) t.label = card.label;
+    t.overrides = eff.overrides;
+    t.tokens = eff.tokens;
+    delete t.font;
+    delete t.path;
+    var mine = t.personal && t.personal.theme;
+    if (!mine || mine === card.name) t.effective = eff;
+    return Object.assign({}, meta, { theme: t });
+  }
+
+  RA.tampilan = { withBusiness: withBusiness, slug: slug, themeYaml: themeYaml, themeOps: themeOps, checkSummary: checkSummary, deriveSpec: deriveSpec,
     withPersonal: withPersonal, businessEffective: businessEffective, cardEffective: cardEffective };
 
   if (!global.React || !global.Rangka) return;
@@ -160,21 +176,27 @@
     var timer = useRef(null);
     var sv = useState(false), saving = sv[0], setSaving = sv[1];
     var saveSeq = useRef(0), base = useRef(null), derived = useRef({});
+    var gs = useState(0), galleryRev = gs[0], setGalleryRev = gs[1], revRef = useRef(0);
+    revRef.current = galleryRev;
+    var applyQ = useRef({ running: false, next: null, confirmed: null, want: null });
+    var as = useState(null), applying = as[0], setApplying = as[1]; // the business theme shown as current while saving
     var metaRef = useRef(meta);
     metaRef.current = meta;
     var bizName = (meta.theme && meta.theme.name) || "standard";
 
     // the gallery; reloaded when the business theme changes, not on every personal pick
     useEffect(function () {
-      var live = true;
+      var live = true, rev = galleryRev;
       api.themes().then(function (d) {
         if (!live) return;
         set({ loading: false, data: d, error: null });
+        var aq = applyQ.current;
+        if (aq.settled && rev >= aq.settled && !aq.running && !aq.next) { aq.settled = 0; setApplying(null); }
         // every card's colours once, so a pick paints without waiting for the server
         ((d && d.themes) || []).forEach(function (c) { deriveOf(c).then(null, function () {}); });
       }, function (e) { if (live) set({ loading: false, data: null, error: e }); });
       return function () { live = false; };
-    }, [bizName, meta.theme && meta.theme.path]);
+    }, [bizName, meta.theme && meta.theme.path, galleryRev]);
     // leaving the page puts the effective theme back (the newest meta, not the one the page opened with)
     useEffect(function () { return function () { RA.paintTheme(metaRef.current); }; }, []);
 
@@ -215,7 +237,7 @@
         base.current = null;
         return ctx.reloadMeta(undefined, { stale: function () { return !latest(); } }).then(null, function () {});
       }).then(function () { if (latest()) setSaving(false); }, function (e) {
-        if (api.isStale && api.isStale(e)) return;
+        if (api.isStale && api.isStale(e)) { if (latest()) setSaving(false); return; } // replaced by the account menu
         setSaving(false);
         var was = base.current;
         base.current = null;
@@ -230,7 +252,7 @@
     function stopTrying() { setTrying(null); RA.paintTheme(ctx.meta); }
 
     function tryCard(card) {
-      if (card.name === data.current) { stopTrying(); return; }
+      if (card.name === (applying || data.current)) { stopTrying(); return; }
       deriveOf(card).then(function (d) {
         setTrying({ name: card.name, label: L(card.label) || card.name, overrides: d.overrides, checks: d.checks });
         RA.paintTheme(ctx.meta, { overrides: d.overrides });
@@ -247,6 +269,8 @@
           return false;
         }
         setTrying(null);
+        derived.current = {}; // a saved theme file may have new colours
+        setGalleryRev(function (x) { return x + 1; });
         return ctx.reloadMeta().then(function () {
           if (r.applied) ctx.toast("ok", okTitle, "Berlaku untuk semua orang di usaha ini.");
           else ctx.toast("info", "Usulan tema dibuat", "Menunggu persetujuan di Perubahan.");
@@ -255,13 +279,71 @@
       }, function (e) { setBusy(false); ctx.toast("bad", "Tema tidak bisa dipakai", RA.ubahError ? RA.ubahError(e) : errText(e)); return false; });
     }
 
+    // "Terapkan": the theme becomes the business theme on this page at once; the change set runs behind it. Single
+    // flight: one change set at a time; picks made meanwhile wait, and only the last of them is applied next. On an
+    // error (or when the change waits for approval) the last applied theme comes back.
     function applyTrying() {
       if (!trying || trying.custom) return;
+      var card = cardOf(trying.name) || { name: trying.name, label: trying.label };
+      var q = applyQ.current;
+      if (!q.confirmed) q.confirmed = { theme: meta.theme, current: data.current };
+      q.next = { card: card, label: trying.label, overrides: trying.overrides };
+      setApplying(card.name);
+      setTrying(null);
+      q.want = card.name;
+      var tried = { overrides: trying.overrides };
+      deriveOf(card).then(null, function () { return tried; }).then(function (d) {
+        if (q.want === card.name) ctx.patchMeta(function (m) { return RA.tampilan.withBusiness(m, card, d); });
+      });
+      if (!q.running) drainApply();
+    }
+
+    function drainApply() {
+      var q = applyQ.current, job = q.next;
+      if (!job) return;
+      q.next = null;
+      q.running = true;
+      var title = "Tema " + job.label + " dipakai";
       api.file("config.rk").then(function (f) {
         var cfg = (f && f.parsed) || {};
-        return run({ title: "Ganti tema usaha ke " + trying.label, reason: "Pengaturan › Tampilan",
-          ops: [{ op: "patch", path: "config.rk", patch: [{ op: Object.prototype.hasOwnProperty.call(cfg, "theme") ? "replace" : "add", path: "/theme", value: trying.name }] }] }, "Tema " + trying.label + " dipakai");
-      }, function (e) { ctx.toast("bad", "Tema tidak bisa dipakai", errText(e)); });
+        if (cfg.theme === job.card.name) return { applied: true, same: true };
+        return api.runChange({ title: "Ganti tema usaha ke " + job.label, reason: "Pengaturan › Tampilan",
+          ops: [{ op: "patch", path: "config.rk", patch: [{ op: Object.prototype.hasOwnProperty.call(cfg, "theme") ? "replace" : "add", path: "/theme", value: job.card.name }] }] },
+          { canApprove: !!(meta.changesets && meta.changesets.approve) });
+      }).then(function (r) {
+        var bad = r.cs && r.cs.status === "invalid";
+        if (bad) {
+          var err = (r.cs.validation && r.cs.validation.errors && r.cs.validation.errors[0]) || {};
+          return { fail: err.message || "Periksa isian lalu coba lagi." };
+        }
+        return { applied: !!r.applied };
+      }, function (e) { return { fail: RA.ubahError ? RA.ubahError(e) : errText(e) }; }).then(function (res) {
+        q.running = false;
+        if (q.next) { drainApply(); return; } // a newer pick: apply it; this one's result no longer shows
+        var was = q.confirmed;
+        q.confirmed = null;
+        if (res.fail || !res.applied) {
+          if (was) ctx.patchMeta(function (m) { // the business theme comes back; the person's own pick stays
+            var t = Object.assign({}, was.theme, { personal: m.theme && m.theme.personal });
+            var mine = t.personal && t.personal.theme;
+            if (mine && mine !== (was.theme && was.theme.name)) t.effective = m.theme && m.theme.effective;
+            return Object.assign({}, m, { theme: t });
+          });
+          setApplying(null);
+          ctx.reloadMeta().then(null, function () {}).then(function () { setGalleryRev(function (x) { return x + 1; }); });
+          if (res.fail) ctx.toast("bad", "Tema tidak bisa dipakai", res.fail);
+          else ctx.toast("info", "Usulan tema dibuat", "Menunggu persetujuan di Perubahan.");
+          return;
+        }
+        ctx.reloadMeta(undefined, { stale: function () { return !!(q.running || q.next); } }).then(null, function () {}).then(function () {
+          if (!q.running && !q.next) {
+            q.settled = revRef.current + 1; // the gallery read this reload (or a later one) names the new theme
+            setGalleryRev(function (x) { return x + 1; }); // the gallery read while saving still names the old theme;
+            // "applying" clears once that reload lands, so the badge never jumps back
+            ctx.toast("ok", title, "Berlaku untuk semua orang di usaha ini.");
+          }
+        });
+      });
     }
 
     // the custom editor: derive and try on every change (debounced)
@@ -312,16 +394,18 @@
             })),
           h("p", { className: "ap-tp-desc" }, "Hanya kamu yang melihat pilihan ini. Timmu tetap melihat tema usaha."))));
 
-    var business = !owner ? null : h(R.Card, { title: "Tema usaha", extra: data.allowed && data.allowed.custom === false ? null : h(R.Button, { size: "sm", icon: "plus", onClick: openEditor }, "Buat tema sendiri") },
+    var newTheme = data.allowed && data.allowed.custom === false ? null : h(R.Button, { key: "n", size: "sm", icon: "plus", onClick: openEditor }, "Buat tema sendiri");
+    var business = !owner ? null : h(R.Card, { title: "Tema usaha", extra: applying ? h("span", { className: "ap-tp-status" }, h("span", { className: "ap-tp-desc", role: "status" }, "Menyimpan…"), newTheme) : newTheme },
       h("div", { className: "ap-tp" },
         trying && !trying.custom ? h(R.Alert, { tone: "info", title: "Kamu sedang mencoba tema " + trying.label,
-          actions: [h(R.Button, { key: "b", size: "sm", onClick: stopTrying }, "Batal"), h(R.Button, { key: "a", size: "sm", variant: "primary", disabled: busy, onClick: applyTrying }, busy ? "Menerapkan…" : "Terapkan")] },
+          actions: [h(R.Button, { key: "b", size: "sm", onClick: stopTrying }, "Batal"), h(R.Button, { key: "a", size: "sm", variant: "primary", disabled: busy, onClick: applyTrying }, "Terapkan")] },
           "Belum ada yang berubah untuk timmu. Halaman ini memakai tema itu sebagai pratinjau.") : null,
         s.error ? h(R.Alert, { tone: "bad", title: "Tema tidak bisa dimuat" }, errText(s.error)) : null,
         h("div", { className: "ap-tp-grid" }, themes.map(function (c) {
-          var state = c.name === data.current ? "used" : trying && trying.name === c.name ? "trying" : null;
+          var cur = applying || data.current;
+          var state = c.name === cur ? "used" : trying && trying.name === c.name ? "trying" : null;
           return h(ThemeCard, { key: c.name, card: c, dark: dark, desc: DESC[c.name] || (c.custom ? "Buatan usaha ini" : ""), state: state,
-            selected: trying ? trying.name === c.name : c.name === data.current, onClick: function () { tryCard(c); } });
+            selected: trying ? trying.name === c.name : c.name === cur, onClick: function () { tryCard(c); } });
         })),
         data.allowed && data.allowed.custom === false ? h(R.Alert, { tone: "info", title: "Tema buatan sendiri mulai paket Zafdoz Pro" },
           "Warna sendiri, warna dari logo, dan font tersedia di Zafdoz Pro. Tema bawaan di atas bisa dipakai di semua paket.") : null));
